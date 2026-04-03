@@ -10,6 +10,7 @@ export const BUILTIN_APPS = {
   DATA_SOURCE_MANAGEMENT: 6,  // 数据源管理
   KEY_MANAGEMENT: 7,     // 密钥管理
   TEACHER_TEACHING: 8,   // 本科教师授课情况
+  MY_TEACHING: 9,        // 我的授课
 } as const;
 
 // 内置应用URL映射
@@ -22,6 +23,7 @@ export const BUILTIN_APP_URLS = {
   '/data-sources': BUILTIN_APPS.DATA_SOURCE_MANAGEMENT,
   '/key-management': BUILTIN_APPS.KEY_MANAGEMENT,
   '/teacher-teaching': BUILTIN_APPS.TEACHER_TEACHING,
+  '/my-teaching': BUILTIN_APPS.MY_TEACHING,
 } as const;
 
 export interface App {

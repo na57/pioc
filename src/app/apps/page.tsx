@@ -34,6 +34,7 @@ import {
   MenuOutlined,
   DatabaseOutlined,
   KeyOutlined,
+  ReadOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 
@@ -74,6 +75,7 @@ const iconMapping: Record<string, React.ReactNode> = {
   MenuOutlined: <MenuOutlined />,
   DatabaseOutlined: <DatabaseOutlined />,
   KeyOutlined: <KeyOutlined />,
+  ReadOutlined: <ReadOutlined />,
 };
 
 const iconOptions = [
@@ -86,6 +88,7 @@ const iconOptions = [
   { value: 'FileTextOutlined', label: '文档' },
   { value: 'KeyOutlined', label: '密钥' },
   { value: 'MailOutlined', label: '邮件' },
+  { value: 'ReadOutlined', label: '阅读' },
   { value: 'SettingOutlined', label: '设置' },
   { value: 'TeamOutlined', label: '团队' },
   { value: 'UserOutlined', label: '用户' },
@@ -208,7 +211,7 @@ export default function AppsPage() {
           {record.icon && iconMapping[record.icon]}
           {name}
           {isBuiltinApp(record.id) && (
-            <Tooltip title="内置应用，不允许删除，名称和URL不可修改">
+            <Tooltip title="内置应用，不允许删除，URL不可修改">
               <Tag icon={<LockOutlined />} color="blue" />
             </Tooltip>
           )}
@@ -305,10 +308,7 @@ export default function AppsPage() {
             label="应用名称"
             rules={[{ required: true, message: '请输入应用名称' }]}
           >
-            <Input 
-              placeholder="请输入应用名称" 
-              disabled={editingApp ? isBuiltinApp(editingApp.id) : false}
-            />
+            <Input placeholder="请输入应用名称" />
           </Form.Item>
           <Form.Item name="description" label="描述">
             <Input.TextArea placeholder="请输入应用描述" rows={3} />
@@ -331,7 +331,7 @@ export default function AppsPage() {
           </Form.Item>
           {editingApp && isBuiltinApp(editingApp.id) && (
             <div style={{ marginBottom: 16, color: token.colorWarning }}>
-              <LockOutlined /> 内置应用的名称和访问地址不可修改
+              <LockOutlined /> 内置应用的访问地址不可修改
             </div>
           )}
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>

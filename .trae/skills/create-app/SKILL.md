@@ -413,6 +413,57 @@ export const GET = createAppProtectedHandler(getBooksHandler, appUrl);
 ### 5. 添加菜单（应用创建后）
 在 `/menus` 页面将"图书管理"添加到合适的菜单组。
 
+## 应用配置
+
+每个应用都应该在 `config.yaml` 中有独立的配置节点，位于 `apps` 下：
+
+**文件位置**: `config/config.yaml` 和 `config/config.yaml.example`
+
+### 配置结构
+
+```yaml
+#------------------------------------------
+# {应用名称}应用配置
+#------------------------------------------
+apps:
+  yourAppName:  # 使用camelCase命名
+    # 数据源ID（如需要数据库）
+    dataSourceId: ""
+    # 其他应用特定配置...
+```
+
+### 配置示例
+
+例如"本科教师授课信息"应用的配置：
+
+```yaml
+apps:
+  teacherTeaching:
+    dataSourceId: "2"
+    semesterTableName: "t_yzsj_dm_xb_xnxqm"
+    teachingInfoTableName: "t_dws_gxjx_bzksjsskxx_v11mx"
+```
+
+### 配置规范
+
+1. **命名规范**: 应用配置键使用 camelCase（如 `teacherTeaching`, `bookManagement`）
+2. **独立节点**: 每个应用在 `apps` 下有独立的配置节点
+3. **示例同步**: 修改 `config.yaml` 时，必须同步更新 `config/config.yaml.example`
+4. **类型定义**: 在 `src/lib/config/index.ts` 中添加对应的 TypeScript 类型定义
+
+### 在代码中使用配置
+
+```typescript
+import { getConfig } from '@/lib/config';
+
+const config = getConfig();
+const appConfig = config.apps?.yourAppName;
+
+if (!appConfig) {
+  throw new Error('应用配置未找到，请在config.yaml中配置apps.yourAppName');
+}
+```
+
 ## 注意事项
 
 1. **应用URL唯一性**: 应用的URL必须唯一，不能与其他应用重复

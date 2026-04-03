@@ -90,6 +90,13 @@ export interface AppConfig {
     teacherTeaching?: {
       dataSourceId: string;
       semesterTableName: string;
+      undergraduateTeachingInfoTableName: string;
+      graduateTeachingInfoTableName: string;
+      classroomDataTableName: string;
+    };
+    myTeaching?: {
+      dataSourceId: string;
+      semesterTableName: string;
       teachingInfoTableName: string;
     };
   };

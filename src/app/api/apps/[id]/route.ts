@@ -37,14 +37,8 @@ async function updateAppHandler(
       return NextResponse.json({ success: false, message: 'App not found' }, { status: 404 });
     }
 
-    // 检查是否为内置应用，内置应用不允许修改名称和URL
+    // 检查是否为内置应用，内置应用不允许修改URL
     if (isBuiltinApp(parseInt(id))) {
-      if (name && name !== existingApp.name) {
-        return NextResponse.json(
-          { success: false, message: 'Cannot modify name of built-in application' },
-          { status: 403 }
-        );
-      }
       if (url && url !== existingApp.url) {
         return NextResponse.json(
           { success: false, message: 'Cannot modify URL of built-in application' },

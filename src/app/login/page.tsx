@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { Form, Input, Button, Card, message, Typography, Divider, Spin } from 'antd';
+import { Form, Input, Button, Card, App, Typography, Divider, Spin } from 'antd';
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -11,6 +11,7 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { message } = App.useApp();
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -23,7 +24,7 @@ function LoginForm() {
         message.error(`登录错误: ${error}`);
       }
     }
-  }, [searchParams]);
+  }, [searchParams, message]);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -95,22 +96,24 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #001529 0%, #1890ff 100%)',
-    }}>
-      <Card style={{ width: 400, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <Title level={2}>个人智慧运行中心</Title>
-          <Title level={5} type="secondary">PIOC</Title>
-        </div>
-        <Suspense fallback={<div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>}>
-          <LoginForm />
-        </Suspense>
-      </Card>
-    </div>
+    <App>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #001529 0%, #1890ff 100%)',
+      }}>
+        <Card style={{ width: 400, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <Title level={2}>个人智慧运行中心</Title>
+            <Title level={5} type="secondary">PIOC</Title>
+          </div>
+          <Suspense fallback={<div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>}>
+            <LoginForm />
+          </Suspense>
+        </Card>
+      </div>
+    </App>
   );
 }

@@ -20,6 +20,8 @@ import {
   CalendarOutlined,
   CloudOutlined,
   BookOutlined,
+  KeyOutlined,
+  ReadOutlined,
 } from '@ant-design/icons';
 import { useRouter, usePathname } from 'next/navigation';
 
@@ -69,6 +71,8 @@ const iconMapping: Record<string, React.ReactNode> = {
   BookOutlined: <BookOutlined />,
   AuditOutlined: <AuditOutlined />,
   MonitorOutlined: <MonitorOutlined />,
+  KeyOutlined: <KeyOutlined />,
+  ReadOutlined: <ReadOutlined />,
 };
 
 function AppLayout({ children }: AppLayoutProps) {

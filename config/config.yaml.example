@@ -147,6 +147,15 @@ apps:
     semesterTableName: "t_yzsj_dm_xb_xnxqm"
     # 教师授课信息表名
     teachingInfoTableName: "t_dws_gxjx_bzksjsskxx_v11mx"
+    # 课堂数据表名（AI课堂统计结果）
+    classroomDataTableName: "t_ynu_gxjx_aikttjjg"
+  myTeaching:
+    # 数据源ID（从数据源管理应用中获取）
+    dataSourceId: ""
+    # 学年学期表名
+    semesterTableName: "t_yzsj_dm_xb_xnxqm"
+    # 教师授课信息表名
+    teachingInfoTableName: "t_dws_gxjx_bzksjsskxx_v11mx"
 
 #------------------------------------------
 # 系统功能开关
