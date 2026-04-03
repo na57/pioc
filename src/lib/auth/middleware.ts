@@ -89,3 +89,15 @@ export async function getCurrentUserId(request: NextRequest): Promise<number | n
   const session = await getSession();
   return session?.userId || null;
 }
+
+// 获取当前用户信息
+export async function getCurrentUser(request: NextRequest): Promise<{ id: number; username: string; email: string; name: string } | null> {
+  const session = await getSession();
+  if (!session) return null;
+  return {
+    id: session.userId,
+    username: session.username,
+    email: session.email,
+    name: session.name,
+  };
+}
