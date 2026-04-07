@@ -25,20 +25,10 @@ import {
   DeleteOutlined,
   LockOutlined,
   MenuOutlined,
-  HomeOutlined,
-  DatabaseOutlined,
-  UserOutlined,
-  TeamOutlined,
   AppstoreOutlined,
-  SettingOutlined,
-  FileTextOutlined,
-  MailOutlined,
-  CalendarOutlined,
-  CloudOutlined,
-  BookOutlined,
-  FolderOutlined,
   LinkOutlined,
 } from '@ant-design/icons';
+import { iconMapping, iconOptions, useIcons } from '@/lib/icons';
 import type { TableProps } from 'antd';
 
 const { Title, Text } = Typography;
@@ -75,41 +65,6 @@ interface MenuFormData {
 // 内置菜单ID（不允许删除）- 只保留系统级菜单
 const BUILTIN_MENU_IDS = [1]; // 1: 系统（根菜单）
 
-// 图标映射
-const iconMapping: Record<string, React.ReactNode> = {
-  HomeOutlined: <HomeOutlined />,
-  DatabaseOutlined: <DatabaseOutlined />,
-  UserOutlined: <UserOutlined />,
-  TeamOutlined: <TeamOutlined />,
-  AppstoreOutlined: <AppstoreOutlined />,
-  MenuOutlined: <MenuOutlined />,
-  SettingOutlined: <SettingOutlined />,
-  FileTextOutlined: <FileTextOutlined />,
-  MailOutlined: <MailOutlined />,
-  CalendarOutlined: <CalendarOutlined />,
-  CloudOutlined: <CloudOutlined />,
-  BookOutlined: <BookOutlined />,
-  FolderOutlined: <FolderOutlined />,
-  LinkOutlined: <LinkOutlined />,
-};
-
-const iconOptions = [
-  { value: 'HomeOutlined', label: '首页' },
-  { value: 'DatabaseOutlined', label: '数据库' },
-  { value: 'UserOutlined', label: '用户' },
-  { value: 'TeamOutlined', label: '团队' },
-  { value: 'AppstoreOutlined', label: '应用' },
-  { value: 'MenuOutlined', label: '菜单' },
-  { value: 'SettingOutlined', label: '设置' },
-  { value: 'FileTextOutlined', label: '文档' },
-  { value: 'MailOutlined', label: '邮件' },
-  { value: 'CalendarOutlined', label: '日历' },
-  { value: 'CloudOutlined', label: '云' },
-  { value: 'BookOutlined', label: '书籍' },
-  { value: 'FolderOutlined', label: '文件夹' },
-  { value: 'LinkOutlined', label: '链接' },
-];
-
 export default function MenusPage() {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [apps, setApps] = useState<App[]>([]);
@@ -122,6 +77,7 @@ export default function MenusPage() {
   const [appForm] = Form.useForm();
   const { token } = theme.useToken();
   const { message } = App.useApp();
+  const { getIcon } = useIcons();
 
   useEffect(() => {
     fetchMenus();
@@ -294,13 +250,13 @@ export default function MenusPage() {
     }
   };
 
-  const getIcon = (iconName?: string, appIconName?: string) => {
+  const getMenuIcon = (iconName?: string, appIconName?: string) => {
     // 如果有应用图标，优先使用应用图标
     if (appIconName) {
-      return iconMapping[appIconName] || <LinkOutlined />;
+      return getIcon(appIconName, <LinkOutlined />);
     }
     // 否则使用菜单图标
-    return iconName ? iconMapping[iconName] || <MenuOutlined /> : <FolderOutlined />;
+    return getIcon(iconName || '', <MenuOutlined />);
   };
 
   // 为树形表格准备数据，添加 key 属性
@@ -322,7 +278,7 @@ export default function MenusPage() {
       key: 'name',
       render: (name: string, record) => (
         <Space key={`name-${record.key}`}>
-          {getIcon(record.icon, record.app_icon)}
+          {getMenuIcon(record.icon, record.app_icon)}
           <span>{name}</span>
           {isBuiltinMenu(record.id) && (
             <Tooltip title="内置菜单，不允许删除">

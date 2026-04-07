@@ -2,20 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Typography, Spin, Empty, message } from 'antd';
-import {
-  BookOutlined,
-  CalendarOutlined,
-  CameraOutlined,
-  CloudOutlined,
-  DashboardOutlined,
-  FileTextOutlined,
-  MailOutlined,
-  SettingOutlined,
-  TeamOutlined,
-  UserOutlined,
-  AppstoreOutlined,
-  MenuOutlined,
-} from '@ant-design/icons';
+import { AppstoreOutlined } from '@ant-design/icons';
+import { largeIconMapping, useIcons } from '@/lib/icons';
 import { useRouter } from 'next/navigation';
 
 const { Title, Text } = Typography;
@@ -29,26 +17,11 @@ interface App {
   status: number;
 }
 
-// 图标映射
-const iconMapping: Record<string, React.ReactNode> = {
-  BookOutlined: <BookOutlined style={{ fontSize: 48 }} />,
-  CalendarOutlined: <CalendarOutlined style={{ fontSize: 48 }} />,
-  CameraOutlined: <CameraOutlined style={{ fontSize: 48 }} />,
-  CloudOutlined: <CloudOutlined style={{ fontSize: 48 }} />,
-  DashboardOutlined: <DashboardOutlined style={{ fontSize: 48 }} />,
-  FileTextOutlined: <FileTextOutlined style={{ fontSize: 48 }} />,
-  MailOutlined: <MailOutlined style={{ fontSize: 48 }} />,
-  SettingOutlined: <SettingOutlined style={{ fontSize: 48 }} />,
-  TeamOutlined: <TeamOutlined style={{ fontSize: 48 }} />,
-  UserOutlined: <UserOutlined style={{ fontSize: 48 }} />,
-  AppstoreOutlined: <AppstoreOutlined style={{ fontSize: 48 }} />,
-  MenuOutlined: <MenuOutlined style={{ fontSize: 48 }} />,
-};
-
 export default function MyAppsPage() {
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { getLargeIcon } = useIcons();
 
   useEffect(() => {
     fetchMyApps();
@@ -117,7 +90,7 @@ export default function MyAppsPage() {
                 }}
               >
                 <div style={{ marginBottom: 16, color: '#1890ff' }}>
-                  {app.icon && iconMapping[app.icon] ? iconMapping[app.icon] : iconMapping.AppstoreOutlined}
+                  {getLargeIcon(app.icon, largeIconMapping.AppstoreOutlined)}
                 </div>
                 <Title level={4} style={{ margin: '0 0 8px 0' }}>
                   {app.name}

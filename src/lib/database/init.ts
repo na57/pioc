@@ -158,7 +158,9 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (7, '密钥管理', '创建和管理RSA、ECC、EdDSA等类型的密钥', 'KeyOutlined', '/key-management', 1),
   (8, '本科教师授课情况', '查看本科教师授课信息明细，支持按学年学期、教工号、教师姓名筛选', 'ReadOutlined', '/teacher-teaching', 1),
   (9, '我的授课', '查看当前登录用户的授课情况，支持按学年学期筛选', 'BookOutlined', '/my-teaching', 1),
-  (10, '数据对象管理', '管理数据对象，配置外部数据源查询', 'DatabaseOutlined', '/data-objects', 1);
+  (10, '数据对象管理', '管理数据对象，配置外部数据源查询', 'DatabaseOutlined', '/data-objects', 1),
+  (11, '标签管理', '管理系统标签，包括标签的增删改查和分组管理', 'TagsOutlined', '/tags', 1),
+  (12, '打标作业', '创建和管理数据打标作业，支持多人协作打标', 'FlagOutlined', '/labeling-tasks', 1);
 
 -- 插入默认菜单
 INSERT IGNORE INTO pioc_menus (id, name, path, icon, parent_id, sort_order, status, app_id) VALUES
@@ -272,8 +274,8 @@ async function assignMenuAppPermission(connection: mysql.PoolConnection) {
 
 async function assignAdditionalAppPermissions(connection: mysql.PoolConnection) {
   try {
-    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10）
-    const additionalAppIds = [5, 6, 7, 8, 9, 10];
+    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12）
+    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12];
     for (const appId of additionalAppIds) {
       await connection.execute(
         'INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (?, ?)',

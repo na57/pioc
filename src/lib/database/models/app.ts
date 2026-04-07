@@ -12,6 +12,8 @@ export const BUILTIN_APPS = {
   TEACHER_TEACHING: 8,   // 本科教师授课情况
   MY_TEACHING: 9,        // 我的授课
   DATA_OBJECT_MANAGEMENT: 10,  // 数据对象管理
+  TAG_MANAGEMENT: 11,    // 标签管理
+  LABELING_TASKS: 12,    // 打标作业
 } as const;
 
 // 内置应用URL映射
@@ -26,6 +28,8 @@ export const BUILTIN_APP_URLS = {
   '/teacher-teaching': BUILTIN_APPS.TEACHER_TEACHING,
   '/my-teaching': BUILTIN_APPS.MY_TEACHING,
   '/data-objects': BUILTIN_APPS.DATA_OBJECT_MANAGEMENT,
+  '/tags': BUILTIN_APPS.TAG_MANAGEMENT,
+  '/labeling-tasks': BUILTIN_APPS.LABELING_TASKS,
 } as const;
 
 export interface App {

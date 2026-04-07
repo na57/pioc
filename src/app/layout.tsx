@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ConfigProvider, App } from 'antd';
 import StyledComponentsRegistry from '@/lib/theme/AntdRegistry';
 import theme from '@/lib/theme/config';
+import { IconProvider } from '@/lib/icons';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -20,7 +21,9 @@ export default function RootLayout({
         <StyledComponentsRegistry>
           <ConfigProvider theme={theme}>
             <App>
-              {children}
+              <IconProvider>
+                {children}
+              </IconProvider>
             </App>
           </ConfigProvider>
         </StyledComponentsRegistry>

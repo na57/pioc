@@ -20,22 +20,9 @@ import {
   EditOutlined,
   DeleteOutlined,
   LockOutlined,
-  BookOutlined,
-  CalendarOutlined,
-  CameraOutlined,
-  CloudOutlined,
-  DashboardOutlined,
-  FileTextOutlined,
-  MailOutlined,
-  SettingOutlined,
-  TeamOutlined,
-  UserOutlined,
   AppstoreOutlined,
-  MenuOutlined,
-  DatabaseOutlined,
-  KeyOutlined,
-  ReadOutlined,
 } from '@ant-design/icons';
+import { iconMapping, iconOptions, useIcons } from '@/lib/icons';
 import type { TableProps } from 'antd';
 
 interface App {
@@ -59,43 +46,6 @@ interface AppFormData {
 // 内置应用ID（包含菜单管理、我的应用）
 const BUILTIN_APP_IDS = [1, 2, 3, 4, 5];
 
-// 图标映射
-const iconMapping: Record<string, React.ReactNode> = {
-  BookOutlined: <BookOutlined />,
-  CalendarOutlined: <CalendarOutlined />,
-  CameraOutlined: <CameraOutlined />,
-  CloudOutlined: <CloudOutlined />,
-  DashboardOutlined: <DashboardOutlined />,
-  FileTextOutlined: <FileTextOutlined />,
-  MailOutlined: <MailOutlined />,
-  SettingOutlined: <SettingOutlined />,
-  TeamOutlined: <TeamOutlined />,
-  UserOutlined: <UserOutlined />,
-  AppstoreOutlined: <AppstoreOutlined />,
-  MenuOutlined: <MenuOutlined />,
-  DatabaseOutlined: <DatabaseOutlined />,
-  KeyOutlined: <KeyOutlined />,
-  ReadOutlined: <ReadOutlined />,
-};
-
-const iconOptions = [
-  { value: 'BookOutlined', label: '笔记' },
-  { value: 'CalendarOutlined', label: '日历' },
-  { value: 'CameraOutlined', label: '相机' },
-  { value: 'CloudOutlined', label: '云存储' },
-  { value: 'DashboardOutlined', label: '仪表盘' },
-  { value: 'DatabaseOutlined', label: '数据库' },
-  { value: 'FileTextOutlined', label: '文档' },
-  { value: 'KeyOutlined', label: '密钥' },
-  { value: 'MailOutlined', label: '邮件' },
-  { value: 'ReadOutlined', label: '阅读' },
-  { value: 'SettingOutlined', label: '设置' },
-  { value: 'TeamOutlined', label: '团队' },
-  { value: 'UserOutlined', label: '用户' },
-  { value: 'AppstoreOutlined', label: '应用' },
-  { value: 'MenuOutlined', label: '菜单' },
-];
-
 // 图标选择器选项渲染
 const iconSelectOptions = iconOptions.map(option => ({
   value: option.value,
@@ -114,6 +64,7 @@ export default function AppsPage() {
   const [editingApp, setEditingApp] = useState<App | null>(null);
   const [form] = Form.useForm();
   const { token } = theme.useToken();
+  const { getIcon } = useIcons();
 
   useEffect(() => {
     fetchApps();
@@ -208,7 +159,7 @@ export default function AppsPage() {
       width: 200,
       render: (name: string, record: App) => (
         <Space>
-          {record.icon && iconMapping[record.icon]}
+          {getIcon(record.icon)}
           {name}
           {isBuiltinApp(record.id) && (
             <Tooltip title="内置应用，不允许删除，URL不可修改">

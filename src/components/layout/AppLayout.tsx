@@ -9,20 +9,10 @@ import {
   SettingOutlined,
   DownOutlined,
   TeamOutlined,
-  AppstoreOutlined,
-  HomeOutlined,
   AuditOutlined,
   MonitorOutlined,
-  DatabaseOutlined,
-  MenuOutlined,
-  FileTextOutlined,
-  MailOutlined,
-  CalendarOutlined,
-  CloudOutlined,
-  BookOutlined,
-  KeyOutlined,
-  ReadOutlined,
 } from '@ant-design/icons';
+import { iconMapping } from '@/lib/icons';
 import { useRouter, usePathname } from 'next/navigation';
 
 const { Header, Content, Footer } = Layout;
@@ -54,26 +44,6 @@ interface AppLayoutProps {
   children: React.ReactNode;
   title?: string;
 }
-
-// 图标映射
-const iconMapping: Record<string, React.ReactNode> = {
-  HomeOutlined: <HomeOutlined />,
-  DatabaseOutlined: <DatabaseOutlined />,
-  UserOutlined: <UserOutlined />,
-  TeamOutlined: <TeamOutlined />,
-  AppstoreOutlined: <AppstoreOutlined />,
-  MenuOutlined: <MenuOutlined />,
-  SettingOutlined: <SettingOutlined />,
-  FileTextOutlined: <FileTextOutlined />,
-  MailOutlined: <MailOutlined />,
-  CalendarOutlined: <CalendarOutlined />,
-  CloudOutlined: <CloudOutlined />,
-  BookOutlined: <BookOutlined />,
-  AuditOutlined: <AuditOutlined />,
-  MonitorOutlined: <MonitorOutlined />,
-  KeyOutlined: <KeyOutlined />,
-  ReadOutlined: <ReadOutlined />,
-};
 
 function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
