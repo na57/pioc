@@ -17,7 +17,7 @@
 
 ## 1. 系统概述
 
-PIOC（Personal Intelligence Operations Center，个人智慧运行中心）是一个基于 Next.js 16+ 和 Ant Design v6 构建的个人数字化管理平台，提供用户管理、角色管理、应用管理和菜单管理等功能。
+PIOC（Personal Intelligence Operations Center，个人智慧运行中心）是一个基于 Next.js 16+ 和 Ant Design v6 构建的个人数字化管理平台，提供用户管理、角色管理、应用管理、菜单管理、数据源管理、密钥管理、标签管理和打标作业等功能。
 
 ### 技术栈
 
@@ -200,6 +200,29 @@ wechat:
   secret: ""
 ```
 
+### 5.4 MongoDB 配置（可选）
+
+```yaml
+mongodb:
+  enabled: false
+  host: "localhost"
+  port: 27017
+  username: "root"
+  password: "root123"
+  database: "mymongo"
+```
+
+### 5.5 Redis 配置（可选）
+
+```yaml
+redis:
+  enabled: false
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+```
+
 ---
 
 ## 6. 初始化系统
@@ -223,10 +246,12 @@ npm run db:init
    - `pioc_role_apps` - 角色应用关联表
    - `pioc_sessions` - 会话表
    - `pioc_menus` - 菜单表
+   - `pioc_data_sources` - 数据源表
+   - `pioc_keys` - 密钥表
 
 2. **插入默认数据**
    - 内置角色：admin（系统管理员）、user（普通用户）、guest（访客）
-   - 内置应用：用户管理、角色管理、应用管理、菜单管理、我的应用
+   - 内置应用：用户管理、角色管理、应用管理、菜单管理、我的应用、数据源管理、密钥管理、本科教师授课情况、我的授课、数据对象管理、标签管理、打标作业
    - 默认菜单：控制台、用户管理、角色管理、应用管理、菜单管理
 
 3. **创建默认管理员账号**
@@ -467,18 +492,18 @@ flowchart TB
 flowchart TB
     subgraph PIOC系统
         direction TB
-        
+
         subgraph 前端层
             UI[Ant Design v6 UI]
             Pages[页面组件]
         end
-        
+
         subgraph 后端层
             API[API 路由]
             Auth[认证授权]
             Business[业务逻辑]
         end
-        
+
         subgraph 数据层
             Models[数据模型]
             DB[(MySQL)]
@@ -503,6 +528,8 @@ erDiagram
     pioc_apps ||--o{ pioc_role_apps : accessible_by
     pioc_apps ||--o{ pioc_menus : linked_to
     pioc_menus ||--o{ pioc_menus : parent_of
+    pioc_users ||--o{ pioc_keys : owns
+    pioc_users ||--o{ pioc_sessions : has
 
     pioc_users {
         int id PK
@@ -569,6 +596,35 @@ erDiagram
         timestamp expires_at
         timestamp created_at
     }
+
+    pioc_data_sources {
+        char id PK
+        string name
+        string type
+        string host
+        int port
+        string username
+        string password
+        string db_name
+        string description
+        tinyint status
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    pioc_keys {
+        char id PK
+        string name
+        string type
+        int key_size
+        string curve
+        text public_key
+        text private_key
+        string description
+        int user_id FK
+        timestamp created_at
+        timestamp updated_at
+    }
 ```
 
 ---
@@ -598,6 +654,13 @@ erDiagram
 | 应用管理 | /apps | 管理系统应用 |
 | 菜单管理 | /menus | 管理导航菜单 |
 | 我的应用 | /my-apps | 展示用户应用 |
+| 数据源管理 | /data-sources | 管理MySQL、MongoDB数据源 |
+| 密钥管理 | /key-management | 管理RSA、ECC、EdDSA密钥 |
+| 本科教师授课情况 | /teacher-teaching | 查看教师授课信息 |
+| 我的授课 | /my-teaching | 查看当前用户授课情况 |
+| 数据对象管理 | /data-objects | 管理数据对象配置 |
+| 标签管理 | /tags | 管理系统标签 |
+| 打标作业 | /labeling-tasks | 创建和管理数据打标作业 |
 
 ### D. 常用命令
 
@@ -620,6 +683,6 @@ npm run lint
 
 ---
 
-**文档版本**: 1.0.0  
-**更新日期**: 2026-03-24  
+**文档版本**: 1.1.0
+**更新日期**: 2026-04-07
 **适用系统版本**: PIOC v0.1.0+

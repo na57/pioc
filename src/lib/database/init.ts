@@ -141,6 +141,123 @@ CREATE TABLE IF NOT EXISTS pioc_keys (
   FOREIGN KEY (user_id) REFERENCES pioc_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 创建数据对象表
+CREATE TABLE IF NOT EXISTS pioc_data_objects (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL COMMENT '数据对象名称',
+  description VARCHAR(500) COMMENT '数据对象描述',
+  data_source_id CHAR(36) NOT NULL COMMENT '数据源ID',
+  query_statement TEXT NOT NULL COMMENT '查询语句',
+  primary_key VARCHAR(100) NOT NULL COMMENT '主键字段名',
+  display_template VARCHAR(500) DEFAULT '{{id}}' COMMENT '显示模板',
+  status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name),
+  INDEX idx_data_source_id (data_source_id),
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (data_source_id) REFERENCES pioc_data_sources(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建标签组表
+CREATE TABLE IF NOT EXISTS pioc_tag_groups (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL COMMENT '标签组名称',
+  code VARCHAR(50) NOT NULL UNIQUE COMMENT '标签组编码',
+  description VARCHAR(500) COMMENT '标签组描述',
+  color VARCHAR(20) DEFAULT NULL COMMENT '标签组颜色',
+  sort_order INT DEFAULT 0 COMMENT '排序顺序',
+  status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name),
+  INDEX idx_code (code),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建标签表
+CREATE TABLE IF NOT EXISTS pioc_tags (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL COMMENT '标签名称',
+  code VARCHAR(50) NOT NULL UNIQUE COMMENT '标签编码',
+  color VARCHAR(20) DEFAULT '#1890ff' COMMENT '标签颜色',
+  description VARCHAR(500) COMMENT '标签描述',
+  status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name),
+  INDEX idx_code (code),
+  INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建标签与标签组关联表
+CREATE TABLE IF NOT EXISTS pioc_tag_group_relations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  tag_id INT NOT NULL COMMENT '标签ID',
+  group_id INT NOT NULL COMMENT '标签组ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_tag_group (tag_id, group_id),
+  INDEX idx_tag_id (tag_id),
+  INDEX idx_group_id (group_id),
+  FOREIGN KEY (tag_id) REFERENCES pioc_tags(id) ON DELETE CASCADE,
+  FOREIGN KEY (group_id) REFERENCES pioc_tag_groups(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建打标作业表
+CREATE TABLE IF NOT EXISTS pioc_labeling_tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL COMMENT '作业名称',
+  description VARCHAR(500) COMMENT '作业描述',
+  data_object_id BIGINT NOT NULL COMMENT '数据对象ID',
+  tag_group_id INT NOT NULL COMMENT '标签组ID',
+  status TINYINT DEFAULT 1 COMMENT '1-进行中，0-已结束',
+  created_by INT NOT NULL COMMENT '创建者ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_data_object_id (data_object_id),
+  INDEX idx_tag_group_id (tag_group_id),
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (data_object_id) REFERENCES pioc_data_objects(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_group_id) REFERENCES pioc_tag_groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建打标作业协作者表
+CREATE TABLE IF NOT EXISTS pioc_labeling_task_collaborators (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL COMMENT '作业ID',
+  user_id INT NOT NULL COMMENT '协作者用户ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_task_user (task_id, user_id),
+  INDEX idx_task_id (task_id),
+  INDEX idx_user_id (user_id),
+  FOREIGN KEY (task_id) REFERENCES pioc_labeling_tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建打标结果表
+CREATE TABLE IF NOT EXISTS pioc_labeling_results (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL COMMENT '作业ID',
+  data_object_id BIGINT NOT NULL COMMENT '数据对象ID',
+  data_entry_id VARCHAR(255) NOT NULL COMMENT '数据条目ID',
+  tag_id INT NOT NULL COMMENT '标签ID',
+  created_by INT NOT NULL COMMENT '打标用户ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_task_id (task_id),
+  INDEX idx_data_object_id (data_object_id),
+  INDEX idx_data_entry_id (data_entry_id),
+  INDEX idx_tag_id (tag_id),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (task_id) REFERENCES pioc_labeling_tasks(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id) REFERENCES pioc_tags(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 插入默认角色（内置角色）
 INSERT IGNORE INTO pioc_roles (id, name, description, is_builtin) VALUES
   (1, 'admin', '系统管理员', 1),
