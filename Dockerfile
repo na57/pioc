@@ -12,6 +12,9 @@ RUN npm ci
 # 复制源代码
 COPY . .
 
+# 复制配置文件
+COPY config/config.yaml.example config/config.yaml
+
 # 构建应用
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
@@ -38,6 +41,7 @@ RUN npm ci --only=production
 # 复制构建产物
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/config ./config
 
 # 切换到非root用户
 USER nextjs
