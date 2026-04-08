@@ -73,7 +73,7 @@ async function updateTagHandler(
       const exists = await tagModel.findByCodeAndUserId(body.code, session.userId);
       if (exists && exists.id !== tagId) {
         return NextResponse.json(
-          { success: false, message: '标签编码已存在' },
+          { success: false, message: `标签编码 "${body.code}" 已存在，请使用其他编码` },
           { status: 400 }
         );
       }
@@ -95,10 +95,47 @@ async function updateTagHandler(
       message: '标签更新成功',
       data: tag,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to update tag:', error);
+    
+    // 处理数据库唯一约束错误
+    if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: '更新失败：标签编码已存在',
+          suggestion: '请修改标签编码后重试'
+        },
+        { status: 400 }
+      );
+    }
+    
+    // 处理外键约束错误
+    if (error.code === 'ER_NO_REFERENCED_ROW' || error.code === 'ER_NO_REFERENCED_ROW_2' || error.errno === 1452) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: '更新失败：所选分组不存在或已被删除',
+          suggestion: '请刷新页面后重新选择分组'
+        },
+        { status: 400 }
+      );
+    }
+    
+    // 处理字段长度错误
+    if (error.code === 'ER_DATA_TOO_LONG' || error.errno === 1406) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: '更新失败：输入内容过长',
+          suggestion: '标签名称最多100字符，编码最多50字符，请精简后重试'
+        },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
-      { success: false, message: '更新标签失败', error: String(error) },
+      { success: false, message: '更新标签失败，请稍后重试', error: error.message || String(error) },
       { status: 500 }
     );
   }
@@ -136,10 +173,10 @@ async function deleteTagHandler(
       success: true,
       message: '标签删除成功',
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to delete tag:', error);
     return NextResponse.json(
-      { success: false, message: '删除标签失败', error: String(error) },
+      { success: false, message: '删除标签失败，请稍后重试', error: error.message || String(error) },
       { status: 500 }
     );
   }

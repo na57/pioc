@@ -62,11 +62,20 @@ async function createTagHandler(
       );
     }
 
+    // 校验编码格式
+    const codePattern = /^[a-zA-Z0-9_]+$/;
+    if (!codePattern.test(body.code)) {
+      return NextResponse.json(
+        { success: false, message: '标签编码只能包含字母、数字和下划线' },
+        { status: 400 }
+      );
+    }
+
     // 检查编码是否已存在（当前用户范围内）
     const exists = await tagModel.findByCodeAndUserId(body.code, session.userId);
     if (exists) {
       return NextResponse.json(
-        { success: false, message: '标签编码已存在' },
+        { success: false, message: `标签编码 "${body.code}" 已存在，请使用其他编码` },
         { status: 400 }
       );
     }
@@ -87,10 +96,62 @@ async function createTagHandler(
       { success: true, message: '标签创建成功', data: tag },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to create tag:', error);
+    
+    // 处理数据库唯一约束错误
+    if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+      // 提取重复字段信息
+      const errorMessage = error.message || '';
+      let fieldName = '编码';
+      let fieldValue = body?.code || '';
+      
+      if (errorMessage.includes('uk_code')) {
+        fieldName = '编码';
+        fieldValue = body?.code;
+      }
+      
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: `创建失败：标签${fieldName} "${fieldValue}" 已存在`,
+          suggestion: '请修改标签编码后重试，或使用其他唯一标识'
+        },
+        { status: 400 }
+      );
+    }
+    
+    // 处理外键约束错误
+    if (error.code === 'ER_NO_REFERENCED_ROW' || error.code === 'ER_NO_REFERENCED_ROW_2' || error.errno === 1452) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: '创建失败：所选分组不存在或已被删除',
+          suggestion: '请刷新页面后重新选择分组'
+        },
+        { status: 400 }
+      );
+    }
+    
+    // 处理字段长度错误
+    if (error.code === 'ER_DATA_TOO_LONG' || error.errno === 1406) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: '创建失败：输入内容过长',
+          suggestion: '标签名称最多100字符，编码最多50字符，请精简后重试'
+        },
+        { status: 400 }
+      );
+    }
+    
+    // 通用错误
     return NextResponse.json(
-      { success: false, message: '创建标签失败', error: String(error) },
+      { 
+        success: false, 
+        message: '创建标签失败，请稍后重试',
+        error: error.message || String(error)
+      },
       { status: 500 }
     );
   }
