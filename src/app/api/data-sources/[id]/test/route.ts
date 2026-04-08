@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findById } from '@/lib/database/models/dataSource';
+import { findByIdAndUserId } from '@/lib/database/models/dataSource';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import mysql from 'mysql2/promise';
 import { MongoClient } from 'mongodb';
@@ -8,12 +8,13 @@ const appUrl = '/data-sources';
 
 async function testConnectionHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const dataSource = await findById(id);
-    
+    const dataSource = await findByIdAndUserId(id, session.userId);
+
     if (!dataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },
@@ -86,13 +87,15 @@ async function testConnectionHandler(
 
 type HandlerFunction = (
   req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   ctx: { params: Promise<{ id: string }> }
 ) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

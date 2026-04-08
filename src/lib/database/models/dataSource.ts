@@ -11,6 +11,7 @@ export interface DataSource {
   db_name: string;
   description: string;
   status: number;
+  created_by: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -25,6 +26,7 @@ export interface CreateDataSourceData {
   db_name: string;
   description?: string;
   status?: number;
+  created_by: number;
 }
 
 export interface UpdateDataSourceData {
@@ -43,8 +45,17 @@ export async function findAll(): Promise<DataSource[]> {
   return query<DataSource[]>('SELECT * FROM pioc_data_sources ORDER BY created_at DESC');
 }
 
+export async function findByUserId(userId: number): Promise<DataSource[]> {
+  return query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE created_by = ? ORDER BY created_at DESC', [userId]);
+}
+
 export async function findById(id: string): Promise<DataSource | null> {
   const results = await query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE id = ?', [id]);
+  return results[0] || null;
+}
+
+export async function findByIdAndUserId(id: string, userId: number): Promise<DataSource | null> {
+  const results = await query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE id = ? AND created_by = ?', [id, userId]);
   return results[0] || null;
 }
 
@@ -53,17 +64,30 @@ export async function findByName(name: string): Promise<DataSource | null> {
   return results[0] || null;
 }
 
+export async function findByNameAndUserId(name: string, userId: number): Promise<DataSource | null> {
+  const results = await query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE name = ? AND created_by = ?', [name, userId]);
+  return results[0] || null;
+}
+
 export async function findByType(type: string): Promise<DataSource[]> {
   return query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE type = ? ORDER BY created_at DESC', [type]);
+}
+
+export async function findByTypeAndUserId(type: string, userId: number): Promise<DataSource[]> {
+  return query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE type = ? AND created_by = ? ORDER BY created_at DESC', [type, userId]);
 }
 
 export async function findByStatus(status: number): Promise<DataSource[]> {
   return query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE status = ? ORDER BY created_at DESC', [status]);
 }
 
+export async function findByStatusAndUserId(status: number, userId: number): Promise<DataSource[]> {
+  return query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE status = ? AND created_by = ? ORDER BY created_at DESC', [status, userId]);
+}
+
 export async function create(data: CreateDataSourceData): Promise<string> {
   const result = await query<{ insertId: string }>(
-    'INSERT INTO pioc_data_sources (name, type, host, port, username, password, db_name, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO pioc_data_sources (name, type, host, port, username, password, db_name, description, status, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       data.name,
       data.type,
@@ -74,12 +98,13 @@ export async function create(data: CreateDataSourceData): Promise<string> {
       data.db_name,
       data.description || '',
       data.status ?? 1,
+      data.created_by,
     ]
   );
   // For UUID, we need to query back to get the generated ID
   const [newRecord] = await query<DataSource[]>(
-    'SELECT id FROM pioc_data_sources WHERE name = ? ORDER BY created_at DESC LIMIT 1',
-    [data.name]
+    'SELECT id FROM pioc_data_sources WHERE name = ? AND created_by = ? ORDER BY created_at DESC LIMIT 1',
+    [data.name, data.created_by]
   );
   return newRecord?.id || '';
 }
@@ -139,5 +164,10 @@ export async function update(id: string, data: UpdateDataSourceData): Promise<bo
 
 export async function remove(id: string): Promise<boolean> {
   const result = await query<{ affectedRows: number }>('DELETE FROM pioc_data_sources WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
+export async function removeByIdAndUserId(id: string, userId: number): Promise<boolean> {
+  const result = await query<{ affectedRows: number }>('DELETE FROM pioc_data_sources WHERE id = ? AND created_by = ?', [id, userId]);
   return result.affectedRows > 0;
 }

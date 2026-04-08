@@ -152,6 +152,11 @@ export async function removeTask(id: number): Promise<boolean> {
   return result.affectedRows > 0;
 }
 
+export async function removeTaskByIdAndUserId(id: number, userId: number): Promise<boolean> {
+  const result = await query<{ affectedRows: number }>('DELETE FROM pioc_labeling_tasks WHERE id = ? AND created_by = ?', [id, userId]);
+  return result.affectedRows > 0;
+}
+
 export async function findCollaboratorsByTaskId(taskId: number): Promise<{ id: number; user_id: number; username: string; name: string }[]> {
   return query<{ id: number; user_id: number; username: string; name: string }[]>(`
     SELECT tc.id, tc.user_id, u.username, u.name

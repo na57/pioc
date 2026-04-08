@@ -5,7 +5,10 @@ import * as tagModel from '@/lib/database/models/tag';
 const appUrl = '/tags';
 
 // GET /api/tags - 获取标签列表
-async function getTagsHandler(request: NextRequest) {
+async function getTagsHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -20,6 +23,7 @@ async function getTagsHandler(request: NextRequest) {
       name,
       status,
       group_id,
+      createdBy: session.userId,
     });
 
     return NextResponse.json({
@@ -43,7 +47,10 @@ async function getTagsHandler(request: NextRequest) {
 }
 
 // POST /api/tags - 创建标签
-async function createTagHandler(request: NextRequest) {
+async function createTagHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const body = await request.json();
 
@@ -55,8 +62,8 @@ async function createTagHandler(request: NextRequest) {
       );
     }
 
-    // 检查编码是否已存在
-    const exists = await tagModel.isCodeExists(body.code);
+    // 检查编码是否已存在（当前用户范围内）
+    const exists = await tagModel.findByCodeAndUserId(body.code, session.userId);
     if (exists) {
       return NextResponse.json(
         { success: false, message: '标签编码已存在' },
@@ -71,6 +78,7 @@ async function createTagHandler(request: NextRequest) {
       description: body.description,
       status: body.status,
       group_ids: body.group_ids,
+      created_by: session.userId,
     });
 
     const tag = await tagModel.findById(tagId);

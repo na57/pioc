@@ -5,7 +5,10 @@ import * as tagGroupModel from '@/lib/database/models/tagGroup';
 const appUrl = '/tags';
 
 // GET /api/tag-groups - 获取分组列表
-async function getTagGroupsHandler(request: NextRequest) {
+async function getTagGroupsHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -15,8 +18,8 @@ async function getTagGroupsHandler(request: NextRequest) {
     const all = searchParams.get('all') === 'true'; // 是否返回所有分组（不分页）
 
     if (all) {
-      // 返回所有启用的分组（用于下拉选择）
-      const list = await tagGroupModel.findAllActive();
+      // 返回所有启用的分组（用于下拉选择，按用户过滤）
+      const list = await tagGroupModel.findAllActiveByUserId(session.userId);
       return NextResponse.json({
         success: true,
         data: { list },
@@ -28,6 +31,7 @@ async function getTagGroupsHandler(request: NextRequest) {
       pageSize,
       name,
       status,
+      createdBy: session.userId,
     });
 
     return NextResponse.json({
@@ -51,7 +55,10 @@ async function getTagGroupsHandler(request: NextRequest) {
 }
 
 // POST /api/tag-groups - 创建分组
-async function createTagGroupHandler(request: NextRequest) {
+async function createTagGroupHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const body = await request.json();
 
@@ -63,8 +70,8 @@ async function createTagGroupHandler(request: NextRequest) {
       );
     }
 
-    // 检查编码是否已存在
-    const exists = await tagGroupModel.isCodeExists(body.code);
+    // 检查编码是否已存在（当前用户范围内）
+    const exists = await tagGroupModel.findByCodeAndUserId(body.code, session.userId);
     if (exists) {
       return NextResponse.json(
         { success: false, message: '分组编码已存在' },
@@ -79,6 +86,7 @@ async function createTagGroupHandler(request: NextRequest) {
       color: body.color,
       sort_order: body.sort_order,
       status: body.status,
+      created_by: session.userId,
     });
 
     const group = await tagGroupModel.findById(groupId);

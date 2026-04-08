@@ -1,26 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAppProtectedHandler, getCurrentUser } from '@/lib/auth/middleware';
+import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import * as labelingTaskModel from '@/lib/database/models/labeling-task';
 
 const appUrl = '/labeling-tasks';
 
 async function getTaskHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { id } = await params;
     const taskId = Number(id);
 
-    const canAccess = await labelingTaskModel.checkUserCanAccessTask(taskId, user.id);
+    const canAccess = await labelingTaskModel.checkUserCanAccessTask(taskId, session.userId);
     if (!canAccess) {
       return NextResponse.json(
         { success: false, message: 'No permission to access this task' },
@@ -52,17 +45,10 @@ async function getTaskHandler(
 
 async function updateTaskHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { id } = await params;
     const taskId = Number(id);
 
@@ -74,7 +60,7 @@ async function updateTaskHandler(
       );
     }
 
-    if (task.created_by !== user.id) {
+    if (task.created_by !== session.userId) {
       return NextResponse.json(
         { success: false, message: 'Only creator can update task' },
         { status: 403 }
@@ -108,17 +94,10 @@ async function updateTaskHandler(
 
 async function deleteTaskHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { id } = await params;
     const taskId = Number(id);
 
@@ -130,14 +109,14 @@ async function deleteTaskHandler(
       );
     }
 
-    if (task.created_by !== user.id) {
+    if (task.created_by !== session.userId) {
       return NextResponse.json(
         { success: false, message: 'Only creator can delete task' },
         { status: 403 }
       );
     }
 
-    const deleted = await labelingTaskModel.removeTask(taskId);
+    const deleted = await labelingTaskModel.removeTaskByIdAndUserId(taskId, session.userId);
     if (!deleted) {
       return NextResponse.json(
         { success: false, message: 'Failed to delete task' },
@@ -154,12 +133,17 @@ async function deleteTaskHandler(
   }
 }
 
-type HandlerFunction = (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<NextResponse>;
+type HandlerFunction = (
+  req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
+  ctx: { params: Promise<{ id: string }> }
+) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

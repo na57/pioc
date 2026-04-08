@@ -115,11 +115,14 @@ CREATE TABLE IF NOT EXISTS pioc_data_sources (
   db_name VARCHAR(100) NOT NULL COMMENT '数据库名称',
   description VARCHAR(500) COMMENT '描述',
   status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者用户ID',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_name (name),
   INDEX idx_type (type),
-  INDEX idx_status (status)
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 创建密钥表
@@ -171,11 +174,14 @@ CREATE TABLE IF NOT EXISTS pioc_tag_groups (
   color VARCHAR(20) DEFAULT NULL COMMENT '标签组颜色',
   sort_order INT DEFAULT 0 COMMENT '排序顺序',
   status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者用户ID',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_name (name),
   INDEX idx_code (code),
-  INDEX idx_status (status)
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 创建标签表
@@ -186,11 +192,14 @@ CREATE TABLE IF NOT EXISTS pioc_tags (
   color VARCHAR(20) DEFAULT '#1890ff' COMMENT '标签颜色',
   description VARCHAR(500) COMMENT '标签描述',
   status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者用户ID',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_name (name),
   INDEX idx_code (code),
-  INDEX idx_status (status)
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 创建标签与标签组关联表

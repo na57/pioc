@@ -46,6 +46,7 @@ export interface ListParams {
   name?: string;
   dataSourceId?: string;
   status?: number;
+  createdBy?: number;
 }
 
 export async function findAll(params?: ListParams): Promise<{ list: DataObjectWithDataSource[]; total: number }> {
@@ -71,6 +72,11 @@ export async function findAll(params?: ListParams): Promise<{ list: DataObjectWi
     queryParams.push(params.status);
   }
 
+  if (params?.createdBy !== undefined) {
+    whereClause += ' AND do.created_by = ?';
+    queryParams.push(params.createdBy);
+  }
+
   // Get total count
   const countResult = await query<{ total: number }[]>(
     `SELECT COUNT(*) as total FROM pioc_data_objects do ${whereClause}`,
@@ -85,7 +91,8 @@ export async function findAll(params?: ListParams): Promise<{ list: DataObjectWi
      LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
      ${whereClause}
      ORDER BY do.created_at DESC
-     LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`
+     LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`,
+    queryParams
   );
 
   return { list, total };
@@ -104,8 +111,26 @@ export async function findById(id: number): Promise<DataObjectWithDataSource | n
   return results[0] || null;
 }
 
+export async function findByIdAndUserId(id: number, userId: number): Promise<DataObjectWithDataSource | null> {
+  const results = await query<DataObjectWithDataSource[]>(
+    `SELECT do.*, ds.name as data_source_name, ds.type as data_source_type,
+            ds.host as data_source_host, ds.port as data_source_port, 
+            ds.db_name as data_source_database, ds.username as data_source_username
+     FROM pioc_data_objects do
+     LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
+     WHERE do.id = ? AND do.created_by = ?`,
+    [id, userId]
+  );
+  return results[0] || null;
+}
+
 export async function findByName(name: string): Promise<DataObject | null> {
   const results = await query<DataObject[]>('SELECT * FROM pioc_data_objects WHERE name = ?', [name]);
+  return results[0] || null;
+}
+
+export async function findByNameAndUserId(name: string, userId: number): Promise<DataObject | null> {
+  const results = await query<DataObject[]>('SELECT * FROM pioc_data_objects WHERE name = ? AND created_by = ?', [name, userId]);
   return results[0] || null;
 }
 
@@ -175,5 +200,10 @@ export async function update(id: number, data: UpdateDataObjectData): Promise<bo
 
 export async function remove(id: number): Promise<boolean> {
   const result = await query<{ affectedRows: number }>('DELETE FROM pioc_data_objects WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
+export async function removeByIdAndUserId(id: number, userId: number): Promise<boolean> {
+  const result = await query<{ affectedRows: number }>('DELETE FROM pioc_data_objects WHERE id = ? AND created_by = ?', [id, userId]);
   return result.affectedRows > 0;
 }

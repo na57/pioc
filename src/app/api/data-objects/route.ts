@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAppProtectedHandler, getCurrentUser } from '@/lib/auth/middleware';
+import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import * as dataObjectModel from '@/lib/database/models/dataObject';
 import * as dataSourceModel from '@/lib/database/models/dataSource';
 
 const appUrl = '/data-objects';
 
 // GET /api/data-objects - 获取数据对象列表
-async function getHandler(request: NextRequest) {
+async function getHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -21,6 +24,7 @@ async function getHandler(request: NextRequest) {
       name,
       dataSourceId,
       status,
+      createdBy: session.userId,
     });
 
     return NextResponse.json({
@@ -45,17 +49,12 @@ async function getHandler(request: NextRequest) {
 }
 
 // POST /api/data-objects - 创建数据对象
-async function postHandler(request: NextRequest) {
+async function postHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const body = await request.json();
-    const user = await getCurrentUser(request);
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: '未登录' },
-        { status: 401 }
-      );
-    }
 
     // 验证必填字段
     if (!body.name || !body.data_source_id || !body.query_statement || !body.primary_key) {
@@ -65,17 +64,17 @@ async function postHandler(request: NextRequest) {
       );
     }
 
-    // 检查数据源是否存在
-    const dataSource = await dataSourceModel.findById(body.data_source_id);
+    // 检查数据源是否存在（且属于当前用户）
+    const dataSource = await dataSourceModel.findByIdAndUserId(body.data_source_id, session.userId);
     if (!dataSource) {
       return NextResponse.json(
-        { success: false, message: '数据源不存在' },
+        { success: false, message: '数据源不存在或无权限访问' },
         { status: 404 }
       );
     }
 
-    // 检查名称是否已存在
-    const existing = await dataObjectModel.findByName(body.name);
+    // 检查名称是否已存在（当前用户范围内）
+    const existing = await dataObjectModel.findByNameAndUserId(body.name, session.userId);
     if (existing) {
       return NextResponse.json(
         { success: false, message: '数据对象名称已存在' },
@@ -92,7 +91,7 @@ async function postHandler(request: NextRequest) {
       primary_key: body.primary_key,
       display_template: body.display_template,
       status: body.status ?? 1,
-      created_by: user.id,
+      created_by: session.userId,
     });
 
     const dataObject = await dataObjectModel.findById(id);

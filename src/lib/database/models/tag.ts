@@ -7,6 +7,7 @@ export interface Tag {
   color: string;
   description: string | null;
   status: number;
+  created_by: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -25,6 +26,7 @@ export interface CreateTagData {
   description?: string;
   status?: number;
   group_ids?: number[];
+  created_by: number;
 }
 
 export interface UpdateTagData {
@@ -42,11 +44,12 @@ export interface TagQueryParams {
   name?: string;
   status?: number;
   group_id?: number;
+  createdBy?: number;
 }
 
 // 获取标签列表（带分页和筛选）
 export async function findAll(params: TagQueryParams = {}): Promise<{ list: TagWithGroups[]; total: number }> {
-  const { page = 1, pageSize = 20, name, status, group_id } = params;
+  const { page = 1, pageSize = 20, name, status, group_id, createdBy } = params;
   const offset = (page - 1) * pageSize;
 
   let whereClause = 'WHERE 1=1';
@@ -65,6 +68,11 @@ export async function findAll(params: TagQueryParams = {}): Promise<{ list: TagW
   if (group_id) {
     whereClause += ' AND t.id IN (SELECT tag_id FROM pioc_tag_group_relations WHERE group_id = ?)';
     queryParams.push(group_id);
+  }
+
+  if (createdBy !== undefined) {
+    whereClause += ' AND t.created_by = ?';
+    queryParams.push(createdBy);
   }
 
   // 获取总数
@@ -128,23 +136,52 @@ export async function findById(id: number): Promise<TagWithGroups | null> {
   };
 }
 
+// 根据ID和用户ID获取标签详情
+export async function findByIdAndUserId(id: number, userId: number): Promise<TagWithGroups | null> {
+  const tags = await query<Tag[]>('SELECT * FROM pioc_tags WHERE id = ? AND created_by = ?', [id, userId]);
+  if (tags.length === 0) return null;
+
+  const tag = tags[0];
+
+  // 获取关联的分组
+  const groups = await query<{ id: number; name: string }[]>(
+    `SELECT tg.id, tg.name 
+     FROM pioc_tag_group_relations tgr
+     INNER JOIN pioc_tag_groups tg ON tgr.group_id = tg.id
+     WHERE tgr.tag_id = ?`,
+    [id]
+  );
+
+  return {
+    ...tag,
+    groups,
+  };
+}
+
 // 根据编码获取标签
 export async function findByCode(code: string): Promise<Tag | null> {
   const tags = await query<Tag[]>('SELECT * FROM pioc_tags WHERE code = ?', [code]);
   return tags[0] || null;
 }
 
+// 根据编码和用户ID获取标签
+export async function findByCodeAndUserId(code: string, userId: number): Promise<Tag | null> {
+  const tags = await query<Tag[]>('SELECT * FROM pioc_tags WHERE code = ? AND created_by = ?', [code, userId]);
+  return tags[0] || null;
+}
+
 // 创建标签
 export async function create(data: CreateTagData): Promise<number> {
   const result = await query<{ insertId: number }>(
-    `INSERT INTO pioc_tags (name, code, color, description, status) 
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO pioc_tags (name, code, color, description, status, created_by) 
+     VALUES (?, ?, ?, ?, ?, ?)`,
     [
       data.name,
       data.code,
       data.color || '#1890ff',
       data.description || null,
       data.status ?? 1,
+      data.created_by,
     ]
   );
 
@@ -230,6 +267,16 @@ export async function remove(id: number): Promise<boolean> {
 
   // 删除标签
   const result = await query<{ affectedRows: number }>('DELETE FROM pioc_tags WHERE id = ?', [id]);
+  return result.affectedRows > 0;
+}
+
+// 根据ID和用户ID删除标签
+export async function removeByIdAndUserId(id: number, userId: number): Promise<boolean> {
+  // 删除关联关系
+  await query('DELETE FROM pioc_tag_group_relations WHERE tag_id = ?', [id]);
+
+  // 删除标签
+  const result = await query<{ affectedRows: number }>('DELETE FROM pioc_tags WHERE id = ? AND created_by = ?', [id, userId]);
   return result.affectedRows > 0;
 }
 

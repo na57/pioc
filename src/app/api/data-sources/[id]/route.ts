@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findById, update, remove } from '@/lib/database/models/dataSource';
+import { findByIdAndUserId, update, removeByIdAndUserId } from '@/lib/database/models/dataSource';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 
 const appUrl = '/data-sources';
 
 async function getDataSourceHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const dataSource = await findById(id);
+    const dataSource = await findByIdAndUserId(id, session.userId);
     if (!dataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },
@@ -28,6 +29,7 @@ async function getDataSourceHandler(
 
 async function updateDataSourceHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -35,7 +37,7 @@ async function updateDataSourceHandler(
     const body = await request.json();
     const { name, type, host, port, username, password, db_name, description, status } = body;
 
-    const existingDataSource = await findById(id);
+    const existingDataSource = await findByIdAndUserId(id, session.userId);
     if (!existingDataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },
@@ -91,11 +93,12 @@ async function updateDataSourceHandler(
 
 async function deleteDataSourceHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const existingDataSource = await findById(id);
+    const existingDataSource = await findByIdAndUserId(id, session.userId);
     if (!existingDataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },
@@ -103,7 +106,7 @@ async function deleteDataSourceHandler(
       );
     }
 
-    const success = await remove(id);
+    const success = await removeByIdAndUserId(id, session.userId);
     if (success) {
       return NextResponse.json({ success: true, message: 'Data source deleted successfully' });
     } else {
@@ -122,13 +125,15 @@ async function deleteDataSourceHandler(
 
 type HandlerFunction = (
   req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   ctx: { params: Promise<{ id: string }> }
 ) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

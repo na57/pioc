@@ -739,7 +739,7 @@ export default function DataObjectsPage() {
           items={steps.map((step) => ({ title: step.title, icon: step.icon }))}
         />
 
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" preserve={false}>
           <div style={{ minHeight: 300 }}>
             {/* 所有步骤的字段都渲染，但根据当前步骤显示/隐藏 */}
             <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>{renderStep1()}</div>

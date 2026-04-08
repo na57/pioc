@@ -41,15 +41,21 @@ function buildCasUrl(path: string): string {
 
 const CAS_CALLBACK_PATH = '/api/auth/cas/callback';
 
+function buildServiceUrl(serviceUrl: string): string {
+  // 移除 serviceUrl 末尾的斜杠，避免与 CAS_CALLBACK_PATH 拼接时产生双斜杠
+  const baseUrl = serviceUrl.endsWith('/') ? serviceUrl.slice(0, -1) : serviceUrl;
+  return `${baseUrl}${CAS_CALLBACK_PATH}`;
+}
+
 export function getCasLoginUrl(): string {
   const config = getConfig().cas;
-  const serviceUrl = `${config.serviceUrl}${CAS_CALLBACK_PATH}`;
+  const serviceUrl = buildServiceUrl(config.serviceUrl);
   return buildCasUrl(config.loginPath) + `?service=${encodeURIComponent(serviceUrl)}`;
 }
 
 export function getCasValidateUrl(ticket: string): string {
   const config = getConfig().cas;
-  const serviceUrl = `${config.serviceUrl}${CAS_CALLBACK_PATH}`;
+  const serviceUrl = buildServiceUrl(config.serviceUrl);
   return buildCasUrl(config.validatePath) + `?service=${encodeURIComponent(serviceUrl)}&ticket=${ticket}`;
 }
 

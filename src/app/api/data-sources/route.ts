@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findAll, create, findByName, findByType, findByStatus } from '@/lib/database/models/dataSource';
+import {
+  findByUserId,
+  create,
+  findByNameAndUserId,
+  findByTypeAndUserId,
+  findByStatusAndUserId,
+} from '@/lib/database/models/dataSource';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 
 const appUrl = '/data-sources';
 
-async function getDataSourcesHandler(request: NextRequest) {
+async function getDataSourcesHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type');
@@ -12,11 +21,11 @@ async function getDataSourcesHandler(request: NextRequest) {
 
     let dataSources;
     if (type) {
-      dataSources = await findByType(type);
+      dataSources = await findByTypeAndUserId(type, session.userId);
     } else if (status !== null) {
-      dataSources = await findByStatus(parseInt(status));
+      dataSources = await findByStatusAndUserId(parseInt(status), session.userId);
     } else {
-      dataSources = await findAll();
+      dataSources = await findByUserId(session.userId);
     }
     return NextResponse.json({ success: true, data: dataSources });
   } catch (error) {
@@ -27,7 +36,10 @@ async function getDataSourcesHandler(request: NextRequest) {
   }
 }
 
-async function createDataSourceHandler(request: NextRequest) {
+async function createDataSourceHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const body = await request.json();
     const { name, type, host, port, username, password, db_name, description } = body;
@@ -46,7 +58,7 @@ async function createDataSourceHandler(request: NextRequest) {
       );
     }
 
-    const existingDataSource = await findByName(name);
+    const existingDataSource = await findByNameAndUserId(name, session.userId);
     if (existingDataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source name already exists' },
@@ -64,6 +76,7 @@ async function createDataSourceHandler(request: NextRequest) {
       db_name,
       description,
       status: 1,
+      created_by: session.userId,
     });
     return NextResponse.json({ success: true, data: { id } }, { status: 201 });
   } catch (error) {

@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAppProtectedHandler, getCurrentUser } from '@/lib/auth/middleware';
+import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import * as labelingTaskModel from '@/lib/database/models/labeling-task';
 
 const appUrl = '/labeling-tasks';
 
-async function getTasksHandler(request: NextRequest) {
+async function getTasksHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const tasks = await labelingTaskModel.findTasksByUserId(user.id);
+    const tasks = await labelingTaskModel.findTasksByUserId(session.userId);
     return NextResponse.json({ success: true, data: tasks });
   } catch (error) {
     return NextResponse.json(
@@ -24,16 +19,11 @@ async function getTasksHandler(request: NextRequest) {
   }
 }
 
-async function createTaskHandler(request: NextRequest) {
+async function createTaskHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
-    const user = await getCurrentUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const body = await request.json();
     const { name, description, data_object_id, tag_group_id } = body;
 
@@ -49,7 +39,7 @@ async function createTaskHandler(request: NextRequest) {
       description,
       data_object_id: Number(data_object_id),
       tag_group_id: Number(tag_group_id),
-      created_by: user.id,
+      created_by: session.userId,
       status: 1
     });
 

@@ -7,6 +7,7 @@ const appUrl = '/data-objects';
 // GET /api/data-objects/:id - 获取数据对象详情
 async function getHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -20,7 +21,7 @@ async function getHandler(
       );
     }
 
-    const dataObject = await dataObjectModel.findById(dataObjectId);
+    const dataObject = await dataObjectModel.findByIdAndUserId(dataObjectId, session.userId);
 
     if (!dataObject) {
       return NextResponse.json(
@@ -45,6 +46,7 @@ async function getHandler(
 // PUT /api/data-objects/:id - 更新数据对象
 async function putHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -60,8 +62,8 @@ async function putHandler(
 
     const body = await request.json();
 
-    // 检查数据对象是否存在
-    const existing = await dataObjectModel.findById(dataObjectId);
+    // 检查数据对象是否存在（且属于当前用户）
+    const existing = await dataObjectModel.findByIdAndUserId(dataObjectId, session.userId);
     if (!existing) {
       return NextResponse.json(
         { success: false, message: '数据对象不存在' },
@@ -69,9 +71,9 @@ async function putHandler(
       );
     }
 
-    // 如果修改了名称，检查是否与其他数据对象冲突
+    // 如果修改了名称，检查是否与其他数据对象冲突（当前用户范围内）
     if (body.name && body.name !== existing.name) {
-      const nameExists = await dataObjectModel.findByName(body.name);
+      const nameExists = await dataObjectModel.findByNameAndUserId(body.name, session.userId);
       if (nameExists && nameExists.id !== dataObjectId) {
         return NextResponse.json(
           { success: false, message: '数据对象名称已存在' },
@@ -117,6 +119,7 @@ async function putHandler(
 // DELETE /api/data-objects/:id - 删除数据对象
 async function deleteHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -130,8 +133,8 @@ async function deleteHandler(
       );
     }
 
-    // 检查数据对象是否存在
-    const existing = await dataObjectModel.findById(dataObjectId);
+    // 检查数据对象是否存在（且属于当前用户）
+    const existing = await dataObjectModel.findByIdAndUserId(dataObjectId, session.userId);
     if (!existing) {
       return NextResponse.json(
         { success: false, message: '数据对象不存在' },
@@ -140,7 +143,7 @@ async function deleteHandler(
     }
 
     // 删除数据对象
-    const deleted = await dataObjectModel.remove(dataObjectId);
+    const deleted = await dataObjectModel.removeByIdAndUserId(dataObjectId, session.userId);
 
     if (!deleted) {
       return NextResponse.json(
@@ -164,13 +167,15 @@ async function deleteHandler(
 
 type HandlerFunction = (
   req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   ctx: { params: Promise<{ id: string }> }
 ) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

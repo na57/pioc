@@ -7,6 +7,7 @@ const appUrl = '/tags';
 // GET /api/tag-groups/:id - 获取分组详情
 async function getTagGroupHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -20,7 +21,7 @@ async function getTagGroupHandler(
       );
     }
 
-    const group = await tagGroupModel.findById(groupId);
+    const group = await tagGroupModel.findByIdAndUserId(groupId, session.userId);
 
     if (!group) {
       return NextResponse.json(
@@ -42,6 +43,7 @@ async function getTagGroupHandler(
 // PUT /api/tag-groups/:id - 更新分组
 async function updateTagGroupHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -57,8 +59,8 @@ async function updateTagGroupHandler(
 
     const body = await request.json();
 
-    // 检查分组是否存在
-    const existingGroup = await tagGroupModel.findById(groupId);
+    // 检查分组是否存在（且属于当前用户）
+    const existingGroup = await tagGroupModel.findByIdAndUserId(groupId, session.userId);
     if (!existingGroup) {
       return NextResponse.json(
         { success: false, message: '分组不存在' },
@@ -66,10 +68,10 @@ async function updateTagGroupHandler(
       );
     }
 
-    // 如果修改了编码，检查是否与其他分组冲突
+    // 如果修改了编码，检查是否与其他分组冲突（当前用户范围内）
     if (body.code && body.code !== existingGroup.code) {
-      const exists = await tagGroupModel.isCodeExists(body.code, groupId);
-      if (exists) {
+      const exists = await tagGroupModel.findByCodeAndUserId(body.code, session.userId);
+      if (exists && exists.id !== groupId) {
         return NextResponse.json(
           { success: false, message: '分组编码已存在' },
           { status: 400 }
@@ -105,6 +107,7 @@ async function updateTagGroupHandler(
 // DELETE /api/tag-groups/:id - 删除分组
 async function deleteTagGroupHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -118,8 +121,8 @@ async function deleteTagGroupHandler(
       );
     }
 
-    // 检查分组是否存在
-    const existingGroup = await tagGroupModel.findById(groupId);
+    // 检查分组是否存在（且属于当前用户）
+    const existingGroup = await tagGroupModel.findByIdAndUserId(groupId, session.userId);
     if (!existingGroup) {
       return NextResponse.json(
         { success: false, message: '分组不存在' },
@@ -127,7 +130,7 @@ async function deleteTagGroupHandler(
       );
     }
 
-    await tagGroupModel.remove(groupId);
+    await tagGroupModel.removeByIdAndUserId(groupId, session.userId);
 
     return NextResponse.json({
       success: true,
@@ -144,13 +147,15 @@ async function deleteTagGroupHandler(
 
 type HandlerFunction = (
   req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   ctx: { params: Promise<{ id: string }> }
 ) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);
