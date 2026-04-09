@@ -9,12 +9,10 @@ import {
   Select,
   Space,
   Tag,
-  Popconfirm,
   message,
   Row,
   Col,
   Typography,
-  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -27,6 +25,7 @@ import type { ColumnsType } from 'antd/es/table';
 import TagModal from './components/TagModal';
 import TagGroupModal from './components/TagGroupModal';
 import GroupList from './components/GroupList';
+import ActionButton from './components/ActionButton';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -258,27 +257,22 @@ export default function TagsPage() {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 120,
       render: (_, record: TagItem) => (
         <Space size="small">
-          <Tooltip title="编辑">
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => handleEditTag(record)}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除标签 "${record.name}" 吗？`}
+          <ActionButton
+            icon={<EditOutlined />}
+            tooltip="编辑"
+            onClick={() => handleEditTag(record)}
+          />
+          <ActionButton
+            icon={<DeleteOutlined />}
+            tooltip="删除"
+            danger
+            confirmTitle="确认删除"
+            confirmDescription={`确定要删除标签 "${record.name}" 吗？`}
             onConfirm={() => handleDeleteTag(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Tooltip title="删除">
-              <Button type="text" danger icon={<DeleteOutlined />} />
-            </Tooltip>
-          </Popconfirm>
+          />
         </Space>
       ),
     },

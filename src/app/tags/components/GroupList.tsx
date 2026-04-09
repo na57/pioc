@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Card, Button, Space, Popconfirm, Tooltip, Tag, Menu } from 'antd';
+import { Card, Space, Tag, Menu } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   PlusOutlined,
@@ -10,6 +10,7 @@ import {
   FolderOutlined,
   FolderOpenOutlined,
 } from '@ant-design/icons';
+import ActionButton from './ActionButton';
 
 interface TagGroup {
   id: number;
@@ -74,9 +75,11 @@ export default function GroupList({
       title="分组列表"
       size="small"
       extra={
-        <Button type="link" icon={<PlusOutlined />} onClick={onAddGroup}>
-          新建分组
-        </Button>
+        <ActionButton
+          icon={<PlusOutlined />}
+          tooltip="新建分组"
+          onClick={onAddGroup}
+        />
       }
     >
       <Menu
@@ -90,25 +93,19 @@ export default function GroupList({
         {groups.map((group) => (
           selectedGroupId === group.id && (
             <Space key={group.id} size="small">
-              <Tooltip title="编辑">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => onEditGroup(group)}
-                />
-              </Tooltip>
-              <Popconfirm
-                title="确认删除"
-                description={`确定要删除分组 "${group.name}" 吗？该分组下的标签将失去此分组关联。`}
+              <ActionButton
+                icon={<EditOutlined />}
+                tooltip="编辑"
+                onClick={() => onEditGroup(group)}
+              />
+              <ActionButton
+                icon={<DeleteOutlined />}
+                tooltip="删除"
+                danger
+                confirmTitle="确认删除"
+                confirmDescription={`确定要删除分组 "${group.name}" 吗？该分组下的标签将失去此分组关联。`}
                 onConfirm={() => onDeleteGroup(group.id)}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Tooltip title="删除">
-                  <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                </Tooltip>
-              </Popconfirm>
+              />
             </Space>
           )
         ))}

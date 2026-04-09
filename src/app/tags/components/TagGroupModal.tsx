@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Form,
@@ -9,6 +9,7 @@ import {
   InputNumber,
   Radio,
   App,
+  Alert,
 } from 'antd';
 
 const { TextArea } = Input;
@@ -40,10 +41,12 @@ export default function TagGroupModal({
 }: TagGroupModalProps) {
   const [form] = Form.useForm();
   const { message } = App.useApp();
+  const [errorInfo, setErrorInfo] = useState<{ message: string; suggestion?: string } | null>(null);
   const isEdit = !!initialValues;
 
   useEffect(() => {
     if (open) {
+      setErrorInfo(null);
       if (initialValues) {
         form.setFieldsValue({
           name: initialValues.name,
@@ -65,6 +68,7 @@ export default function TagGroupModal({
 
   const handleSubmit = async () => {
     try {
+      setErrorInfo(null);
       const values = await form.validateFields();
 
       const url = isEdit ? `/api/tag-groups/${initialValues.id}` : '/api/tag-groups';
@@ -84,28 +88,60 @@ export default function TagGroupModal({
         message.success(isEdit ? '分组更新成功' : '分组创建成功');
         onSuccess();
       } else {
-        message.error(data.message || (isEdit ? '更新分组失败' : '创建分组失败'));
+        // 显示详细的错误信息
+        setErrorInfo({
+          message: data.message || (isEdit ? '更新分组失败' : '创建分组失败'),
+          suggestion: data.suggestion,
+        });
+        
+        // 如果是编码重复错误，高亮编码字段
+        if (data.message?.includes('编码') && data.message?.includes('已存在')) {
+          form.setFields([
+            {
+              name: 'code',
+              errors: [data.message],
+            },
+          ]);
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('提交失败:', error);
+      setErrorInfo({
+        message: '网络错误，请检查网络连接后重试',
+      });
     }
+  };
+
+  const handleCancel = () => {
+    setErrorInfo(null);
+    onCancel();
   };
 
   return (
     <Modal
       title={title}
       open={open}
-      onCancel={onCancel}
+      onCancel={handleCancel}
       onOk={handleSubmit}
       width={560}
       destroyOnHidden
     >
+      {errorInfo && (
+        <Alert
+          message={errorInfo.message}
+          description={errorInfo.suggestion}
+          type="error"
+          showIcon
+          closable
+          onClose={() => setErrorInfo(null)}
+          style={{ marginBottom: 16, marginTop: 16 }}
+        />
+      )}
       <Form
         form={form}
         layout="horizontal"
         labelCol={{ span: 4 }}
         wrapperCol={{ span: 20 }}
-        style={{ marginTop: 16 }}
       >
         <Form.Item
           name="name"
@@ -122,6 +158,7 @@ export default function TagGroupModal({
             { required: true, message: '请输入分组编码' },
             { pattern: /^[a-zA-Z0-9_]+$/, message: '编码只能包含字母、数字和下划线' },
           ]}
+          extra="编码唯一，创建后不可修改"
         >
           <Input placeholder="请输入分组编码" maxLength={50} showCount disabled={isEdit} />
         </Form.Item>
