@@ -3,14 +3,15 @@ import { validateCasTicket, casLogin, setSessionCookie } from '@/lib/auth/cas';
 import { getConfig } from '@/lib/config';
 
 function getBaseUrl(request: NextRequest): string {
-  // 优先从请求 URL 中获取 origin（包含协议、主机名和端口）
-  // 例如: http://aaa.com/api/auth/cas/callback -> http://aaa.com
-  const origin = request.nextUrl.origin;
-  if (origin && origin !== 'null') {
-    return origin;
+  // 优先从请求头中获取协议和主机（支持反向代理场景）
+  const protocol = request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '');
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host;
+
+  if (host && host !== 'localhost:8080') {
+    return `${protocol}://${host}`;
   }
 
-  // 如果 origin 不可用，使用配置文件中的 serviceUrl 作为默认值
+  // 如果无法从请求头获取，使用配置文件中的 serviceUrl 作为默认值
   const config = getConfig();
   return config.cas.serviceUrl.endsWith('/') ? config.cas.serviceUrl.slice(0, -1) : config.cas.serviceUrl;
 }
