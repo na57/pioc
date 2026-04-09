@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Typography, Spin, Empty, message } from 'antd';
+import { Card, Row, Col, Typography, Spin, Empty, App } from 'antd';
 import { AppstoreOutlined } from '@ant-design/icons';
 import { largeIconMapping, useIcons } from '@/lib/icons';
 import { useRouter } from 'next/navigation';
@@ -22,6 +22,7 @@ export default function MyAppsPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { getLargeIcon } = useIcons();
+  const { message } = App.useApp();
 
   useEffect(() => {
     fetchMyApps();

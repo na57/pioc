@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import * as labelingTaskModel from '@/lib/database/models/labeling-task';
+import { findById as findDataObjectById } from '@/lib/database/models/dataObject';
 
 const appUrl = '/labeling-tasks';
 
@@ -30,10 +31,17 @@ async function getTaskHandler(
     }
 
     const collaborators = await labelingTaskModel.findCollaboratorsByTaskId(taskId);
+    
+    // 获取数据对象的 primary_key
+    const dataObject = await findDataObjectById(task.data_object_id);
 
     return NextResponse.json({
       success: true,
-      data: { ...task, collaborators }
+      data: { 
+        ...task, 
+        collaborators,
+        data_object_primary_key: dataObject?.primary_key || 'id'
+      }
     });
   } catch (error) {
     return NextResponse.json(

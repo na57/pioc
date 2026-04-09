@@ -14,6 +14,7 @@ import {
 } from '@ant-design/icons';
 import { iconMapping } from '@/lib/icons';
 import { useRouter, usePathname } from 'next/navigation';
+import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 const { Header, Content, Footer } = Layout;
 const { Title, Text } = Typography;
@@ -54,6 +55,7 @@ function AppLayout({ children }: AppLayoutProps) {
   const [menuLoading, setMenuLoading] = useState(true);
   const { message } = App.useApp();
   const { token } = theme.useToken();
+  const { config: systemConfig } = useSystemConfig();
 
   useEffect(() => {
     fetchUserInfo();
@@ -324,7 +326,7 @@ function AppLayout({ children }: AppLayoutProps) {
             }}
             onClick={() => router.push('/dashboard')}
           >
-            个人智慧运行中心
+            {systemConfig.name}
           </Title>
           {menuLoading ? (
             <Skeleton.Button active style={{ width: 400, height: 40 }} />
@@ -370,7 +372,7 @@ function AppLayout({ children }: AppLayoutProps) {
         marginTop: 'auto',
       }}>
         <Text type="secondary">
-          个人智慧运行中心 ©2026 PIOC
+          {systemConfig.name} {systemConfig.copyright}
         </Text>
       </Footer>
     </Layout>

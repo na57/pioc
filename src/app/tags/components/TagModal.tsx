@@ -8,8 +8,8 @@ import {
   ColorPicker,
   Checkbox,
   Radio,
-  message,
   Alert,
+  App,
 } from 'antd';
 
 const { TextArea } = Input;
@@ -52,6 +52,7 @@ export default function TagModal({
   groups,
 }: TagModalProps) {
   const [form] = Form.useForm();
+  const { message } = App.useApp();
   const [errorInfo, setErrorInfo] = React.useState<{ message: string; suggestion?: string } | null>(null);
   const isEdit = !!initialValues;
 
@@ -136,7 +137,7 @@ export default function TagModal({
       onCancel={handleCancel}
       onOk={handleSubmit}
       width={560}
-      destroyOnClose
+      destroyOnHidden
     >
       {errorInfo && (
         <Alert

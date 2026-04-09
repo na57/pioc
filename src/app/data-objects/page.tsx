@@ -739,31 +739,33 @@ export default function DataObjectsPage() {
           items={steps.map((step) => ({ title: step.title, icon: step.icon }))}
         />
 
-        <Form form={form} layout="vertical" preserve={false}>
-          <div style={{ minHeight: 300 }}>
-            {/* 所有步骤的字段都渲染，但根据当前步骤显示/隐藏 */}
-            <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>{renderStep1()}</div>
-            <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>{renderStep2()}</div>
-            <div style={{ display: currentStep === 2 ? 'block' : 'none' }}>{renderStep3()}</div>
-          </div>
+        {modalVisible && (
+          <Form form={form} layout="vertical" preserve={false}>
+            <div style={{ minHeight: 300 }}>
+              {/* 所有步骤的字段都渲染，但根据当前步骤显示/隐藏 */}
+              <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>{renderStep1()}</div>
+              <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>{renderStep2()}</div>
+              <div style={{ display: currentStep === 2 ? 'block' : 'none' }}>{renderStep3()}</div>
+            </div>
 
-          <div style={{ textAlign: 'right', marginTop: 24 }}>
-            <Space>
-              {currentStep > 0 && <Button onClick={handlePrevStep}>上一步</Button>}
-              {currentStep < steps.length - 1 && (
-                <Button type="primary" onClick={handleNextStep}>
-                  下一步
-                </Button>
-              )}
-              {currentStep === steps.length - 1 && (
-                <Button type="primary" onClick={handleSubmit}>
-                  {editingDataObject ? '更新' : '创建'}
-                </Button>
-              )}
-              <Button onClick={() => setModalVisible(false)}>取消</Button>
-            </Space>
-          </div>
-        </Form>
+            <div style={{ textAlign: 'right', marginTop: 24 }}>
+              <Space>
+                {currentStep > 0 && <Button onClick={handlePrevStep}>上一步</Button>}
+                {currentStep < steps.length - 1 && (
+                  <Button type="primary" onClick={handleNextStep}>
+                    下一步
+                  </Button>
+                )}
+                {currentStep === steps.length - 1 && (
+                  <Button type="primary" onClick={handleSubmit}>
+                    {editingDataObject ? '更新' : '创建'}
+                  </Button>
+                )}
+                <Button onClick={() => setModalVisible(false)}>取消</Button>
+              </Space>
+            </div>
+          </Form>
+        )}
       </Modal>
 
       {/* 查询结果弹窗 */}

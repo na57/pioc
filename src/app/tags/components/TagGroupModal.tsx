@@ -8,7 +8,7 @@ import {
   ColorPicker,
   InputNumber,
   Radio,
-  message,
+  App,
 } from 'antd';
 
 const { TextArea } = Input;
@@ -39,6 +39,7 @@ export default function TagGroupModal({
   initialValues,
 }: TagGroupModalProps) {
   const [form] = Form.useForm();
+  const { message } = App.useApp();
   const isEdit = !!initialValues;
 
   useEffect(() => {
@@ -97,7 +98,7 @@ export default function TagGroupModal({
       onCancel={onCancel}
       onOk={handleSubmit}
       width={560}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

@@ -51,8 +51,9 @@ async function createTagHandler(
   request: NextRequest,
   session: { userId: number; username: string; email: string; name: string }
 ) {
+  let body: any = {};
   try {
-    const body = await request.json();
+    body = await request.json();
 
     // 校验必填字段
     if (!body.name || !body.code) {

@@ -3,12 +3,17 @@ import { ConfigProvider, App } from 'antd';
 import StyledComponentsRegistry from '@/lib/theme/AntdRegistry';
 import theme from '@/lib/theme/config';
 import { IconProvider } from '@/lib/icons';
+import { getConfig } from '@/lib/config';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: '个人智慧运行中心 - PIOC',
-  description: 'Personal Intelligence Operation Center',
-};
+export function generateMetadata(): Metadata {
+  const config = getConfig();
+  
+  return {
+    title: `${config.app.name} - PIOC`,
+    description: config.app.description,
+  };
+}
 
 export default function RootLayout({
   children,
