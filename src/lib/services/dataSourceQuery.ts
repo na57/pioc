@@ -5,6 +5,7 @@ import type { DataSource } from '../database/models/dataSource';
 export interface QueryResult {
   success: boolean;
   data: unknown[];
+  total?: number;
   error?: string;
 }
 
@@ -22,11 +23,14 @@ class DataSourceQueryService {
   ): Promise<QueryResult> {
     try {
       let data: any[] = [];
+      let total = 0;
 
       if (dataSource.type === 'mysql') {
         data = await this.executeMySQLQuery(dataSource, queryStatement, options);
+        total = await this.getMySQLTotalCount(dataSource, queryStatement);
       } else if (dataSource.type === 'mongodb') {
         data = await this.executeMongoDBQuery(dataSource, queryStatement, options);
+        total = await this.getMongoDBTotalCount(dataSource, queryStatement);
       } else {
         throw new Error(`不支持的数据源类型: ${dataSource.type}`);
       }
@@ -34,6 +38,7 @@ class DataSourceQueryService {
       return {
         success: true,
         data,
+        total,
       };
     } catch (error) {
       console.error('查询执行失败:', error);
@@ -74,6 +79,30 @@ class DataSourceQueryService {
     }
   }
 
+  private async getMySQLTotalCount(
+    dataSource: DataSource,
+    queryStatement: string
+  ): Promise<number> {
+    const connection = await mysql.createConnection({
+      host: dataSource.host,
+      port: dataSource.port,
+      user: dataSource.username,
+      password: dataSource.password,
+      database: dataSource.db_name,
+      connectTimeout: 10000,
+    });
+
+    try {
+      // 将原始查询包装为子查询来计算总数
+      const countQuery = `SELECT COUNT(*) as total FROM (${queryStatement}) as t`;
+      const [rows] = await connection.query(countQuery);
+      const result = rows as { total: number }[];
+      return result[0]?.total || 0;
+    } finally {
+      await connection.end();
+    }
+  }
+
   private async executeMongoDBQuery(
     dataSource: DataSource,
     queryStatement: string,
@@ -108,6 +137,40 @@ class DataSourceQueryService {
       }
 
       return await cursor.toArray();
+    } finally {
+      await client.close();
+    }
+  }
+
+  private async getMongoDBTotalCount(
+    dataSource: DataSource,
+    queryStatement: string
+  ): Promise<number> {
+    const uri = `mongodb://${dataSource.username}:${encodeURIComponent(dataSource.password)}@${dataSource.host}:${dataSource.port}/${dataSource.db_name}`;
+    const client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
+
+    try {
+      await client.connect();
+      const db = client.db(dataSource.db_name);
+
+      // Parse collection name from query statement
+      const collectionName = this.extractMongoCollectionName(queryStatement);
+      const collection = db.collection(collectionName);
+
+      // Parse aggregation pipeline if provided
+      const pipeline = this.parseMongoQuery(queryStatement);
+
+      if (pipeline.length > 0) {
+        // 对于聚合管道，添加 $count 阶段
+        const countPipeline = [...pipeline, { $count: 'total' }];
+        const result = await collection.aggregate(countPipeline).toArray();
+        return result[0]?.total || 0;
+      } else {
+        // 简单查询，直接统计文档数
+        return await collection.countDocuments();
+      }
     } finally {
       await client.close();
     }

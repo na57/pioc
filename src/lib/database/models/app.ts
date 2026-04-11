@@ -14,6 +14,7 @@ export const BUILTIN_APPS = {
   DATA_OBJECT_MANAGEMENT: 10,  // 数据对象管理
   TAG_MANAGEMENT: 11,    // 标签管理
   LABELING_TASKS: 12,    // 打标作业
+  COURSE_CENTER: 13,     // 课程中心
 } as const;
 
 // 内置应用URL映射
@@ -30,6 +31,7 @@ export const BUILTIN_APP_URLS = {
   '/data-objects': BUILTIN_APPS.DATA_OBJECT_MANAGEMENT,
   '/tags': BUILTIN_APPS.TAG_MANAGEMENT,
   '/labeling-tasks': BUILTIN_APPS.LABELING_TASKS,
+  '/course-center': BUILTIN_APPS.COURSE_CENTER,
 } as const;
 
 export interface App {

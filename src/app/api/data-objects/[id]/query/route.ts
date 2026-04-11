@@ -91,7 +91,7 @@ async function queryHandler(
         pagination: {
           page,
           pageSize,
-          total: list.length, // 注意：这里返回的是当前页数量，实际总数需要额外查询
+          total: result.total || 0,
         },
       },
     });

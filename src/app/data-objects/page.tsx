@@ -111,6 +111,21 @@ export default function DataObjectsPage() {
     fetchDataSources();
   }, []);
 
+  // 当编辑弹窗打开且有编辑对象时，设置表单值
+  useEffect(() => {
+    if (modalVisible && editingDataObject) {
+      form.setFieldsValue({
+        name: editingDataObject.name,
+        description: editingDataObject.description,
+        data_source_id: editingDataObject.data_source_id,
+        query_statement: editingDataObject.query_statement,
+        primary_key: editingDataObject.primary_key,
+        display_template: editingDataObject.display_template,
+        status: editingDataObject.status,
+      });
+    }
+  }, [modalVisible, editingDataObject, form]);
+
   const fetchDataObjects = async (params?: { name?: string; dataSourceId?: string; status?: number }) => {
     try {
       setLoading(true);
@@ -172,15 +187,6 @@ export default function DataObjectsPage() {
   const handleEdit = (record: DataObject) => {
     setEditingDataObject(record);
     setCurrentStep(0);
-    form.setFieldsValue({
-      name: record.name,
-      description: record.description,
-      data_source_id: record.data_source_id,
-      query_statement: record.query_statement,
-      primary_key: record.primary_key,
-      display_template: record.display_template,
-      status: record.status,
-    });
     setPreviewData([]);
     setPreviewColumns([]);
     setModalVisible(true);
@@ -801,6 +807,10 @@ export default function DataObjectsPage() {
                       }))
                   : []
               }
+              rowKey={(record) => {
+                const pkValue = record[queryResult.primary_key];
+                return pkValue !== undefined ? String(pkValue) : JSON.stringify(record);
+              }}
               pagination={{
                 pageSize: queryResult.pagination.pageSize,
                 total: queryResult.pagination.total,

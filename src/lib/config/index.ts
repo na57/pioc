@@ -99,6 +99,14 @@ export interface AppConfig {
       semesterTableName: string;
       teachingInfoTableName: string;
     };
+    courseCenter?: {
+      dataSourceId: string;
+      undergraduateCourseTableName: string;
+      graduateCourseTableName: string;
+      undergraduateTeachingTableName: string;
+      graduateTeachingTableName: string;
+      classroomStatsTableName: string;
+    };
   };
   features: {
     allowUserRegistration: boolean;

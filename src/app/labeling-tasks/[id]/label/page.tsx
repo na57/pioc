@@ -153,7 +153,7 @@ export default function LabelPage() {
         setPagination(prev => ({
           ...prev,
           current: page,
-          total: data.data?.total || 0,
+          total: data.data?.pagination?.total || 0,
         }));
       }
     } catch (error) {

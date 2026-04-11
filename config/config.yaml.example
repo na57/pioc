@@ -156,6 +156,19 @@ apps:
     semesterTableName: "t_yzsj_dm_xb_xnxqm"
     # 教师授课信息表名
     teachingInfoTableName: "t_dws_gxjx_bzksjsskxx_v11mx"
+  courseCenter:
+    # 数据源ID（从数据源管理应用中获取）
+    dataSourceId: ""
+    # 本科生课程信息表名
+    undergraduateCourseTableName: "t_dws_gxjx_bzkskcjbxxmx"
+    # 研究生课程信息表名
+    graduateCourseTableName: "t_dws_gxjx_yjskcxxmx"
+    # 本科生教师授课信息表名
+    undergraduateTeachingTableName: "t_dws_gxjx_bzksjsskxx_v11mx"
+    # 研究生教师授课信息表名
+    graduateTeachingTableName: "t_dws_gxjx_yjsjsskxxmx"
+    # 课堂统计数据表名
+    classroomStatsTableName: "t_ynu_gxjx_aikttjjg"
 
 #------------------------------------------
 # 系统功能开关

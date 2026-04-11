@@ -257,6 +257,7 @@ CREATE TABLE IF NOT EXISTS pioc_labeling_results (
   tag_id INT NOT NULL COMMENT '标签ID',
   created_by INT NOT NULL COMMENT '打标用户ID',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_object_entry_tag (data_object_id, data_entry_id, tag_id),
   INDEX idx_task_id (task_id),
   INDEX idx_data_object_id (data_object_id),
   INDEX idx_data_entry_id (data_entry_id),
@@ -286,7 +287,8 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (9, '我的授课', '查看当前登录用户的授课情况，支持按学年学期筛选', 'BookOutlined', '/my-teaching', 1),
   (10, '数据对象管理', '管理数据对象，配置外部数据源查询', 'DatabaseOutlined', '/data-objects', 1),
   (11, '标签管理', '管理系统标签，包括标签的增删改查和分组管理', 'TagsOutlined', '/tags', 1),
-  (12, '打标作业', '创建和管理数据打标作业，支持多人协作打标', 'FlagOutlined', '/labeling-tasks', 1);
+  (12, '打标作业', '创建和管理数据打标作业，支持多人协作打标', 'FlagOutlined', '/labeling-tasks', 1),
+  (13, '课程中心', '查看本科生和研究生课程信息，支持课程查询、教学班和课堂统计查看', 'BookOutlined', '/course-center', 1);
 
 -- 插入默认菜单
 INSERT IGNORE INTO pioc_menus (id, name, path, icon, parent_id, sort_order, status, app_id) VALUES
@@ -400,8 +402,8 @@ async function assignMenuAppPermission(connection: mysql.PoolConnection) {
 
 async function assignAdditionalAppPermissions(connection: mysql.PoolConnection) {
   try {
-    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12）
-    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12];
+    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13）
+    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13];
     for (const appId of additionalAppIds) {
       await connection.execute(
         'INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (?, ?)',

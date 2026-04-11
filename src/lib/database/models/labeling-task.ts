@@ -200,7 +200,21 @@ export async function checkUserCanAccessTask(taskId: number, userId: number): Pr
   return results[0]?.count > 0;
 }
 
-export async function createLabelingResult(data: Partial<LabelingResult>): Promise<number> {
+export async function createLabelingResult(data: Partial<LabelingResult>): Promise<number | null> {
+  // 先检查是否已存在相同的打标结果（等幂性）
+  // 同一个数据对象中的同一个数据条目，同一个标签只能被打一次，不论在哪个作业中
+  const existingResults = await query<{ id: number; task_id: number }[]>(
+    `SELECT id, task_id FROM pioc_labeling_results 
+     WHERE data_object_id = ? AND data_entry_id = ? AND tag_id = ?`,
+    [data.data_object_id, data.data_entry_id, data.tag_id]
+  );
+  
+  // 如果已存在，直接返回已存在的记录ID（等幂操作）
+  if (existingResults.length > 0) {
+    return existingResults[0].id;
+  }
+  
+  // 不存在则插入新记录
   const result = await query<{ insertId: number }>(
     `INSERT INTO pioc_labeling_results (task_id, data_object_id, data_entry_id, tag_id, created_by) 
      VALUES (?, ?, ?, ?, ?)`,
