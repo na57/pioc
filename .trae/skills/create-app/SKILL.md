@@ -481,6 +481,98 @@ if (!appConfig) {
    
    两者缺一不可！初始化脚本用于重新部署，开发环境插入用于即时调试。
 
+## 7. 创建数据库迁移脚本（必须）
+
+对于已部署的环境，需要创建数据库迁移脚本来更新数据库。
+
+### 迁移脚本文件
+
+**文件命名规范**: `database-migration-{应用名称}.sql`
+
+**文件位置**: 项目根目录
+
+### 迁移脚本内容模板
+
+```sql
+-- {应用名称}应用数据库迁移脚本
+-- 执行此脚本以在已部署的数据库中添加{应用名称}应用
+
+-- 设置字符集
+SET NAMES utf8mb4;
+
+-- 1. 注册应用（如果不存在）
+INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
+  ({应用ID}, '{应用名称}', '{应用描述}', '{图标名称}', '{应用URL}', 1);
+
+-- 2. 为 admin 角色分配应用权限
+INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (1, {应用ID});
+
+-- 3. 创建应用所需的表（如果有）
+-- CREATE TABLE IF NOT EXISTS pioc_{表名} (...);
+
+-- 4. 创建索引（如果有）
+-- CREATE INDEX idx_{索引名} ON pioc_{表名}({字段名});
+
+-- 验证插入结果
+SELECT id, name, url, status FROM pioc_apps WHERE id = {应用ID};
+SELECT role_id, app_id FROM pioc_role_apps WHERE app_id = {应用ID};
+```
+
+### 执行迁移脚本
+
+**方式1: 使用docker命令（推荐）**
+```bash
+docker exec -i mysql mysql -uroot -proot123 mydb < /path/to/database-migration-{应用名称}.sql
+```
+
+**方式2: 使用数据库客户端**
+直接连接MySQL执行SQL脚本文件。
+
+### 示例：课程中心应用迁移脚本
+
+`database-migration-course-center.sql`:
+```sql
+-- 课程中心应用数据库迁移脚本
+
+SET NAMES utf8mb4;
+
+-- 注册课程中心应用
+INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
+  (13, '课程中心', '查看本科生和研究生课程信息，支持课程查询、教学班和课堂统计查看', 'BookOutlined', '/course-center', 1);
+
+-- 为 admin 角色分配权限
+INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (1, 13);
+
+-- 验证结果
+SELECT id, name, url, status FROM pioc_apps WHERE id = 13;
+SELECT role_id, app_id FROM pioc_role_apps WHERE app_id = 13;
+```
+
+### 迁移脚本最佳实践
+
+1. **幂等性**: 使用 `INSERT IGNORE` 或 `IF NOT EXISTS` 确保脚本可重复执行
+2. **字符集**: 始终设置 `SET NAMES utf8mb4` 避免中文乱码
+3. **验证**: 脚本末尾添加查询语句验证插入结果
+4. **版本控制**: 将迁移脚本纳入版本控制，便于追踪变更
+5. **命名规范**: 使用 `database-migration-{应用名称}.sql` 格式命名
+
+## 完整创建清单
+
+创建新应用时，请确保完成以下所有步骤：
+
+- [ ] 1. 在 `src/lib/database/init.ts` 中添加应用初始化SQL
+- [ ] 2. 在 `src/lib/database/models/app.ts` 中添加应用常量
+- [ ] 3. 创建前端页面 `src/app/{url}/page.tsx`
+- [ ] 4. 创建布局文件 `src/app/{url}/layout.tsx`
+- [ ] 5. 创建API路由 `src/app/api/{api-path}/route.ts`
+- [ ] 6. 在 `config/config.yaml` 中添加应用配置
+- [ ] 7. 在 `config/config.yaml.example` 中同步配置示例
+- [ ] 8. 在 `src/lib/config/index.ts` 中添加类型定义
+- [ ] 9. 创建数据库迁移脚本 `database-migration-{应用名称}.sql`
+- [ ] 10. 执行数据库迁移脚本（已部署环境）
+- [ ] 11. 配置角色权限（在 `/roles` 页面）
+- [ ] 12. 添加菜单项（在 `/menus` 页面）
+
 ## 相关文件参考
 
 - 数据库初始化: `src/lib/database/init.ts`
@@ -488,3 +580,5 @@ if (!appConfig) {
 - 权限中间件: `src/lib/auth/middleware.ts`
 - 应用页面示例: `src/app/apps/page.tsx`
 - API示例: `src/app/api/apps/route.ts`
+- 配置类型定义: `src/lib/config/index.ts`
+- 迁移脚本示例: `database-migration-course-center.sql`
