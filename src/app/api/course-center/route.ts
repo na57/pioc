@@ -213,9 +213,16 @@ async function getTeachingClasses(params: {
   const { pool, appConfig } = await getDataSourceConnection();
   const { undergraduateTeachingTableName, graduateTeachingTableName } = appConfig;
 
-  const tableName = params.courseType === 'graduate' 
+  const isGraduate = params.courseType === 'graduate';
+  const tableName = isGraduate 
     ? graduateTeachingTableName 
     : undergraduateTeachingTableName;
+
+  // 本科生和研究生表的字段名不同
+  const weekField = isGraduate ? 'zc as skzc' : 'skzc';
+  const weekDayField = isGraduate ? 'xq as skxq' : 'skxq';
+  const classNameField = isGraduate ? 'xszyjc as skbjmc' : 'skbjmc';
+  const deptNameField = isGraduate ? 'yxmc as kcksdwmc' : 'kcksdwmc';
 
   try {
     const [rows] = await pool.execute(
@@ -227,8 +234,8 @@ async function getTeachingClasses(params: {
         xnxqmc,
         kcdm,
         kcmc,
-        skzc,
-        skxq,
+        ${weekField},
+        ${weekDayField},
         ksjc,
         jsjc,
         jasdm,
@@ -236,10 +243,10 @@ async function getTeachingClasses(params: {
         jsszxqh,
         jsszxqmc,
         skbjh,
-        skbjmc,
+        ${classNameField},
         kxh,
         kcksdwh,
-        kcksdwmc,
+        ${deptNameField},
         kkxnd,
         kkxqm,
         sksj,
