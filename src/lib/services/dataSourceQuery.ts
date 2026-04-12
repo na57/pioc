@@ -2,11 +2,17 @@ import mysql from 'mysql2/promise';
 import { MongoClient, Document } from 'mongodb';
 import type { DataSource } from '../database/models/dataSource';
 
+export interface FieldComment {
+  name: string;
+  comment: string;
+}
+
 export interface QueryResult {
   success: boolean;
   data: unknown[];
   total?: number;
   error?: string;
+  fieldComments?: FieldComment[];
 }
 
 export interface QueryOptions {
@@ -247,7 +253,68 @@ class DataSourceQueryService {
 
   // Preview query - limited results for testing
   async previewQuery(dataSource: DataSource, queryStatement: string): Promise<QueryResult> {
-    return this.executeQuery(dataSource, queryStatement, { page: 1, pageSize: 10 });
+    const result = await this.executeQuery(dataSource, queryStatement, { page: 1, pageSize: 10 });
+    
+    // 获取字段注释（仅 MySQL）
+    if (result.success && dataSource.type === 'mysql') {
+      try {
+        const fieldComments = await this.getMySQLFieldComments(dataSource, queryStatement);
+        result.fieldComments = fieldComments;
+      } catch (error) {
+        console.warn('获取字段注释失败:', error);
+        // 获取注释失败不影响主功能
+      }
+    }
+    
+    return result;
+  }
+
+  // 获取 MySQL 表字段注释
+  private async getMySQLFieldComments(
+    dataSource: DataSource,
+    queryStatement: string
+  ): Promise<FieldComment[]> {
+    const connection = await mysql.createConnection({
+      host: dataSource.host,
+      port: dataSource.port,
+      user: dataSource.username,
+      password: dataSource.password,
+      database: dataSource.db_name,
+      connectTimeout: 10000,
+    });
+
+    try {
+      // 从查询语句中提取表名
+      const tableName = this.extractTableNameFromQuery(queryStatement);
+      if (!tableName) {
+        return [];
+      }
+
+      // 查询 INFORMATION_SCHEMA 获取字段注释
+      const [rows] = await connection.query(
+        `SELECT COLUMN_NAME as name, COLUMN_COMMENT as comment 
+         FROM INFORMATION_SCHEMA.COLUMNS 
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+        [dataSource.db_name, tableName]
+      );
+
+      return (rows as { name: string; comment: string }[]).map(row => ({
+        name: row.name,
+        comment: row.comment || row.name, // 如果没有注释，使用字段名
+      }));
+    } finally {
+      await connection.end();
+    }
+  }
+
+  // 从查询语句中提取表名
+  private extractTableNameFromQuery(queryStatement: string): string | null {
+    // 匹配 SELECT ... FROM table_name ...
+    const fromMatch = queryStatement.match(/FROM\s+(\w+)/i);
+    if (fromMatch) {
+      return fromMatch[1];
+    }
+    return null;
   }
 }
 

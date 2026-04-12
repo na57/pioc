@@ -14,6 +14,7 @@ interface LabelingTask {
   description: string | null;
   data_object_id: number;
   data_object_name: string;
+  data_object_display_template?: string;
   tag_group_id: number;
   tag_group_name: string;
   status: number;
@@ -57,6 +58,7 @@ export default function TaskResultsPage() {
   const [task, setTask] = useState<LabelingTask | null>(null);
   const [results, setResults] = useState<LabelingResultDetail[]>([]);
   const [tagStats, setTagStats] = useState<TagStatistics[]>([]);
+  const [dataEntriesMap, setDataEntriesMap] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
@@ -74,6 +76,9 @@ export default function TaskResultsPage() {
       const taskData = await taskResponse.json();
       if (taskData.success) {
         setTask(taskData.data);
+        
+        // 获取数据对象的数据列表
+        await fetchDataEntriesMap(taskData.data.data_object_id);
       }
 
       // 获取打标结果
@@ -83,6 +88,41 @@ export default function TaskResultsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchDataEntriesMap = async (dataObjectId: number) => {
+    try {
+      const response = await fetch(`/api/data-objects/${dataObjectId}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page: 1, pageSize: 10000 }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        const map = new Map<string, any>();
+        (data.data?.list || []).forEach((entry: any) => {
+          map.set(String(entry.id), entry);
+        });
+        setDataEntriesMap(map);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data entries map:', error);
+    }
+  };
+
+  // 根据显示模板渲染数据条目
+  const renderDataEntryDisplay = (dataEntryId: string): string => {
+    const entry = dataEntriesMap.get(dataEntryId);
+    if (!entry || !task?.data_object_display_template) {
+      return dataEntryId;
+    }
+
+    let display = task.data_object_display_template;
+    // 替换模板中的字段，如 {{id}} -> 实际值
+    Object.keys(entry).forEach((key) => {
+      display = display.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(entry[key]));
+    });
+    return display;
   };
 
   const fetchResults = async () => {
@@ -124,14 +164,17 @@ export default function TaskResultsPage() {
   const columns = [
     {
       title: '数据条目',
-      dataIndex: 'data_entry_display',
-      key: 'data_entry_display',
-      render: (text: string, record: LabelingResultDetail) => (
-        <div>
-          <div>{text || record.data_entry_id}</div>
-          <Text type="secondary" style={{ fontSize: '12px' }}>{record.data_entry_id}</Text>
-        </div>
-      ),
+      dataIndex: 'data_entry_id',
+      key: 'data_entry_id',
+      render: (dataEntryId: string) => {
+        const displayText = renderDataEntryDisplay(dataEntryId);
+        return (
+          <div>
+            <div>{displayText}</div>
+            <Text type="secondary" style={{ fontSize: '12px' }}>{dataEntryId}</Text>
+          </div>
+        );
+      },
     },
     {
       title: '标签',

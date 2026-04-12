@@ -12,7 +12,6 @@ import {
   InputNumber,
   Select,
   App,
-  Popconfirm,
   Switch,
   Card,
   Typography,
@@ -28,6 +27,7 @@ import {
 } from '@ant-design/icons';
 import Image from 'next/image';
 import type { TableProps } from 'antd';
+import ActionButton from '@/app/tags/components/ActionButton';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -272,34 +272,28 @@ export default function DataSourcesPage() {
     {
       title: '操作',
       key: 'action',
-      width: 220,
+      width: 180,
       fixed: 'right',
       render: (_, record) => (
         <Space>
-          <Button
-            type="link"
+          <ActionButton
             icon={<ApiOutlined />}
+            tooltip="测试连接"
             onClick={() => handleTestConnection(record.id)}
-          >
-            测试
-          </Button>
-          <Button
-            type="link"
+          />
+          <ActionButton
             icon={<EditOutlined />}
+            tooltip="编辑"
             onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除此数据源？"
+          />
+          <ActionButton
+            icon={<DeleteOutlined />}
+            tooltip="删除"
+            danger
+            confirmTitle="确认删除"
+            confirmDescription="确定要删除此数据源吗？"
             onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          />
         </Space>
       ),
     },

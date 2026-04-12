@@ -53,6 +53,7 @@ async function previewQueryHandler(
     return NextResponse.json({
       success: true,
       data: result.data,
+      fieldComments: result.fieldComments,
     });
   } catch (error) {
     console.error('预览查询失败:', error);

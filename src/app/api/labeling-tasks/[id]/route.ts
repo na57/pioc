@@ -32,7 +32,7 @@ async function getTaskHandler(
 
     const collaborators = await labelingTaskModel.findCollaboratorsByTaskId(taskId);
     
-    // 获取数据对象的 primary_key
+    // 获取数据对象的 primary_key 和 display_template
     const dataObject = await findDataObjectById(task.data_object_id);
 
     return NextResponse.json({
@@ -40,7 +40,8 @@ async function getTaskHandler(
       data: { 
         ...task, 
         collaborators,
-        data_object_primary_key: dataObject?.primary_key || 'id'
+        data_object_primary_key: dataObject?.primary_key || 'id',
+        data_object_display_template: dataObject?.display_template || '{{id}}'
       }
     });
   } catch (error) {

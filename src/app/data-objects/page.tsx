@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Table,
   Button,
@@ -33,6 +34,7 @@ import {
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import Image from 'next/image';
+import ActionButton from '@/app/tags/components/ActionButton';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -87,19 +89,19 @@ interface QueryResult {
 }
 
 export default function DataObjectsPage() {
+  const router = useRouter();
   const [dataObjects, setDataObjects] = useState<DataObject[]>([]);
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [queryModalVisible, setQueryModalVisible] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [editingDataObject, setEditingDataObject] = useState<DataObject | null>(null);
   const [selectedDataObject, setSelectedDataObject] = useState<DataObject | null>(null);
-  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [previewData, setPreviewData] = useState<Record<string, unknown>[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewColumns, setPreviewColumns] = useState<{ title: string; dataIndex: string; key: string; ellipsis: boolean }[]>([]);
+  const [fieldComments, setFieldComments] = useState<Record<string, string>>({});
   const [form] = Form.useForm();
   const { message } = App.useApp();
 
@@ -212,27 +214,8 @@ export default function DataObjectsPage() {
     setDetailModalVisible(true);
   };
 
-  const handleQuery = async (record: DataObject) => {
-    try {
-      setSelectedDataObject(record);
-      setQueryModalVisible(true);
-      setQueryResult(null);
-
-      const response = await fetch(`/api/data-objects/${record.id}/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page: 1, pageSize: 20 }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setQueryResult(data.data);
-      } else {
-        message.error(data.message || '查询失败');
-      }
-    } catch {
-      message.error('查询失败');
-    }
+  const handleQuery = (record: DataObject) => {
+    router.push(`/data-objects/${record.id}/query`);
   };
 
   const handlePreviewQuery = async () => {
@@ -253,10 +236,20 @@ export default function DataObjectsPage() {
       const data = await response.json();
       if (data.success && data.data.length > 0) {
         setPreviewData(data.data);
-        // 动态生成列
+        
+        // 保存字段注释
+        let commentsMap: Record<string, string> = {};
+        if (data.fieldComments && Array.isArray(data.fieldComments)) {
+          data.fieldComments.forEach((field: { name: string; comment: string }) => {
+            commentsMap[field.name] = field.comment;
+          });
+          setFieldComments(commentsMap);
+        }
+        
+        // 动态生成列（使用字段注释）
         const firstRow = data.data[0];
         const columns = Object.keys(firstRow).map((key) => ({
-          title: key,
+          title: commentsMap[key] ? `${commentsMap[key]}(${key})` : key,
           dataIndex: key,
           key,
           ellipsis: true,
@@ -376,11 +369,14 @@ export default function DataObjectsPage() {
     }
   };
 
-  // 获取字段建议
+  // 获取字段建议（带注释）
   const getFieldSuggestions = () => {
     if (previewData.length === 0) return [];
     const firstRow = previewData[0];
-    return Object.keys(firstRow);
+    return Object.keys(firstRow).map((field) => ({
+      value: field,
+      label: fieldComments[field] ? `${fieldComments[field]}(${field})` : field,
+    }));
   };
 
   // 渲染模板预览
@@ -461,26 +457,28 @@ export default function DataObjectsPage() {
     {
       title: '操作',
       key: 'action',
-      width: 220,
+      width: 200,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
-          <Button type="link" icon={<EyeOutlined />} onClick={() => handleQuery(record)}>
-            查询
-          </Button>
-          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除此数据对象？"
+        <Space size="small">
+          <ActionButton
+            icon={<EyeOutlined />}
+            tooltip="查询数据"
+            onClick={() => handleQuery(record)}
+          />
+          <ActionButton
+            icon={<EditOutlined />}
+            tooltip="编辑"
+            onClick={() => handleEdit(record)}
+          />
+          <ActionButton
+            icon={<DeleteOutlined />}
+            tooltip="删除"
+            danger
+            confirmTitle="确认删除"
+            confirmDescription="确定要删除此数据对象吗？"
             onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          />
         </Space>
       ),
     },
@@ -601,7 +599,7 @@ export default function DataObjectsPage() {
           placeholder="请选择或输入主键字段"
           showSearch
           allowClear
-          options={getFieldSuggestions().map((field) => ({ label: field, value: field }))}
+          options={getFieldSuggestions()}
         />
       </Form.Item>
     </>
@@ -641,17 +639,17 @@ export default function DataObjectsPage() {
           <div style={{ marginTop: 8 }}>
             {getFieldSuggestions().map((field) => (
               <Tag
-                key={field}
+                key={field.value}
                 style={{ cursor: 'pointer', marginBottom: 4 }}
                 onClick={() => {
                   const currentTemplate = form.getFieldValue('display_template') || '';
                   const newTemplate = currentTemplate
-                    ? `${currentTemplate} {{${field}}}`
-                    : `{{${field}}}`;
+                    ? `${currentTemplate} {{${field.value}}}`
+                    : `{{${field.value}}}`;
                   form.setFieldsValue({ display_template: newTemplate });
                 }}
               >
-                {field}
+                {field.label}
               </Tag>
             ))}
           </div>
@@ -738,6 +736,7 @@ export default function DataObjectsPage() {
         footer={null}
         width={800}
         destroyOnHidden
+        forceRender
       >
         <Steps
           current={currentStep}
@@ -745,84 +744,31 @@ export default function DataObjectsPage() {
           items={steps.map((step) => ({ title: step.title, icon: step.icon }))}
         />
 
-        {modalVisible && (
-          <Form form={form} layout="vertical" preserve={false}>
-            <div style={{ minHeight: 300 }}>
-              {/* 所有步骤的字段都渲染，但根据当前步骤显示/隐藏 */}
-              <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>{renderStep1()}</div>
-              <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>{renderStep2()}</div>
-              <div style={{ display: currentStep === 2 ? 'block' : 'none' }}>{renderStep3()}</div>
-            </div>
-
-            <div style={{ textAlign: 'right', marginTop: 24 }}>
-              <Space>
-                {currentStep > 0 && <Button onClick={handlePrevStep}>上一步</Button>}
-                {currentStep < steps.length - 1 && (
-                  <Button type="primary" onClick={handleNextStep}>
-                    下一步
-                  </Button>
-                )}
-                {currentStep === steps.length - 1 && (
-                  <Button type="primary" onClick={handleSubmit}>
-                    {editingDataObject ? '更新' : '创建'}
-                  </Button>
-                )}
-                <Button onClick={() => setModalVisible(false)}>取消</Button>
-              </Space>
-            </div>
-          </Form>
-        )}
-      </Modal>
-
-      {/* 查询结果弹窗 */}
-      <Modal
-        title={`查询数据 - ${selectedDataObject?.name || ''}`}
-        open={queryModalVisible}
-        onCancel={() => setQueryModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setQueryModalVisible(false)}>
-            关闭
-          </Button>,
-        ]}
-        width={900}
-      >
-        {queryResult ? (
-          <>
-            <Alert
-              title={`显示模板: ${queryResult.display_template} | 主键字段: ${queryResult.primary_key}`}
-              type="info"
-              style={{ marginBottom: 16 }}
-            />
-            <AntTable
-              dataSource={queryResult.list}
-              columns={
-                queryResult.list.length > 0
-                  ? Object.keys(queryResult.list[0])
-                      .filter((key) => !key.startsWith('_'))
-                      .map((key) => ({
-                        title: key,
-                        dataIndex: key,
-                        key,
-                        ellipsis: true,
-                      }))
-                  : []
-              }
-              rowKey={(record) => {
-                const pkValue = record[queryResult.primary_key];
-                return pkValue !== undefined ? String(pkValue) : JSON.stringify(record);
-              }}
-              pagination={{
-                pageSize: queryResult.pagination.pageSize,
-                total: queryResult.pagination.total,
-              }}
-              scroll={{ x: 'max-content' }}
-            />
-          </>
-        ) : (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Text type="secondary">正在查询...</Text>
+        <Form form={form} layout="vertical" preserve={false}>
+          <div style={{ minHeight: 300 }}>
+            {/* 所有步骤的字段都渲染，但根据当前步骤显示/隐藏 */}
+            <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>{renderStep1()}</div>
+            <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>{renderStep2()}</div>
+            <div style={{ display: currentStep === 2 ? 'block' : 'none' }}>{renderStep3()}</div>
           </div>
-        )}
+
+          <div style={{ textAlign: 'right', marginTop: 24 }}>
+            <Space>
+              {currentStep > 0 && <Button onClick={handlePrevStep}>上一步</Button>}
+              {currentStep < steps.length - 1 && (
+                <Button type="primary" onClick={handleNextStep}>
+                  下一步
+                </Button>
+              )}
+              {currentStep === steps.length - 1 && (
+                <Button type="primary" onClick={handleSubmit}>
+                  {editingDataObject ? '更新' : '创建'}
+                </Button>
+              )}
+              <Button onClick={() => setModalVisible(false)}>取消</Button>
+            </Space>
+          </div>
+        </Form>
       </Modal>
 
       {/* 详情弹窗 */}
