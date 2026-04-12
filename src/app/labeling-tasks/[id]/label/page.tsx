@@ -47,6 +47,8 @@ interface LabelingResult {
   id: number;
   data_entry_id: string;
   tag_id: number;
+  tag_name: string;
+  tag_color: string;
   created_by: number;
   created_at: string;
 }
@@ -98,7 +100,7 @@ export default function LabelPage() {
       if (data.success) {
         setTask(data.data);
         await fetchTagGroup(data.data.tag_group_id);
-        await fetchDataEntries(data.data.data_object_id, 1);
+        await fetchDataEntries(data.data.data_object_id, 1, data.data.data_object_primary_key);
         await fetchAllResults();
       } else {
         message.error(data.message || '获取作业信息失败');
@@ -130,25 +132,29 @@ export default function LabelPage() {
     }
   };
 
-  const fetchDataEntries = async (dataObjectId: number, page: number) => {
+  const fetchDataEntries = async (dataObjectId: number, page: number, primaryKey?: string) => {
     setDataLoading(true);
     try {
       const response = await fetch(`/api/data-objects/${dataObjectId}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          page: page, 
-          pageSize: pagination.pageSize 
+        body: JSON.stringify({
+          page: page,
+          pageSize: pagination.pageSize
         }),
       });
       const data = await response.json();
       if (data.success) {
-        // 为每条数据确保有唯一的 key
-        const entries = (data.data?.list || []).map((entry: any, index: number) => ({
-          ...entry,
-          _key: entry.id ? String(entry.id) : `entry-${page}-${index}`,
-        }));
-        
+        // 为每条数据确保有唯一的 key，使用与 getEntryPrimaryKey 相同的逻辑
+        const entries = (data.data?.list || []).map((entry: any, index: number) => {
+          const keyField = primaryKey || 'id';
+          const keyValue = entry[keyField];
+          return {
+            ...entry,
+            _key: keyValue !== undefined ? String(keyValue) : `entry-${page}-${index}`,
+          };
+        });
+
         setDataEntries(entries);
         setPagination(prev => ({
           ...prev,
@@ -165,7 +171,8 @@ export default function LabelPage() {
 
   const fetchAllResults = async () => {
     try {
-      const response = await fetch(`/api/labeling-tasks/${taskId}/results`);
+      // 使用 scope=global 查询该数据对象下的所有全局标签
+      const response = await fetch(`/api/labeling-tasks/${taskId}/results?scope=global`);
       const data = await response.json();
       if (data.success) {
         setAllResults(data.data || []);
@@ -297,7 +304,7 @@ export default function LabelPage() {
 
   const handleTableChange = (newPagination: any) => {
     if (task) {
-      fetchDataEntries(task.data_object_id, newPagination.current);
+      fetchDataEntries(task.data_object_id, newPagination.current, task.data_object_primary_key);
     }
   };
 
@@ -306,26 +313,23 @@ export default function LabelPage() {
     if (results.length === 0) {
       return <Text type="secondary">未打标</Text>;
     }
-    
+
     return (
       <Space wrap size="small">
-        {results.map((result) => {
-          const tag = tagGroup?.tags.find(t => t.id === result.tag_id);
-          return tag ? (
-            <Tag
-              key={result.id}
-              color={tag.color}
-              closable
-              onClose={(e) => {
-                e.stopPropagation();
-                handleRemoveTag(result.id);
-              }}
-              icon={<CheckCircleOutlined />}
-            >
-              {tag.name}
-            </Tag>
-          ) : null;
-        })}
+        {results.map((result) => (
+          <Tag
+            key={result.id}
+            color={result.tag_color || '#1890ff'}
+            closable
+            onClose={(e) => {
+              e.stopPropagation();
+              handleRemoveTag(result.id);
+            }}
+            icon={<CheckCircleOutlined />}
+          >
+            {result.tag_name || '未知标签'}
+          </Tag>
+        ))}
       </Space>
     );
   };
@@ -553,20 +557,17 @@ export default function LabelPage() {
                 {getEntryResults(selectedEntry).length === 0 ? (
                   <Text type="secondary">暂无标签</Text>
                 ) : (
-                  getEntryResults(selectedEntry).map((result) => {
-                    const tag = tagGroup?.tags.find(t => t.id === result.tag_id);
-                    return tag ? (
-                      <Tag
-                        key={result.id}
-                        color={tag.color}
-                        closable
-                        onClose={() => handleRemoveTag(result.id)}
-                        icon={<CheckCircleOutlined />}
-                      >
-                        {tag.name}
-                      </Tag>
-                    ) : null;
-                  })
+                  getEntryResults(selectedEntry).map((result) => (
+                    <Tag
+                      key={result.id}
+                      color={result.tag_color || '#1890ff'}
+                      closable
+                      onClose={() => handleRemoveTag(result.id)}
+                      icon={<CheckCircleOutlined />}
+                    >
+                      {result.tag_name || '未知标签'}
+                    </Tag>
+                  ))
                 )}
               </Space>
             </div>

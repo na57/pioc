@@ -30,13 +30,32 @@ async function getResultsHandler(
 
     const { searchParams } = new URL(request.url);
     const dataEntryId = searchParams.get('data_entry_id');
+    const scope = searchParams.get('scope'); // 'global' 表示查询全局标签
+
+    // 获取作业信息以获取 data_object_id
+    const task = await labelingTaskModel.findTaskById(taskId);
+    if (!task) {
+      return NextResponse.json(
+        { success: false, message: 'Task not found' },
+        { status: 404 }
+      );
+    }
 
     let results;
-    if (dataEntryId) {
-      results = await labelingTaskModel.findResultsByTaskAndEntry(taskId, dataEntryId);
+    if (scope === 'global') {
+      // 查询该数据对象下所有作业的全局标签
+      if (dataEntryId) {
+        results = await labelingTaskModel.findResultsByDataObjectAndEntry(task.data_object_id, dataEntryId);
+      } else {
+        results = await labelingTaskModel.findResultsByDataObject(task.data_object_id);
+      }
     } else {
-      // 使用带详细信息的查询方法
-      results = await labelingTaskModel.findResultsByTaskIdWithDetails(taskId);
+      // 兼容原有逻辑：按作业查询
+      if (dataEntryId) {
+        results = await labelingTaskModel.findResultsByTaskAndEntry(taskId, dataEntryId);
+      } else {
+        results = await labelingTaskModel.findResultsByTaskIdWithDetails(taskId);
+      }
     }
 
     return NextResponse.json({ success: true, data: results });
