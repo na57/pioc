@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Tag, Space, Modal, Form, Input, Select, Popconfirm, Badge, Tooltip, App } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, TeamOutlined, PlayCircleOutlined, FlagOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Tag, Space, Modal, Form, Input, Select, App } from 'antd';
+import { PlusOutlined, DeleteOutlined, TeamOutlined, PlayCircleOutlined, FlagOutlined, BarChartOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
+import ActionButton from '@/app/tags/components/ActionButton';
+import FriendlyTime from '@/components/FriendlyTime';
 
 const { TextArea } = Input;
 
@@ -15,7 +17,6 @@ interface LabelingTask {
   data_object_name: string;
   tag_group_id: number;
   tag_group_name: string;
-  status: number;
   created_by: number;
   creator_name: string;
   collaborator_count: number;
@@ -72,7 +73,6 @@ export default function LabelingTasksPage() {
       const response = await fetch('/api/data-objects');
       const data = await response.json();
       if (data.success) {
-        // API 返回格式为 { data: { list: [...] } }
         const list = data.data?.list || [];
         setDataObjects(list);
       }
@@ -86,7 +86,6 @@ export default function LabelingTasksPage() {
       const response = await fetch('/api/tag-groups?all=true');
       const data = await response.json();
       if (data.success) {
-        // API 返回格式为 { data: { list: [...] } }
         const list = data.data?.list || [];
         setTagGroups(list);
       }
@@ -144,12 +143,16 @@ export default function LabelingTasksPage() {
     router.push(`/labeling-tasks/${taskId}/collaborators`);
   };
 
+  const handleViewResults = (taskId: number) => {
+    router.push(`/labeling-tasks/${taskId}/results`);
+  };
+
   const columns = [
     {
       title: '作业名称',
       dataIndex: 'name',
       key: 'name',
-      render: (text: string, record: LabelingTask) => (
+      render: (text: string) => (
         <Space>
           <FlagOutlined />
           <span>{text}</span>
@@ -167,18 +170,6 @@ export default function LabelingTasksPage() {
       key: 'tag_group_name',
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      render: (status: number) => (
-        status === 1 ? (
-          <Badge status="processing" text="进行中" />
-        ) : (
-          <Badge status="default" text="已结束" />
-        )
-      ),
-    },
-    {
       title: '创建者',
       dataIndex: 'creator_name',
       key: 'creator_name',
@@ -188,11 +179,9 @@ export default function LabelingTasksPage() {
       dataIndex: 'collaborator_count',
       key: 'collaborator_count',
       render: (count: number) => (
-        <Tooltip title={`${count} 位协作者`}>
-          <Tag icon={<TeamOutlined />} color="blue">
-            {count}
-          </Tag>
-        </Tooltip>
+        <Tag icon={<TeamOutlined />} color="blue">
+          {count}
+        </Tag>
       ),
     },
     {
@@ -207,43 +196,38 @@ export default function LabelingTasksPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (text: string) => new Date(text).toLocaleString(),
+      width: 120,
+      render: (text: string) => <FriendlyTime date={text} />,
     },
     {
       title: '操作',
       key: 'action',
+      width: 200,
       render: (_: any, record: LabelingTask) => (
         <Space size="small">
-          <Tooltip title="开始打标">
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              size="small"
-              onClick={() => handleStartLabeling(record.id)}
-            >
-              打标
-            </Button>
-          </Tooltip>
-          <Tooltip title="管理协作者">
-            <Button
-              icon={<TeamOutlined />}
-              size="small"
-              onClick={() => handleManageCollaborators(record.id)}
-            >
-              协作者
-            </Button>
-          </Tooltip>
-          <Popconfirm
-            title="确认删除"
-            description="确定要删除这个打标作业吗？"
+          <ActionButton
+            icon={<PlayCircleOutlined />}
+            tooltip="开始打标"
+            onClick={() => handleStartLabeling(record.id)}
+          />
+          <ActionButton
+            icon={<BarChartOutlined />}
+            tooltip="查看结果"
+            onClick={() => handleViewResults(record.id)}
+          />
+          <ActionButton
+            icon={<TeamOutlined />}
+            tooltip="管理协作者"
+            onClick={() => handleManageCollaborators(record.id)}
+          />
+          <ActionButton
+            icon={<DeleteOutlined />}
+            tooltip="删除"
+            danger
+            confirmTitle="确认删除"
+            confirmDescription="确定要删除这个打标作业吗？"
             onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button danger icon={<DeleteOutlined />} size="small">
-              删除
-            </Button>
-          </Popconfirm>
+          />
         </Space>
       ),
     },

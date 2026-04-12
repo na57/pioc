@@ -230,6 +230,42 @@ export async function findResultsByTaskId(taskId: number): Promise<LabelingResul
   );
 }
 
+export interface LabelingResultDetail {
+  id: number;
+  task_id: number;
+  data_object_id: number;
+  data_entry_id: string;
+  data_entry_display: string;
+  tag_id: number;
+  tag_name: string;
+  tag_color: string;
+  created_by: number;
+  creator_name: string;
+  created_at: Date;
+}
+
+export async function findResultsByTaskIdWithDetails(taskId: number): Promise<LabelingResultDetail[]> {
+  return query<LabelingResultDetail[]>(`
+    SELECT 
+      lr.id,
+      lr.task_id,
+      lr.data_object_id,
+      lr.data_entry_id,
+      lr.data_entry_id as data_entry_display,
+      lr.tag_id,
+      t.name as tag_name,
+      t.color as tag_color,
+      lr.created_by,
+      u.name as creator_name,
+      lr.created_at
+    FROM pioc_labeling_results lr
+    LEFT JOIN pioc_tags t ON lr.tag_id = t.id
+    LEFT JOIN pioc_users u ON lr.created_by = u.id
+    WHERE lr.task_id = ?
+    ORDER BY lr.created_at DESC
+  `, [taskId]);
+}
+
 export async function findResultsByTaskAndEntry(taskId: number, dataEntryId: string): Promise<LabelingResult[]> {
   return query<LabelingResult[]>(
     'SELECT * FROM pioc_labeling_results WHERE task_id = ? AND data_entry_id = ? ORDER BY created_at DESC',

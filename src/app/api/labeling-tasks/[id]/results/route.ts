@@ -35,7 +35,8 @@ async function getResultsHandler(
     if (dataEntryId) {
       results = await labelingTaskModel.findResultsByTaskAndEntry(taskId, dataEntryId);
     } else {
-      results = await labelingTaskModel.findResultsByTaskId(taskId);
+      // 使用带详细信息的查询方法
+      results = await labelingTaskModel.findResultsByTaskIdWithDetails(taskId);
     }
 
     return NextResponse.json({ success: true, data: results });
