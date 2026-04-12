@@ -100,8 +100,11 @@ export default function TaskResultsPage() {
       const data = await response.json();
       if (data.success) {
         const map = new Map<string, any>();
+        const primaryKey = data.data?.primary_key || 'id';
         (data.data?.list || []).forEach((entry: any) => {
-          map.set(String(entry.id), entry);
+          // 使用主键字段作为key，与存储打标结果时保持一致
+          const keyValue = entry[primaryKey] !== undefined ? String(entry[primaryKey]) : String(entry.id);
+          map.set(keyValue, entry);
         });
         setDataEntriesMap(map);
       }
