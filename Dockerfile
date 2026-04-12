@@ -6,7 +6,7 @@ WORKDIR /app
 # 复制依赖文件
 COPY package*.json ./
 
-# 安装依赖
+# 安装所有依赖（包括开发依赖，用于构建）
 RUN npm ci
 
 # 复制源代码
@@ -34,9 +34,11 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# 复制 package.json 和依赖
+# 复制 package.json
 COPY --from=builder /app/package*.json ./
-RUN npm ci --only=production
+
+# 复制 builder 阶段安装的生产依赖（不需要重新安装）
+COPY --from=builder /app/node_modules ./node_modules
 
 # 复制构建产物
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
