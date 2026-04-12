@@ -128,8 +128,7 @@ export default function TaskResultsPage() {
   const fetchResults = async () => {
     setDataLoading(true);
     try {
-      // 使用 scope=global 查询该数据对象下的所有全局标签
-      const response = await fetch(`/api/labeling-tasks/${taskId}/results?scope=global`);
+      const response = await fetch(`/api/labeling-tasks/${taskId}/results`);
       const data = await response.json();
       if (data.success) {
         setResults(data.data || []);

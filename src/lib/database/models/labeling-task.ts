@@ -51,7 +51,7 @@ export async function findAllTasks(): Promise<LabelingTaskWithDetails[]> {
     LEFT JOIN pioc_tag_groups tg ON t.tag_group_id = tg.id
     LEFT JOIN pioc_users u ON t.created_by = u.id
     LEFT JOIN pioc_labeling_task_collaborators tc ON t.id = tc.task_id
-    LEFT JOIN pioc_labeling_results lr ON t.data_object_id = lr.data_object_id
+    LEFT JOIN pioc_labeling_results lr ON t.id = lr.task_id
     GROUP BY t.id
     ORDER BY t.created_at DESC
   `);
@@ -71,7 +71,7 @@ export async function findTasksByUserId(userId: number): Promise<LabelingTaskWit
     LEFT JOIN pioc_tag_groups tg ON t.tag_group_id = tg.id
     LEFT JOIN pioc_users u ON t.created_by = u.id
     LEFT JOIN pioc_labeling_task_collaborators tc ON t.id = tc.task_id
-    LEFT JOIN pioc_labeling_results lr ON t.data_object_id = lr.data_object_id
+    LEFT JOIN pioc_labeling_results lr ON t.id = lr.task_id
     WHERE t.created_by = ? OR t.id IN (
       SELECT task_id FROM pioc_labeling_task_collaborators WHERE user_id = ?
     )
@@ -94,7 +94,7 @@ export async function findTaskById(id: number): Promise<LabelingTaskWithDetails 
     LEFT JOIN pioc_tag_groups tg ON t.tag_group_id = tg.id
     LEFT JOIN pioc_users u ON t.created_by = u.id
     LEFT JOIN pioc_labeling_task_collaborators tc ON t.id = tc.task_id
-    LEFT JOIN pioc_labeling_results lr ON t.data_object_id = lr.data_object_id
+    LEFT JOIN pioc_labeling_results lr ON t.id = lr.task_id
     WHERE t.id = ?
     GROUP BY t.id
   `, [id]);
@@ -273,45 +273,11 @@ export async function findResultsByTaskAndEntry(taskId: number, dataEntryId: str
   );
 }
 
-export async function findResultsByDataObjectAndEntry(dataObjectId: number, dataEntryId: string): Promise<LabelingResult[]> {
-  return query<LabelingResult[]>(
-    'SELECT * FROM pioc_labeling_results WHERE data_object_id = ? AND data_entry_id = ? ORDER BY created_at DESC',
-    [dataObjectId, dataEntryId]
-  );
-}
-
-export async function findResultsByDataObject(dataObjectId: number): Promise<LabelingResultDetail[]> {
-  return query<LabelingResultDetail[]>(`
-    SELECT 
-      lr.id,
-      lr.task_id,
-      lr.data_object_id,
-      lr.data_entry_id,
-      lr.data_entry_id as data_entry_display,
-      lr.tag_id,
-      t.name as tag_name,
-      t.color as tag_color,
-      lr.created_by,
-      u.name as creator_name,
-      lr.created_at
-    FROM pioc_labeling_results lr
-    LEFT JOIN pioc_tags t ON lr.tag_id = t.id
-    LEFT JOIN pioc_users u ON lr.created_by = u.id
-    WHERE lr.data_object_id = ?
-    ORDER BY lr.created_at DESC
-  `, [dataObjectId]);
-}
-
 export async function findResultsByTaskAndUser(taskId: number, userId: number): Promise<LabelingResult[]> {
   return query<LabelingResult[]>(
     'SELECT * FROM pioc_labeling_results WHERE task_id = ? AND created_by = ? ORDER BY created_at DESC',
     [taskId, userId]
   );
-}
-
-export async function findResultById(id: number): Promise<LabelingResult | null> {
-  const results = await query<LabelingResult[]>('SELECT * FROM pioc_labeling_results WHERE id = ?', [id]);
-  return results[0] || null;
 }
 
 export async function removeResult(id: number): Promise<boolean> {
@@ -324,16 +290,6 @@ export async function getTaskStatistics(taskId: number): Promise<{
   labeled_entries: number;
   total_results: number;
 }> {
-  // 获取作业信息以获取 data_object_id
-  const task = await findTaskById(taskId);
-  if (!task) {
-    return {
-      total_entries: 0,
-      labeled_entries: 0,
-      total_results: 0
-    };
-  }
-
   const results = await query<{
     total_entries: number;
     labeled_entries: number;
@@ -343,9 +299,9 @@ export async function getTaskStatistics(taskId: number): Promise<{
       COUNT(DISTINCT lr.data_entry_id) as labeled_entries,
       COUNT(lr.id) as total_results
     FROM pioc_labeling_results lr
-    WHERE lr.data_object_id = ?
-  `, [task.data_object_id]);
-
+    WHERE lr.task_id = ?
+  `, [taskId]);
+  
   return {
     total_entries: 0,
     labeled_entries: results[0]?.labeled_entries || 0,
