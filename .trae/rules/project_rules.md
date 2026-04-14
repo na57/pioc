@@ -114,6 +114,91 @@ import { Alert } from 'antd';
 
 ---
 
+### 4. Ant Design message/notification/modal 必须使用 App.useApp()
+
+**规则**: 在 Next.js 中使用 Ant Design 的 `message`、`notification`、`modal` 等静态方法时，必须使用 `App` 组件的 `useApp()` 钩子获取实例，而不是直接导入静态方法。
+
+**示例**:
+```tsx
+import { App } from 'antd';
+
+// ✅ 正确用法 - 使用 App.useApp()
+export default function MyPage() {
+  const { message, notification, modal } = App.useApp();
+  
+  const handleClick = () => {
+    message.success('操作成功');
+    // 或
+    message.error('操作失败');
+  };
+  
+  return <div>...</div>;
+}
+
+// ❌ 错误用法 - 直接导入静态方法
+import { message } from 'antd';
+
+export default function MyPage() {
+  const handleClick = () => {
+    message.error('操作失败'); // 会产生警告
+  };
+  
+  return <div>...</div>;
+}
+```
+
+**原因**: Ant Design v6 中，静态方法（如 `message.error()`）无法消费动态主题上下文，会导致警告：`Static function can not consume context like dynamic theme. Please use 'App' component instead.`
+
+---
+
+### 5. 数据库插入必须使用 UTF-8 编码
+
+**规则**: 在数据库中插入数据时，必须使用 UTF-8 编码，确保中文和其他多字节字符正确存储和显示。
+
+**SQL 脚本要求**:
+
+1. **必须设置字符集**: 每个 SQL 脚本文件开头必须包含 `SET NAMES utf8mb4;`
+2. **文件编码**: SQL 脚本文件本身必须保存为 UTF-8 编码（不带 BOM）
+3. **docker 命令执行**: 使用 docker 执行 SQL 时，确保使用 `-i` 参数以支持 UTF-8
+
+**示例**:
+
+```sql
+-- ✅ 正确用法 - SQL 脚本开头设置字符集
+SET NAMES utf8mb4;
+
+INSERT INTO t_dws_gxjx_yjskcxxmx (kch, kcmc, kcjj) VALUES
+('YJS2024001', '高级算法设计', '本课程深入讲解高级算法设计技术...');
+```
+
+```bash
+# ✅ 正确用法 - 使用 docker 执行 SQL 脚本
+docker exec -i mysql mysql -uroot -proot123 mydb < /path/to/script.sql
+```
+
+**错误示例**:
+
+```sql
+-- ❌ 错误用法 - 未设置字符集
+INSERT INTO t_dws_gxjx_yjskcxxmx (kch, kcmc) VALUES
+('YJS2024001', 'é«˜çº§ç®—æ³•è®¾è®¡'); -- 乱码！
+```
+
+**验证方法**:
+
+执行 SQL 后，查询数据验证中文显示正常：
+
+```bash
+docker exec mysql mysql -uroot -proot123 mydb -e "SET NAMES utf8mb4; SELECT kch, kcmc FROM t_dws_gxjx_yjskcxxmx;"
+```
+
+**注意事项**:
+- 如果数据库表字符集不是 utf8mb4，需要先修改表字符集
+- 对于已存在乱码的数据，需要删除后重新插入
+- 建议在插入测试数据前，先清理表中已有的乱码数据
+
+---
+
 ## 检查清单
 
 在提交代码前，请检查：
@@ -122,3 +207,6 @@ import { Alert } from 'antd';
 - [ ] 所有时间显示是否使用了 FriendlyTime 组件
 - [ ] 时间列是否设置了固定宽度（建议 120px）
 - [ ] Alert 组件是否使用了 title 属性而非 message 属性
+- [ ] message/notification/modal 是否使用了 App.useApp() 而非直接导入静态方法
+- [ ] SQL 脚本是否包含 `SET NAMES utf8mb4;` 字符集设置
+- [ ] 插入的中文数据是否正确显示，无乱码

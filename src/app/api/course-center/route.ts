@@ -45,6 +45,8 @@ async function getDataSourceConnection() {
 // 获取本科生课程列表
 async function getUndergraduateCourses(params: {
   keyword?: string;
+  dept?: string;
+  status?: string;
   page?: number;
   per_page?: number;
 }) {
@@ -59,6 +61,16 @@ async function getUndergraduateCourses(params: {
       whereConditions.push('(kch LIKE ? OR kcmc LIKE ? OR kcksdwmc LIKE ? OR kcfzrh LIKE ?)');
       const keyword = `%${params.keyword}%`;
       queryParams.push(keyword, keyword, keyword, keyword);
+    }
+
+    if (params.dept) {
+      whereConditions.push('kcksdwmc = ?');
+      queryParams.push(params.dept);
+    }
+
+    if (params.status) {
+      whereConditions.push('kcztdm = ?');
+      queryParams.push(params.status);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -130,6 +142,7 @@ async function getUndergraduateCourses(params: {
 // 获取研究生课程列表
 async function getGraduateCourses(params: {
   keyword?: string;
+  dept?: string;
   page?: number;
   per_page?: number;
 }) {
@@ -144,6 +157,11 @@ async function getGraduateCourses(params: {
       whereConditions.push('(kch LIKE ? OR kcmc LIKE ? OR kcksdwmc LIKE ? OR kcfzrh LIKE ?)');
       const keyword = `%${params.keyword}%`;
       queryParams.push(keyword, keyword, keyword, keyword);
+    }
+
+    if (params.dept) {
+      whereConditions.push('kcksdwmc = ?');
+      queryParams.push(params.dept);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -347,14 +365,16 @@ async function getHandler(request: NextRequest) {
     } else {
       const courseType = searchParams.get('course_type') as 'undergraduate' | 'graduate' || 'undergraduate';
       const keyword = searchParams.get('keyword') || undefined;
+      const dept = searchParams.get('dept') || undefined;
+      const status = searchParams.get('status') || undefined;
       const page = parseInt(searchParams.get('page') || '1', 10);
       const per_page = parseInt(searchParams.get('per_page') || '10', 10);
 
       let result;
       if (courseType === 'graduate') {
-        result = await getGraduateCourses({ keyword, page, per_page });
+        result = await getGraduateCourses({ keyword, dept, page, per_page });
       } else {
-        result = await getUndergraduateCourses({ keyword, page, per_page });
+        result = await getUndergraduateCourses({ keyword, dept, status, page, per_page });
       }
 
       return NextResponse.json({ success: true, ...result });
