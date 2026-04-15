@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Card,
   Button,
@@ -24,6 +24,7 @@ import {
 import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
+import * as echarts from 'echarts';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -125,6 +126,20 @@ interface ClassroomStats {
   wybs: string;
 }
 
+// 教材类型
+interface Textbook {
+  wybs: string;
+  cbh: string;
+  jcmc: string;
+  kcdm: string;
+  bc: string;
+  cbrq: string;
+  sfzxjcsyqk: string;
+  cbs: string;
+  bzzzs: string;
+  tstamp: string;
+}
+
 export default function CourseDetailPage() {
   const { message } = App.useApp();
   const router = useRouter();
@@ -141,6 +156,19 @@ export default function CourseDetailPage() {
   const [activeTab, setActiveTab] = useState<string>('info');
   const [courseType, setCourseType] = useState<'undergraduate' | 'graduate'>('undergraduate');
   const [statsDrawerVisible, setStatsDrawerVisible] = useState(false);
+  const [statsActiveTab, setStatsActiveTab] = useState<string>('detail');
+  
+  // ECharts 实例引用
+  const chartRefs = {
+    attention: useRef<HTMLDivElement>(null),
+    teachingRatio: useRef<HTMLDivElement>(null),
+    behavior: useRef<HTMLDivElement>(null),
+  };
+  const chartInstances = useRef<Record<string, echarts.ECharts | null>>({
+    attention: null,
+    teachingRatio: null,
+    behavior: null,
+  });
   
   // 教学班筛选状态
   const [semesterFilter, setSemesterFilter] = useState<string>('');
@@ -155,6 +183,15 @@ export default function CourseDetailPage() {
   const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
   const [selectedTeachingClass, setSelectedTeachingClass] = useState<TeachingClass | null>(null);
 
+  // 教材使用情况
+  const [textbooks, setTextbooks] = useState<Textbook[]>([]);
+  const [textbooksLoading, setTextbooksLoading] = useState(false);
+  const [textbookPagination, setTextbookPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
+
   // 获取课程详情
   const fetchCourseDetail = useCallback(async () => {
     setLoading(true);
@@ -167,6 +204,7 @@ export default function CourseDetailPage() {
         setCourse(result.data[0]);
         setCourseType('undergraduate');
         fetchTeachingClasses(result.data[0].kch, 'undergraduate');
+        fetchTextbooks(result.data[0].kch);
       } else {
         // 尝试获取研究生课程
         response = await fetch(`/api/course-center?course_type=graduate&keyword=${kch}&page=1&per_page=1`);
@@ -176,6 +214,8 @@ export default function CourseDetailPage() {
           setCourse(result.data[0]);
           setCourseType('graduate');
           fetchTeachingClasses(result.data[0].kch, 'graduate');
+          // 研究生课程暂不支持教材查询
+          setTextbooks([]);
         } else {
           message.error('课程不存在');
         }
@@ -212,6 +252,37 @@ export default function CourseDetailPage() {
     }
   };
 
+  // 获取教材使用情况
+  const fetchTextbooks = async (courseKch: string) => {
+    setTextbooksLoading(true);
+    try {
+      const response = await fetch(`/api/course-center?action=textbooks&kcdm=${courseKch}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setTextbooks(result.data);
+        setTextbookPagination(prev => ({
+          ...prev,
+          current: 1,
+          total: result.data.length,
+        }));
+      } else {
+        message.error(result.message || '获取教材使用情况失败');
+      }
+    } catch (error) {
+      message.error('获取教材使用情况失败');
+    } finally {
+      setTextbooksLoading(false);
+    }
+  };
+
+  // 分页后的教材数据
+  const paginatedTextbooks = useMemo(() => {
+    const start = (textbookPagination.current - 1) * textbookPagination.pageSize;
+    const end = start + textbookPagination.pageSize;
+    return textbooks.slice(start, end);
+  }, [textbooks, textbookPagination]);
+
   // 获取课堂统计数据
   const fetchClassroomStats = async (jxbh: string) => {
     setClassroomStatsLoading(true);
@@ -235,8 +306,210 @@ export default function CourseDetailPage() {
   const handleViewStats = (jxbh: string) => {
     setSelectedJxbh(jxbh);
     setStatsDrawerVisible(true);
+    setStatsActiveTab('detail');
     fetchClassroomStats(jxbh);
   };
+
+  // 准备图表数据
+  const dates = useMemo(() => {
+    return classroomStats.map((item) => {
+      if (item.kckssj) {
+        const date = new Date(item.kckssj);
+        return `${date.getMonth() + 1}/${date.getDate()}`;
+      }
+      return '-';
+    });
+  }, [classroomStats]);
+
+  // 初始化单个图表的函数
+  const initChart = (
+    ref: React.RefObject<HTMLDivElement | null>,
+    key: string,
+    option: echarts.EChartsOption
+  ) => {
+    if (ref.current) {
+      // 销毁旧实例
+      if (chartInstances.current[key]) {
+        chartInstances.current[key]?.dispose();
+      }
+      // 创建新实例
+      chartInstances.current[key] = echarts.init(ref.current);
+      chartInstances.current[key]?.setOption(option);
+    }
+  };
+
+  // 渲染图表
+  const renderCharts = (activeKey?: string) => {
+    if (!classroomStats.length) return;
+
+    // 1. 专注度和活跃度图表
+    if (activeKey === 'chart1' || !activeKey) {
+      initChart(chartRefs.attention, 'attention', {
+        title: { text: '专注度与活跃度趋势', left: 'center' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['专注度', '活跃度'], bottom: 0 },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: dates,
+          axisLabel: { rotate: 45 },
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: 100,
+          axisLabel: { formatter: '{value}%' },
+        },
+        series: [
+          {
+            name: '专注度',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.zzd || '0')),
+            smooth: true,
+            itemStyle: { color: '#5470c6' },
+          },
+          {
+            name: '活跃度',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.hyd || '0')),
+            smooth: true,
+            itemStyle: { color: '#91cc75' },
+          },
+        ],
+      });
+    }
+
+    // 2. 讲授占比和板书占比图表
+    if (activeKey === 'chart2' || !activeKey) {
+      initChart(chartRefs.teachingRatio, 'teachingRatio', {
+        title: { text: '教学方式占比趋势', left: 'center' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['讲授占比', '板书占比'], bottom: 0 },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: dates,
+          axisLabel: { rotate: 45 },
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: 100,
+          axisLabel: { formatter: '{value}%' },
+        },
+        series: [
+          {
+            name: '讲授占比',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.jszb || '0')),
+            smooth: true,
+            itemStyle: { color: '#fac858' },
+          },
+          {
+            name: '板书占比',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.bszb || '0')),
+            smooth: true,
+            itemStyle: { color: '#ee6666' },
+          },
+        ],
+      });
+    }
+
+    // 3. 学生行为数据图表
+    if (activeKey === 'chart3' || !activeKey) {
+      initChart(chartRefs.behavior, 'behavior', {
+        title: { text: '学生行为数据趋势', left: 'center' },
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['用手机率', '睡觉度', '低头率', '抬头率'], bottom: 0 },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: dates,
+          axisLabel: { rotate: 45 },
+        },
+        yAxis: {
+          type: 'value',
+          min: 0,
+          max: 100,
+          axisLabel: { formatter: '{value}%' },
+        },
+        series: [
+          {
+            name: '用手机率',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.ysjlv || '0')),
+            smooth: true,
+            itemStyle: { color: '#73c0de' },
+          },
+          {
+            name: '睡觉度',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.sjd || '0')),
+            smooth: true,
+            itemStyle: { color: '#3ba272' },
+          },
+          {
+            name: '低头率',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.dtlv || '0')),
+            smooth: true,
+            itemStyle: { color: '#fc8452' },
+          },
+          {
+            name: '抬头率',
+            type: 'line',
+            data: classroomStats.map((item) => parseFloat(item.ttlv || '0')),
+            smooth: true,
+            itemStyle: { color: '#9a60b4' },
+          },
+        ],
+      });
+    }
+  };
+
+  // 处理图表 tab 切换
+  const handleStatsTabChange = (activeKey: string) => {
+    setStatsActiveTab(activeKey);
+    if (activeKey.startsWith('chart')) {
+      // 延迟渲染以确保 DOM 已挂载
+      setTimeout(() => {
+        renderCharts(activeKey);
+      }, 100);
+    }
+  };
+
+  // 首次渲染图表
+  useEffect(() => {
+    if (statsDrawerVisible && classroomStats.length > 0 && statsActiveTab.startsWith('chart')) {
+      setTimeout(() => {
+        renderCharts(statsActiveTab);
+      }, 100);
+    }
+  }, [statsDrawerVisible, classroomStats, statsActiveTab]);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const handleResize = () => {
+      Object.values(chartInstances.current).forEach((instance) => {
+        instance?.resize();
+      });
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
+  // 清理图表实例
+  useEffect(() => {
+    return () => {
+      Object.values(chartInstances.current).forEach((instance) => {
+        instance?.dispose();
+      });
+    };
+  }, []);
   
   // 处理查看详情
   const handleViewDetail = (record: TeachingClass) => {
@@ -402,7 +675,7 @@ export default function CourseDetailPage() {
   return (
     <div style={{ padding: 24 }}>
       <Card style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/course-center')}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()}>
           返回课程列表
         </Button>
       </Card>
@@ -533,6 +806,90 @@ export default function CourseDetailPage() {
                 </Spin>
               ),
             },
+            {
+              key: 'textbooks',
+              label: (
+                <Space>
+                  <BookOutlined />
+                  教材使用情况 ({textbooks.length})
+                </Space>
+              ),
+              children: (
+                <Spin spinning={textbooksLoading}>
+                  {textbooks.length === 0 ? (
+                    <Empty description="暂无教材使用信息" />
+                  ) : (
+                    <Table
+                      dataSource={paginatedTextbooks}
+                      rowKey="wybs"
+                      size="small"
+                      pagination={{
+                        ...textbookPagination,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        showTotal: (total) => `共 ${total} 条记录`,
+                        onChange: (page, pageSize) => {
+                          setTextbookPagination({
+                            current: page,
+                            pageSize: pageSize || 10,
+                            total: textbooks.length,
+                          });
+                        },
+                      }}
+                      columns={[
+                        {
+                          title: '教材名称',
+                          dataIndex: 'jcmc',
+                          key: 'jcmc',
+                          width: 250,
+                        },
+                        {
+                          title: '出版社',
+                          dataIndex: 'cbs',
+                          key: 'cbs',
+                          width: 200,
+                        },
+                        {
+                          title: '出版号',
+                          dataIndex: 'cbh',
+                          key: 'cbh',
+                          width: 150,
+                        },
+                        {
+                          title: '版次',
+                          dataIndex: 'bc',
+                          key: 'bc',
+                          width: 100,
+                        },
+                        {
+                          title: '出版日期',
+                          dataIndex: 'cbrq',
+                          key: 'cbrq',
+                          width: 120,
+                        },
+                        {
+                          title: '编著者总数',
+                          dataIndex: 'bzzzs',
+                          key: 'bzzzs',
+                          width: 100,
+                        },
+                        {
+                          title: '是否最新',
+                          dataIndex: 'sfzxjcsyqk',
+                          key: 'sfzxjcsyqk',
+                          width: 100,
+                          render: (v: string) => (
+                            <Tag color={v === '1' ? 'green' : 'default'}>
+                              {v === '1' ? '是' : '否'}
+                            </Tag>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </Spin>
+              ),
+            },
           ]}
         />
       </Card>
@@ -624,63 +981,115 @@ export default function CourseDetailPage() {
 
               <Divider />
 
-              <Title level={5}>课堂记录详情</Title>
-              <Table
-                dataSource={classroomStats}
-                rowKey="wybs"
-                size="small"
-                pagination={{ pageSize: 10 }}
-                columns={[
+              <Tabs
+                activeKey={statsActiveTab}
+                onChange={handleStatsTabChange}
+                items={[
                   {
-                    title: '学期',
-                    dataIndex: 'xnxqmc',
-                    key: 'xnxqmc',
+                    key: 'detail',
+                    label: (
+                      <Space>
+                        <EyeOutlined />
+                        详情
+                      </Space>
+                    ),
+                    children: (
+                      <Table
+                        dataSource={classroomStats}
+                        rowKey="wybs"
+                        size="small"
+                        pagination={{ pageSize: 10 }}
+                        columns={[
+                          {
+                            title: '学期',
+                            dataIndex: 'xnxqmc',
+                            key: 'xnxqmc',
+                          },
+                          {
+                            title: '开始时间',
+                            dataIndex: 'kckssj',
+                            key: 'kckssj',
+                          },
+                          {
+                            title: '结束时间',
+                            dataIndex: 'kcjssj',
+                            key: 'kcjssj',
+                          },
+                          {
+                            title: '专注度',
+                            dataIndex: 'zzd',
+                            key: 'zzd',
+                            render: (v: string) => <Tag color="blue">{v}%</Tag>,
+                          },
+                          {
+                            title: '活跃度',
+                            dataIndex: 'hyd',
+                            key: 'hyd',
+                            render: (v: string) => <Tag color="green">{v}%</Tag>,
+                          },
+                          {
+                            title: '抬头率',
+                            dataIndex: 'ttlv',
+                            key: 'ttlv',
+                            render: (v: string) => <Tag color="cyan">{v}%</Tag>,
+                          },
+                          {
+                            title: '低头率',
+                            dataIndex: 'dtlv',
+                            key: 'dtlv',
+                            render: (v: string) => <Tag color="orange">{v}%</Tag>,
+                          },
+                          {
+                            title: '用手机率',
+                            dataIndex: 'ysjlv',
+                            key: 'ysjlv',
+                            render: (v: string) => <Tag color="red">{v}%</Tag>,
+                          },
+                          {
+                            title: '睡觉度',
+                            dataIndex: 'sjd',
+                            key: 'sjd',
+                            render: (v: string) => <Tag color="purple">{v}%</Tag>,
+                          },
+                        ]}
+                      />
+                    ),
                   },
                   {
-                    title: '开始时间',
-                    dataIndex: 'kckssj',
-                    key: 'kckssj',
+                    key: 'chart1',
+                    label: (
+                      <Space>
+                        <BarChartOutlined />
+                        专注度与活跃度
+                      </Space>
+                    ),
+                    children: (
+                      <div ref={chartRefs.attention} style={{ width: '100%', height: 400 }} />
+                    ),
                   },
                   {
-                    title: '结束时间',
-                    dataIndex: 'kcjssj',
-                    key: 'kcjssj',
+                    key: 'chart2',
+                    label: (
+                      <Space>
+                        <BarChartOutlined />
+                        教学方式占比
+                      </Space>
+                    ),
+                    children: (
+                      <div ref={chartRefs.teachingRatio} style={{ width: '100%', height: 400 }} />
+                    ),
                   },
                   {
-                    title: '专注度',
-                    dataIndex: 'zzd',
-                    key: 'zzd',
-                    render: (v: string) => <Tag color="blue">{v}%</Tag>,
-                  },
-                  {
-                    title: '活跃度',
-                    dataIndex: 'hyd',
-                    key: 'hyd',
-                    render: (v: string) => <Tag color="green">{v}%</Tag>,
-                  },
-                  {
-                    title: '抬头率',
-                    dataIndex: 'ttlv',
-                    key: 'ttlv',
-                    render: (v: string) => <Tag color="cyan">{v}%</Tag>,
-                  },
-                  {
-                    title: '低头率',
-                    dataIndex: 'dtlv',
-                    key: 'dtlv',
-                    render: (v: string) => <Tag color="orange">{v}%</Tag>,
-                  },
-                  {
-                    title: '用手机率',
-                    dataIndex: 'ysjlv',
-                    key: 'ysjlv',
-                    render: (v: string) => <Tag color="red">{v}%</Tag>,
-                  },
-                  {
-                    title: '睡觉度',
-                    dataIndex: 'sjd',
-                    key: 'sjd',
-                    render: (v: string) => <Tag color="purple">{v}%</Tag>,
+                    key: 'chart3',
+                    label: (
+                      <Space>
+                        <BarChartOutlined />
+                        学生行为数据
+                      </Space>
+                    ),
+                    children: (
+                      <div ref={chartRefs.behavior} style={{ width: '100%', height: 400 }} />
+                    ),
                   },
                 ]}
               />
@@ -712,7 +1121,7 @@ export default function CourseDetailPage() {
             <Descriptions.Item label="教学班名称">{selectedTeachingClass.jxbmc}</Descriptions.Item>
             <Descriptions.Item label="学期">{selectedTeachingClass.xnxqmc}</Descriptions.Item>
             <Descriptions.Item label="课序号">{selectedTeachingClass.kxh}</Descriptions.Item>
-            <Descriptions.Item label="教师">{selectedTeachingClass.jsxm} ({selectedTeachingClass.jsgh})</Descriptions.Item>
+            <Descriptions.Item label="教师">{selectedTeachingClass.jsxm}</Descriptions.Item>
             <Descriptions.Item label="上课班级">{selectedTeachingClass.skbjmc}</Descriptions.Item>
             <Descriptions.Item label="上课周次">{selectedTeachingClass.skzc}</Descriptions.Item>
             <Descriptions.Item label="上课时间">{selectedTeachingClass.sksj}</Descriptions.Item>

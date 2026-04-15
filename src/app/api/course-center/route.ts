@@ -64,7 +64,7 @@ async function getUndergraduateCourses(params: {
     }
 
     if (params.dept) {
-      whereConditions.push('kcksdwmc = ?');
+      whereConditions.push('kcksdwh = ?');
       queryParams.push(params.dept);
     }
 
@@ -143,6 +143,7 @@ async function getUndergraduateCourses(params: {
 async function getGraduateCourses(params: {
   keyword?: string;
   dept?: string;
+  status?: string;
   page?: number;
   per_page?: number;
 }) {
@@ -160,8 +161,13 @@ async function getGraduateCourses(params: {
     }
 
     if (params.dept) {
-      whereConditions.push('kcksdwmc = ?');
+      whereConditions.push('kcksdwh = ?');
       queryParams.push(params.dept);
+    }
+
+    if (params.status) {
+      whereConditions.push('sfyx = ?');
+      queryParams.push(params.status);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -218,6 +224,25 @@ async function getGraduateCourses(params: {
       per_page,
       max_page,
     };
+  } finally {
+    await pool.end();
+  }
+}
+
+// 获取所有开设单位
+async function getAllDepartments(courseType: 'undergraduate' | 'graduate') {
+  const { pool, appConfig } = await getDataSourceConnection();
+  const { undergraduateCourseTableName, graduateCourseTableName } = appConfig;
+  const tableName = courseType === 'graduate' ? graduateCourseTableName : undergraduateCourseTableName;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT DISTINCT kcksdwh, kcksdwmc FROM ${tableName} WHERE kcksdwh IS NOT NULL AND kcksdwh != '' AND kcksdwmc IS NOT NULL AND kcksdwmc != '' ORDER BY kcksdwmc`
+    );
+    return (rows as Array<{ kcksdwh: string; kcksdwmc: string }>).map(row => ({
+      code: row.kcksdwh,
+      name: row.kcksdwmc,
+    }));
   } finally {
     await pool.end();
   }
@@ -331,6 +356,36 @@ async function getClassroomStats(jxbh: string) {
   }
 }
 
+// 获取教材使用情况
+async function getTextbooks(kcdm: string) {
+  const { pool, appConfig } = await getDataSourceConnection();
+  const { undergraduateTextbookTableName } = appConfig;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+        wybs,
+        cbh,
+        jcmc,
+        kcdm,
+        bc,
+        cbrq,
+        sfzxjcsyqk,
+        cbs,
+        bzzzs,
+        tstamp
+      FROM ${undergraduateTextbookTableName}
+      WHERE kcdm = ?
+      ORDER BY sfzxjcsyqk DESC, cbrq DESC`,
+      [kcdm]
+    );
+
+    return rows;
+  } finally {
+    await pool.end();
+  }
+}
+
 // GET请求处理
 async function getHandler(request: NextRequest) {
   try {
@@ -362,6 +417,22 @@ async function getHandler(request: NextRequest) {
 
       const data = await getClassroomStats(jxbh);
       return NextResponse.json({ success: true, data });
+    } else if (action === 'textbooks') {
+      const kcdm = searchParams.get('kcdm');
+
+      if (!kcdm) {
+        return NextResponse.json(
+          { success: false, message: '缺少必要参数: kcdm' },
+          { status: 400 }
+        );
+      }
+
+      const data = await getTextbooks(kcdm);
+      return NextResponse.json({ success: true, data });
+    } else if (action === 'departments') {
+      const courseType = searchParams.get('course_type') as 'undergraduate' | 'graduate' || 'undergraduate';
+      const data = await getAllDepartments(courseType);
+      return NextResponse.json({ success: true, data });
     } else {
       const courseType = searchParams.get('course_type') as 'undergraduate' | 'graduate' || 'undergraduate';
       const keyword = searchParams.get('keyword') || undefined;
@@ -372,7 +443,7 @@ async function getHandler(request: NextRequest) {
 
       let result;
       if (courseType === 'graduate') {
-        result = await getGraduateCourses({ keyword, dept, page, per_page });
+        result = await getGraduateCourses({ keyword, dept, status, page, per_page });
       } else {
         result = await getUndergraduateCourses({ keyword, dept, status, page, per_page });
       }

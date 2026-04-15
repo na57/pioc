@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import Link from 'next/link';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -56,26 +57,53 @@ interface Course {
 
 export default function CourseCenterPage() {
   const { message } = App.useApp();
-  const [courseType, setCourseType] = useState<'undergraduate' | 'graduate'>('undergraduate');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // 从 URL 读取初始状态
+  const initialCourseType = (searchParams.get('type') as 'undergraduate' | 'graduate') || 'undergraduate';
+  const initialKeyword = searchParams.get('keyword') || '';
+  const initialDept = searchParams.get('dept') || '';
+  const initialStatus = searchParams.get('status') || '';
+  const initialPage = parseInt(searchParams.get('page') || '1', 10);
+  const initialPageSize = parseInt(searchParams.get('pageSize') || '10', 10);
+
+  const [courseType, setCourseType] = useState<'undergraduate' | 'graduate'>(initialCourseType);
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 10,
+    current: initialPage,
+    pageSize: initialPageSize,
     total: 0,
   });
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedDept, setSelectedDept] = useState<string>('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [searchKeyword, setSearchKeyword] = useState(initialKeyword);
+  const [selectedDeptCode, setSelectedDeptCode] = useState<string>(initialDept);
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus);
+  const [allDepartments, setAllDepartments] = useState<{ code: string; name: string }[]>([]);
 
-  // 根据课程数据动态获取开设单位选项
+
+
+  // 获取所有开设单位
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/course-center?action=departments&course_type=${courseType}`);
+      const result = await response.json();
+      if (result.success) {
+        setAllDepartments(result.data);
+      }
+    } catch (error) {
+      console.error('获取开设单位失败:', error);
+    }
+  }, [courseType]);
+
+  // 单位选项 - value 是代码，label 是名称
   const departmentOptions = useMemo(() => {
-    const departments = [...new Set(courses.map(item => item.kcksdwmc).filter(Boolean))];
     return [
       { value: '', label: '全部单位' },
-      ...departments.map(dept => ({ value: dept, label: dept }))
+      ...allDepartments.map(dept => ({ value: dept.code, label: dept.name }))
     ];
-  }, [courses]);
+  }, [allDepartments]);
 
   // 课程状态选项
   const statusOptions = [
@@ -85,7 +113,7 @@ export default function CourseCenterPage() {
   ];
 
   // 获取课程列表
-  const fetchCourses = useCallback(async (page = 1, pageSize = 10) => {
+  const fetchCourses = useCallback(async (page: number, pageSize: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -95,7 +123,7 @@ export default function CourseCenterPage() {
       });
 
       if (searchKeyword) params.append('keyword', searchKeyword);
-      if (selectedDept) params.append('dept', selectedDept);
+      if (selectedDeptCode) params.append('dept', selectedDeptCode);
       if (selectedStatus) params.append('status', selectedStatus);
 
       const response = await fetch(`/api/course-center?${params.toString()}`);
@@ -116,22 +144,49 @@ export default function CourseCenterPage() {
     } finally {
       setLoading(false);
     }
-  }, [courseType, searchKeyword, selectedDept, selectedStatus]);
+  }, [courseType, searchKeyword, selectedDeptCode, selectedStatus]);
+
+  // 当筛选条件或分页变化时，获取数据
+  useEffect(() => {
+    fetchCourses(pagination.current, pagination.pageSize);
+  }, [fetchCourses, pagination.current, pagination.pageSize]);
+
+  // 更新 URL 的 effect - 使用 ref 避免循环
+  const isFirstRender = React.useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const newSearchParams = new URLSearchParams();
+    if (courseType) newSearchParams.set('type', courseType);
+    if (searchKeyword) newSearchParams.set('keyword', searchKeyword);
+    if (selectedDeptCode) newSearchParams.set('dept', selectedDeptCode);
+    if (selectedStatus) newSearchParams.set('status', selectedStatus);
+    if (pagination.current !== 1) newSearchParams.set('page', pagination.current.toString());
+    if (pagination.pageSize !== 10) newSearchParams.set('pageSize', pagination.pageSize.toString());
+    
+    const queryString = newSearchParams.toString();
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    router.replace(newUrl, { scroll: false });
+  }, [courseType, searchKeyword, selectedDeptCode, selectedStatus, pagination.current, pagination.pageSize]);
 
   useEffect(() => {
-    fetchCourses();
-  }, [fetchCourses]);
+    fetchDepartments();
+  }, [fetchDepartments]);
 
   // 处理搜索
   const handleSearch = () => {
+    setPagination(prev => ({ ...prev, current: 1 }));
     fetchCourses(1);
   };
 
   // 处理重置
   const handleReset = () => {
     setSearchKeyword('');
-    setSelectedDept('');
+    setSelectedDeptCode('');
     setSelectedStatus('');
+    setPagination(prev => ({ ...prev, current: 1 }));
     fetchCourses(1);
   };
 
@@ -139,8 +194,9 @@ export default function CourseCenterPage() {
   const handleCourseTypeChange = (value: 'undergraduate' | 'graduate') => {
     setCourseType(value);
     setSearchKeyword('');
-    setSelectedDept('');
+    setSelectedDeptCode('');
     setSelectedStatus('');
+    setPagination(prev => ({ ...prev, current: 1 }));
   };
 
   // 表格列定义
@@ -196,8 +252,8 @@ export default function CourseCenterPage() {
             <Option value="graduate">研究生课程</Option>
           </Select>
           <Select
-            value={selectedDept}
-            onChange={setSelectedDept}
+            value={selectedDeptCode}
+            onChange={setSelectedDeptCode}
             style={{ width: 150 }}
             placeholder="开设单位"
             allowClear
@@ -246,6 +302,7 @@ export default function CourseCenterPage() {
             showQuickJumper: true,
             showTotal: (total) => `共 ${total} 条记录`,
             onChange: (page, pageSize) => {
+              setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 10 }));
               fetchCourses(page, pageSize);
             },
           }}
