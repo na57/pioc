@@ -2,6 +2,29 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 
+export interface AIModelConfig {
+  modelId: string;
+  displayName: string;
+  maxTokens: number;
+  temperature: number;
+}
+
+export interface AIProviderConfig {
+  name: string;
+  providerId: string;
+  baseUrl: string;
+  apiKey: string;
+  models: AIModelConfig[];
+}
+
+export interface AIConfig {
+  enabled: boolean;
+  providers: AIProviderConfig[];
+  defaultModel: string;
+  timeout: number;
+  maxRetries: number;
+}
+
 export interface AppConfig {
   app: {
     port: number;
@@ -86,6 +109,7 @@ export interface AppConfig {
     fromAddress: string;
     fromName: string;
   };
+  ai: AIConfig;
   apps?: {
     teacherTeaching?: {
       dataSourceId: string;
@@ -106,6 +130,11 @@ export interface AppConfig {
       undergraduateTeachingTableName: string;
       graduateTeachingTableName: string;
       classroomStatsTableName: string;
+      undergraduateTextbookTableName: string;
+      supervisionRecordTableName: string;
+      undergraduateGradeTableName: string;
+      graduateGradeTableName: string;
+      courseIdeologyTableName: string;
     };
   };
   features: {

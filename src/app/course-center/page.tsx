@@ -178,7 +178,7 @@ export default function CourseCenterPage() {
   // 处理搜索
   const handleSearch = () => {
     setPagination(prev => ({ ...prev, current: 1 }));
-    fetchCourses(1);
+    fetchCourses(1, pagination.pageSize);
   };
 
   // 处理重置
@@ -187,7 +187,7 @@ export default function CourseCenterPage() {
     setSelectedDeptCode('');
     setSelectedStatus('');
     setPagination(prev => ({ ...prev, current: 1 }));
-    fetchCourses(1);
+    fetchCourses(1, pagination.pageSize);
   };
 
   // 处理课程类型切换

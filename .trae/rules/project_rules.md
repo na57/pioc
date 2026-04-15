@@ -151,7 +151,99 @@ export default function MyPage() {
 
 ---
 
-### 5. 数据库插入必须使用 UTF-8 编码
+### 5. Ant Design Space 组件必须使用 orientation 属性
+
+**规则**: 使用 Ant Design 的 `Space` 组件时，必须使用 `orientation` 属性来设置方向，不要使用已弃用的 `direction` 属性。
+
+**示例**:
+```tsx
+import { Space } from 'antd';
+
+// ✅ 正确用法 - 使用 orientation 属性
+<Space orientation="vertical" size="middle">
+  <div>Item 1</div>
+  <div>Item 2</div>
+</Space>
+
+<Space orientation="horizontal" size="large">
+  <Button>按钮1</Button>
+  <Button>按钮2</Button>
+</Space>
+
+// ❌ 错误用法 - 使用已弃用的 direction 属性
+<Space direction="vertical" size="middle">
+  <div>Item 1</div>
+  <div>Item 2</div>
+</Space>
+```
+
+**原因**: Ant Design v6 中 `Space` 组件的 `direction` 属性已被弃用，使用 `orientation` 替代。
+
+---
+
+### 6. Ant Design Drawer 组件必须使用 size 属性
+
+**规则**: 使用 Ant Design 的 `Drawer` 组件时，必须使用 `size` 属性来设置宽度，不要使用已弃用的 `width` 属性。
+
+**示例**:
+```tsx
+import { Drawer } from 'antd';
+
+// ✅ 正确用法 - 使用 size 属性
+<Drawer
+  title="详情"
+  size="large"  // 'default' | 'large'
+  open={visible}
+  onClose={onClose}
+>
+  内容
+</Drawer>
+
+// ❌ 错误用法 - 使用已弃用的 width 属性
+<Drawer
+  title="详情"
+  width={600}
+  open={visible}
+  onClose={onClose}
+>
+  内容
+</Drawer>
+```
+
+**原因**: Ant Design v6 中 `Drawer` 组件的 `width` 属性已被弃用，使用 `size` 替代，可选值为 `'default'` 或 `'large'`。
+
+---
+
+### 7. Ant Design Spin 组件必须使用 description 属性
+
+**规则**: 使用 Ant Design 的 `Spin` 组件时，必须使用 `description` 属性来设置加载提示文字，不要使用已弃用的 `tip` 属性。
+
+**示例**:
+```tsx
+import { Spin } from 'antd';
+
+// ✅ 正确用法 - 使用 description 属性
+<Spin spinning={loading} description="加载中...">
+  <div>内容</div>
+</Spin>
+
+<Spin spinning={aiSummaryLoading} description="AI 正在分析教学数据...">
+  <Card>
+    <div>分析结果</div>
+  </Card>
+</Spin>
+
+// ❌ 错误用法 - 使用已弃用的 tip 属性
+<Spin spinning={loading} tip="加载中...">
+  <div>内容</div>
+</Spin>
+```
+
+**原因**: Ant Design v6 中 `Spin` 组件的 `tip` 属性已被弃用，使用 `description` 替代。
+
+---
+
+### 8. 数据库插入必须使用 UTF-8 编码
 
 **规则**: 在数据库中插入数据时，必须使用 UTF-8 编码，确保中文和其他多字节字符正确存储和显示。
 
@@ -208,5 +300,8 @@ docker exec mysql mysql -uroot -proot123 mydb -e "SET NAMES utf8mb4; SELECT kch,
 - [ ] 时间列是否设置了固定宽度（建议 120px）
 - [ ] Alert 组件是否使用了 title 属性而非 message 属性
 - [ ] message/notification/modal 是否使用了 App.useApp() 而非直接导入静态方法
+- [ ] Space 组件是否使用了 orientation 属性而非 direction 属性
+- [ ] Drawer 组件是否使用了 size 属性而非 width 属性
+- [ ] Spin 组件是否使用了 description 属性而非 tip 属性
 - [ ] SQL 脚本是否包含 `SET NAMES utf8mb4;` 字符集设置
 - [ ] 插入的中文数据是否正确显示，无乱码

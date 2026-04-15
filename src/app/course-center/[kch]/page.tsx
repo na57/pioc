@@ -140,6 +140,77 @@ interface Textbook {
   tstamp: string;
 }
 
+// 督导记录类型
+interface SupervisionRecord {
+  wybs: string;
+  wjdm: string;
+  bpr: string;
+  bprxm: string;
+  cpr: string;
+  cprxm: string;
+  kcdm: string;
+  kcmc: string;
+  jxbid: string;
+  zf: string;
+  ydrs: string;
+  sdrs: string;
+  tksj: string;
+  xnxqdm: string;
+  xnxqmc: string;
+  pglxdm: string;
+  pgwjwybs: string;
+  pgwjdm: string;
+  pgbpr: string;
+  pgbprxm: string;
+  pgcpr: string;
+  pgcprxm: string;
+  pgkcdm: string;
+  pgkcmc: string;
+  pgzjyj: string;
+  pgysjg: string;
+  pgjxbid: string;
+  pgglwid: string;
+  pjjy: string;
+  tstamp: string;
+}
+
+// 成绩类型（本科生和研究生共用）
+interface Grade {
+  wybs: string;
+  xh: string;
+  xm: string;
+  kch: string;
+  kcmc: string;
+  xnxqdm: string;
+  xnxqmc: string;
+  kccj: string;
+  xf: string;
+  jd: string;
+  sfyx: string;
+  sfyxmc: string;
+  sfjg: string;
+  sfjgmc: string;
+  pscj?: string;
+  qzcj?: string;
+  qmcj?: string;
+  sycj?: string;
+  ksrq?: string;
+  rkjsxm?: string;
+  jxbh: string;
+}
+
+// 课程思政类型
+interface CourseIdeology {
+  px: string;
+  szrhd: string;
+  xqzj: string;
+  zsdqr: string;
+  szjhd: string;
+  szyrcl: string;
+  tstamp: string;
+  jxbh: string;
+}
+
 export default function CourseDetailPage() {
   const { message } = App.useApp();
   const router = useRouter();
@@ -191,6 +262,37 @@ export default function CourseDetailPage() {
     pageSize: 10,
     total: 0,
   });
+
+  // 督导记录
+  const [supervisionRecords, setSupervisionRecords] = useState<SupervisionRecord[]>([]);
+  const [supervisionLoading, setSupervisionLoading] = useState(false);
+  const [supervisionDrawerVisible, setSupervisionDrawerVisible] = useState(false);
+  const [selectedJxbid, setSelectedJxbid] = useState<string>('');
+  const [expandedRecords, setExpandedRecords] = useState<Set<string>>(new Set());
+
+  // 成绩信息
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [gradesLoading, setGradesLoading] = useState(false);
+  const [gradesDrawerVisible, setGradesDrawerVisible] = useState(false);
+  const [selectedGradeJxbh, setSelectedGradeJxbh] = useState<string>('');
+  const [gradesPagination, setGradesPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
+
+  // 课程思政
+  const [courseIdeology, setCourseIdeology] = useState<CourseIdeology[]>([]);
+  const [courseIdeologyLoading, setCourseIdeologyLoading] = useState(false);
+  const [courseIdeologyDrawerVisible, setCourseIdeologyDrawerVisible] = useState(false);
+  const [selectedIdeologyJxbh, setSelectedIdeologyJxbh] = useState<string>('');
+
+  // AI 总结
+  const [aiSummary, setAiSummary] = useState<string>('');
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryDrawerVisible, setAiSummaryDrawerVisible] = useState(false);
+  const [aiSummaryJxbh, setAiSummaryJxbh] = useState<string>('');
+  const [displayedSummary, setDisplayedSummary] = useState<string>('');
 
   // 获取课程详情
   const fetchCourseDetail = useCallback(async () => {
@@ -282,6 +384,151 @@ export default function CourseDetailPage() {
     const end = start + textbookPagination.pageSize;
     return textbooks.slice(start, end);
   }, [textbooks, textbookPagination]);
+
+  // 获取督导记录
+  const fetchSupervisionRecords = async (jxbid: string) => {
+    setSupervisionLoading(true);
+    try {
+      const response = await fetch(`/api/course-center?action=supervision-records&jxbid=${jxbid}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setSupervisionRecords(result.data);
+      } else {
+        message.error(result.message || '获取督导记录失败');
+      }
+    } catch (error) {
+      message.error('获取督导记录失败');
+    } finally {
+      setSupervisionLoading(false);
+    }
+  };
+
+  // 处理查看督导信息
+  const handleViewSupervision = (jxbid: string) => {
+    setSelectedJxbid(jxbid);
+    setSupervisionDrawerVisible(true);
+    setExpandedRecords(new Set());
+    fetchSupervisionRecords(jxbid);
+  };
+
+  // 切换展开状态
+  const toggleExpand = (wybs: string) => {
+    setExpandedRecords(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(wybs)) {
+        newSet.delete(wybs);
+      } else {
+        newSet.add(wybs);
+      }
+      return newSet;
+    });
+  };
+
+  // 获取成绩信息
+  const fetchGrades = async (jxbh: string, courseType: 'undergraduate' | 'graduate') => {
+    setGradesLoading(true);
+    try {
+      const response = await fetch(`/api/course-center?action=grades&jxbh=${jxbh}&course_type=${courseType}`);
+      const result = await response.json();
+
+      if (result.success) {
+        // 只保留有效成绩
+        const validGrades = result.data.filter((g: Grade) => g.sfyx === '1');
+        setGrades(validGrades);
+        setGradesPagination(prev => ({
+          ...prev,
+          current: 1,
+          total: validGrades.length,
+        }));
+      } else {
+        message.error(result.message || '获取成绩信息失败');
+      }
+    } catch (error) {
+      message.error('获取成绩信息失败');
+    } finally {
+      setGradesLoading(false);
+    }
+  };
+
+  // 处理查看成绩
+  const handleViewGrades = (jxbh: string) => {
+    setSelectedGradeJxbh(jxbh);
+    setGradesDrawerVisible(true);
+    fetchGrades(jxbh, courseType);
+  };
+
+  // 分页后的成绩数据
+  const paginatedGrades = useMemo(() => {
+    const start = (gradesPagination.current - 1) * gradesPagination.pageSize;
+    const end = start + gradesPagination.pageSize;
+    return grades.slice(start, end);
+  }, [grades, gradesPagination]);
+
+  // 获取课程思政数据
+  const fetchCourseIdeology = async (jxbh: string) => {
+    setCourseIdeologyLoading(true);
+    try {
+      const response = await fetch(`/api/course-center?action=course-ideology&jxbh=${jxbh}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setCourseIdeology(result.data);
+      } else {
+        message.error(result.message || '获取课程思政数据失败');
+      }
+    } catch (error) {
+      message.error('获取课程思政数据失败');
+    } finally {
+      setCourseIdeologyLoading(false);
+    }
+  };
+
+  // 处理查看课程思政
+  const handleViewCourseIdeology = (jxbh: string) => {
+    setSelectedIdeologyJxbh(jxbh);
+    setCourseIdeologyDrawerVisible(true);
+    fetchCourseIdeology(jxbh);
+  };
+
+  // 获取 AI 总结
+  const fetchAiSummary = async (jxbh: string, courseType: 'undergraduate' | 'graduate') => {
+    setAiSummaryLoading(true);
+    setAiSummary('');
+    setDisplayedSummary('');
+    try {
+      const response = await fetch(`/api/course-center?action=ai-summary&jxbh=${jxbh}&course_type=${courseType}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setAiSummary(result.data);
+        // 逐字显示效果
+        let index = 0;
+        const text = result.data;
+        const interval = setInterval(() => {
+          if (index <= text.length) {
+            setDisplayedSummary(text.slice(0, index));
+            index++;
+          } else {
+            clearInterval(interval);
+          }
+        }, 30); // 每30毫秒显示一个字符
+      } else {
+        message.error(result.message || '获取AI总结失败');
+      }
+    } catch (error) {
+      message.error('获取AI总结失败');
+    } finally {
+      setAiSummaryLoading(false);
+    }
+  };
+
+  // 处理查看 AI 总结
+  const handleViewAiSummary = (jxbh: string) => {
+    setAiSummaryJxbh(jxbh);
+    setAiSummaryDrawerVisible(true);
+    fetchAiSummary(jxbh, courseType);
+  };
 
   // 获取课堂统计数据
   const fetchClassroomStats = async (jxbh: string) => {
@@ -642,7 +889,7 @@ export default function CourseDetailPage() {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 280,
       fixed: 'right' as const,
       render: (_: unknown, record: TeachingClass) => (
         <Space>
@@ -650,6 +897,26 @@ export default function CourseDetailPage() {
             icon={<BarChartOutlined />}
             tooltip="查看课堂统计"
             onClick={() => handleViewStats(record.jxbh)}
+          />
+          <ActionButton
+            icon={<TeamOutlined />}
+            tooltip="查看督导信息"
+            onClick={() => handleViewSupervision(record.jxbh)}
+          />
+          <ActionButton
+            icon={<BookOutlined />}
+            tooltip="查看成绩"
+            onClick={() => handleViewGrades(record.jxbh)}
+          />
+          <ActionButton
+            icon={<BookOutlined />}
+            tooltip="查看课程思政"
+            onClick={() => handleViewCourseIdeology(record.jxbh)}
+          />
+          <ActionButton
+            icon={<BarChartOutlined />}
+            tooltip="AI总结"
+            onClick={() => handleViewAiSummary(record.jxbh)}
           />
         </Space>
       ),
@@ -1137,6 +1404,337 @@ export default function CourseDetailPage() {
             <Descriptions.Item label="排课要求">{selectedTeachingClass.pkyq}</Descriptions.Item>
           </Descriptions>
         )}
+      </Drawer>
+
+      {/* 督导记录抽屉 */}
+      <Drawer
+        title={
+          <Space>
+            <TeamOutlined />
+            督导记录 - {selectedJxbid}
+          </Space>
+        }
+        size="large"
+        open={supervisionDrawerVisible}
+        onClose={() => setSupervisionDrawerVisible(false)}
+        extra={
+          <Button icon={<CloseOutlined />} onClick={() => setSupervisionDrawerVisible(false)}>
+            关闭
+          </Button>
+        }
+      >
+        <Spin spinning={supervisionLoading}>
+          {supervisionRecords.length === 0 ? (
+            <Empty description="暂无督导记录" />
+          ) : (
+            <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+              {supervisionRecords.map((record) => (
+                <Card
+                  key={record.wybs}
+                  size="small"
+                  title={
+                    <Space>
+                      <Tag color="blue">{record.xnxqmc}</Tag>
+                      <span>{record.tksj}</span>
+                    </Space>
+                  }
+                  extra={
+                    <Space>
+                      <span>总分: <strong>{record.zf}</strong></span>
+                      <span>应到: {record.ydrs}人</span>
+                      <span>实到: {record.sdrs}人</span>
+                    </Space>
+                  }
+                >
+                  <Descriptions size="small" column={2}>
+                    <Descriptions.Item label="参评人">{record.cprxm}</Descriptions.Item>
+                    <Descriptions.Item label="被评人">{record.bprxm}</Descriptions.Item>
+                  </Descriptions>
+                  
+                  {(record.pjjy || record.pgzjyj) && (
+                    <>
+                      <Divider style={{ margin: '12px 0' }} />
+                      {record.pjjy && (
+                        <div style={{ marginBottom: 12 }}>
+                          <div style={{ fontWeight: 'bold', marginBottom: 4, color: '#666' }}>
+                            评价建议：
+                          </div>
+                          <div style={{ color: '#333', lineHeight: 1.6 }}>
+                            {expandedRecords.has(record.wybs) || record.pjjy.length <= 100
+                              ? <div style={{ whiteSpace: 'pre-wrap' }}>{record.pjjy}</div>
+                              : record.pjjy.slice(0, 100) + '...'}
+                            {record.pjjy.length > 100 && (
+                              <Button 
+                                type="link" 
+                                size="small" 
+                                style={{ padding: '0 4px' }}
+                                onClick={() => toggleExpand(record.wybs)}
+                              >
+                                {expandedRecords.has(record.wybs) ? '收起' : '展开'}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {record.pgzjyj && (
+                        <div>
+                          <div style={{ fontWeight: 'bold', marginBottom: 4, color: '#666' }}>
+                            专家意见：
+                          </div>
+                          <div style={{ color: '#333', lineHeight: 1.6 }}>
+                            {expandedRecords.has(record.wybs) || record.pgzjyj.length <= 100
+                              ? <div style={{ whiteSpace: 'pre-wrap' }}>{record.pgzjyj}</div>
+                              : record.pgzjyj.slice(0, 100) + '...'}
+                            {record.pgzjyj.length > 100 && (
+                              <Button 
+                                type="link" 
+                                size="small" 
+                                style={{ padding: '0 4px' }}
+                                onClick={() => toggleExpand(record.wybs)}
+                              >
+                                {expandedRecords.has(record.wybs) ? '收起' : '展开'}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </Card>
+              ))}
+            </Space>
+          )}
+        </Spin>
+      </Drawer>
+
+      {/* 成绩信息抽屉 */}
+      <Drawer
+        title={
+          <Space>
+            <BookOutlined />
+            成绩信息 - {selectedGradeJxbh}
+          </Space>
+        }
+        size="large"
+        open={gradesDrawerVisible}
+        onClose={() => setGradesDrawerVisible(false)}
+        extra={
+          <Button icon={<CloseOutlined />} onClick={() => setGradesDrawerVisible(false)}>
+            关闭
+          </Button>
+        }
+      >
+        <Spin spinning={gradesLoading}>
+          {grades.length === 0 ? (
+            <Empty description="暂无成绩信息" />
+          ) : (
+            <>
+              <Row gutter={16} style={{ marginBottom: 16 }}>
+                <Col span={6}>
+                  <Statistic title="总人数" value={grades.length} suffix="人" />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="平均分"
+                    value={(
+                      grades.reduce((sum, g) => sum + parseFloat(g.kccj || '0'), 0) / grades.length
+                    ).toFixed(2)}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="及格人数"
+                    value={grades.filter(g => g.sfjg === '1').length}
+                    suffix={`/ ${grades.length}人`}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="平均绩点"
+                    value={(
+                      grades.reduce((sum, g) => sum + parseFloat(g.jd || '0'), 0) / grades.length
+                    ).toFixed(2)}
+                  />
+                </Col>
+              </Row>
+
+              <Divider />
+
+              <Table
+                dataSource={paginatedGrades}
+                rowKey="wybs"
+                size="small"
+                pagination={{
+                  ...gradesPagination,
+                  showSizeChanger: true,
+                  showQuickJumper: true,
+                  showTotal: (total) => `共 ${total} 条记录`,
+                  onChange: (page, pageSize) => {
+                    setGradesPagination({
+                      current: page,
+                      pageSize: pageSize || 10,
+                      total: grades.length,
+                    });
+                  },
+                }}
+                columns={[
+                  {
+                    title: '学生',
+                    key: 'student',
+                    width: 150,
+                    render: (_: unknown, record: Grade) => (
+                      <span>{record.xm} ({record.xh})</span>
+                    ),
+                  },
+                  {
+                    title: '课程成绩',
+                    dataIndex: 'kccj',
+                    key: 'kccj',
+                    width: 100,
+                    render: (v: string, record: Grade) => (
+                      <Tag color={record.sfjg === '1' ? 'green' : 'red'}>{v}</Tag>
+                    ),
+                  },
+                  {
+                    title: '绩点',
+                    dataIndex: 'jd',
+                    key: 'jd',
+                    width: 80,
+                  },
+                  {
+                    title: '学分',
+                    dataIndex: 'xf',
+                    key: 'xf',
+                    width: 80,
+                  },
+                  {
+                    title: '平时成绩',
+                    dataIndex: 'pscj',
+                    key: 'pscj',
+                    width: 100,
+                  },
+                  {
+                    title: '期中成绩',
+                    dataIndex: 'qzcj',
+                    key: 'qzcj',
+                    width: 100,
+                  },
+                  {
+                    title: '期末成绩',
+                    dataIndex: 'qmcj',
+                    key: 'qmcj',
+                    width: 100,
+                  },
+                  {
+                    title: '实验成绩',
+                    dataIndex: 'sycj',
+                    key: 'sycj',
+                    width: 100,
+                  },
+                  {
+                    title: '是否及格',
+                    dataIndex: 'sfjgmc',
+                    key: 'sfjgmc',
+                    width: 100,
+                    render: (v: string, record: Grade) => (
+                      <Tag color={record.sfjg === '1' ? 'green' : 'red'}>{v}</Tag>
+                    ),
+                  },
+                  {
+                    title: '考试日期',
+                    dataIndex: 'ksrq',
+                    key: 'ksrq',
+                    width: 120,
+                  },
+                ]}
+              />
+            </>
+          )}
+        </Spin>
+      </Drawer>
+
+      {/* 课程思政抽屉 */}
+      <Drawer
+        title={
+          <Space>
+            <BookOutlined />
+            课程思政 - {selectedIdeologyJxbh}
+          </Space>
+        }
+        size="large"
+        open={courseIdeologyDrawerVisible}
+        onClose={() => setCourseIdeologyDrawerVisible(false)}
+        extra={
+          <Button icon={<CloseOutlined />} onClick={() => setCourseIdeologyDrawerVisible(false)}>
+            关闭
+          </Button>
+        }
+      >
+        <Spin spinning={courseIdeologyLoading}>
+          {courseIdeology.length === 0 ? (
+            <Empty description="暂无课程思政数据" />
+          ) : (
+            <Space orientation="vertical" style={{ width: '100%' }} size="middle">
+              {courseIdeology.map((item, index) => (
+                <Card
+                  key={index}
+                  size="small"
+                  title={
+                    <Space>
+                      <Tag color="blue">第 {item.px} 点</Tag>
+                      <span>{item.szrhd}</span>
+                    </Space>
+                  }
+                >
+                  <Descriptions size="small" column={1}>
+                    <Descriptions.Item label="选取章节">{item.xqzj || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="知识切入点">{item.zsdqr || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="思政结合点">{item.szjhd || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="思政育人策略">{item.szyrcl || '-'}</Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              ))}
+            </Space>
+          )}
+        </Spin>
+      </Drawer>
+
+      {/* AI 总结抽屉 */}
+      <Drawer
+        title={
+          <Space>
+            <BarChartOutlined />
+            AI 教学总结 - {aiSummaryJxbh}
+          </Space>
+        }
+        size="large"
+        open={aiSummaryDrawerVisible}
+        onClose={() => setAiSummaryDrawerVisible(false)}
+        extra={
+          <Button icon={<CloseOutlined />} onClick={() => setAiSummaryDrawerVisible(false)}>
+            关闭
+          </Button>
+        }
+      >
+        <Spin spinning={aiSummaryLoading} description="AI 正在分析教学数据...">
+          {displayedSummary ? (
+            <Card>
+              <div style={{ 
+                whiteSpace: 'pre-wrap', 
+                lineHeight: 1.8, 
+                fontSize: 14,
+                minHeight: 200 
+              }}>
+                {displayedSummary}
+                {aiSummaryLoading && displayedSummary.length < aiSummary.length && (
+                  <span style={{ color: '#1890ff' }}>|</span>
+                )}
+              </div>
+            </Card>
+          ) : (
+            <Empty description={aiSummaryLoading ? 'AI 正在分析中...' : '暂无数据'} />
+          )}
+        </Spin>
       </Drawer>
     </div>
   );

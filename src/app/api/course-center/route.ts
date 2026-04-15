@@ -236,12 +236,16 @@ async function getAllDepartments(courseType: 'undergraduate' | 'graduate') {
   const tableName = courseType === 'graduate' ? graduateCourseTableName : undergraduateCourseTableName;
 
   try {
+    // 本科课程使用 gsyxbm/gsyxmc 字段，研究生课程使用 kcksdwh/kcksdwmc 字段
+    const codeField = courseType === 'undergraduate' ? 'gsyxbm' : 'kcksdwh';
+    const nameField = courseType === 'undergraduate' ? 'gsyxmc' : 'kcksdwmc';
+    
     const [rows] = await pool.execute(
-      `SELECT DISTINCT kcksdwh, kcksdwmc FROM ${tableName} WHERE kcksdwh IS NOT NULL AND kcksdwh != '' AND kcksdwmc IS NOT NULL AND kcksdwmc != '' ORDER BY kcksdwmc`
+      `SELECT DISTINCT ${codeField} as code, ${nameField} as name FROM ${tableName} WHERE ${codeField} IS NOT NULL AND ${codeField} != '' AND ${nameField} IS NOT NULL AND ${nameField} != '' ORDER BY ${nameField}`
     );
-    return (rows as Array<{ kcksdwh: string; kcksdwmc: string }>).map(row => ({
-      code: row.kcksdwh,
-      name: row.kcksdwmc,
+    return (rows as Array<{ code: string; name: string }>).map(row => ({
+      code: row.code,
+      name: row.name,
     }));
   } finally {
     await pool.end();
@@ -386,6 +390,341 @@ async function getTextbooks(kcdm: string) {
   }
 }
 
+// 获取督导记录
+async function getSupervisionRecords(jxbid: string) {
+  const { pool, appConfig } = await getDataSourceConnection();
+  const { supervisionRecordTableName } = appConfig;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+        wybs,
+        wjdm,
+        bpr,
+        bprxm,
+        cpr,
+        cprxm,
+        kcdm,
+        kcmc,
+        jxbid,
+        zf,
+        ydrs,
+        sdrs,
+        tksj,
+        xnxqdm,
+        xnxqmc,
+        pglxdm,
+        pgwjwybs,
+        pgwjdm,
+        pgbpr,
+        pgbprxm,
+        pgcpr,
+        pgcprxm,
+        pgkcdm,
+        pgkcmc,
+        pgzjyj,
+        pgysjg,
+        pgjxbid,
+        pgglwid,
+        pjjy,
+        tstamp
+      FROM ${supervisionRecordTableName}
+      WHERE jxbid = ?
+      ORDER BY tksj DESC`,
+      [jxbid]
+    );
+
+    return rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+// 获取本科生成绩
+async function getUndergraduateGrades(jxbh: string) {
+  const { pool, appConfig } = await getDataSourceConnection();
+  const { undergraduateGradeTableName } = appConfig;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+        wybs,
+        xh,
+        xm,
+        ksrq,
+        kch,
+        kcmc,
+        xnxqdm,
+        xnxqmc,
+        ksfsm,
+        ksfsmmc,
+        ksxzm,
+        ksxsm,
+        kccj,
+        cjlrrh,
+        cjlrrxm,
+        cjlrsj,
+        xf,
+        jd,
+        sfyx,
+        sfyxmc,
+        sfjg,
+        sfjgmc,
+        sfzx,
+        sfzxmc,
+        sfcyxfjjs,
+        sfcyxfjjsmc,
+        bz,
+        pscj,
+        qzcj,
+        qmcj,
+        sycj,
+        djlkscj,
+        xs,
+        xn,
+        xqm,
+        fslkscj,
+        kcdjcjm,
+        rkjsgh,
+        rkjsxm,
+        cjlrrq,
+        tstamp,
+        jxbh
+      FROM ${undergraduateGradeTableName}
+      WHERE jxbh = ?
+      ORDER BY xh ASC`,
+      [jxbh]
+    );
+
+    return rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+// 获取研究生成绩
+async function getGraduateGrades(jxbh: string) {
+  const { pool, appConfig } = await getDataSourceConnection();
+  const { graduateGradeTableName } = appConfig;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+        wybs,
+        xh,
+        xm,
+        xnxqdm,
+        njdm,
+        yxdm,
+        yxmc,
+        zydm,
+        kch,
+        kcmc,
+        kkdwbm,
+        kkdwmc,
+        bjdm,
+        kccj,
+        cjxsz,
+        cjfzdm,
+        cjfzmc,
+        sfjg,
+        sfjgmc,
+        jd,
+        kclbdm,
+        kclbdmmc,
+        xf,
+        sfyx,
+        sfyxmc,
+        khlxdm,
+        kslx,
+        ksxzm,
+        ksxzmmc,
+        xn,
+        xqm,
+        ksrq,
+        pscj,
+        ksfsm,
+        ksfsmmc,
+        ksxsm,
+        fslkscj,
+        djlkscj,
+        kcdjcjm,
+        rkjsgh,
+        rkjsxm,
+        cjlrrh,
+        cjlrrq,
+        cjlrsj,
+        xs,
+        tstamp,
+        jxbh,
+        zymc
+      FROM ${graduateGradeTableName}
+      WHERE jxbh = ?
+      ORDER BY xh ASC`,
+      [jxbh]
+    );
+
+    return rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+// 获取课程思政数据
+async function getCourseIdeology(jxbh: string) {
+  const { pool, appConfig } = await getDataSourceConnection();
+  const { courseIdeologyTableName } = appConfig;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+        px,
+        szrhd,
+        xqzj,
+        zsdqr,
+        szjhd,
+        szyrcl,
+        tstamp,
+        jxbh
+      FROM ${courseIdeologyTableName}
+      WHERE jxbh = ?
+      ORDER BY px ASC`,
+      [jxbh]
+    );
+
+    return rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+// AI 总结函数
+async function generateAISummary(params: {
+  jxbh: string;
+  courseType: 'undergraduate' | 'graduate';
+  classroomStats: any[];
+  supervisionRecords: any[];
+  grades: any[];
+  courseIdeology: any[];
+}) {
+  const config = getConfig();
+  const aiConfig = config.ai;
+
+  if (!aiConfig?.enabled || !aiConfig?.providers?.length) {
+    throw new Error('AI 功能未启用或未配置');
+  }
+
+  // 使用第一个可用的 provider
+  const provider = aiConfig.providers[0];
+  const modelId = provider.models?.[0]?.modelId || 'minimax';
+
+  // 构建提示词
+  const prompt = buildSummaryPrompt(params);
+
+  // 使用原生 fetch 调用 OpenAI 兼容 API
+  const response = await fetch(`${provider.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${provider.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: [
+        {
+          role: 'system',
+          content: '你是一位经验丰富的高校教学管理部门专家，擅长分析教学数据并提供专业的教学评估总结。请从教学管理的角度，对教学班的教学情况进行全面、客观、专业的分析和总结。',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `AI API 请求失败: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '无法生成总结';
+}
+
+// 构建总结提示词
+function buildSummaryPrompt(params: {
+  jxbh: string;
+  courseType: 'undergraduate' | 'graduate';
+  classroomStats: any[];
+  supervisionRecords: any[];
+  grades: any[];
+  courseIdeology: any[];
+}) {
+  const { jxbh, courseType, classroomStats, supervisionRecords, grades, courseIdeology } = params;
+
+  let prompt = `请对以下${courseType === 'graduate' ? '研究生' : '本科生'}教学班（教学班号：${jxbh}）的教学情况进行专业分析和总结：\n\n`;
+
+  // 课堂统计数据
+  if (classroomStats.length > 0) {
+    prompt += `## 一、课堂统计数据\n`;
+    prompt += `共 ${classroomStats.length} 次课堂记录\n`;
+    const avgAttention = classroomStats.reduce((sum, s) => sum + parseFloat(s.zzd || '0'), 0) / classroomStats.length;
+    const avgActivity = classroomStats.reduce((sum, s) => sum + parseFloat(s.hyd || '0'), 0) / classroomStats.length;
+    const avgHeadUp = classroomStats.reduce((sum, s) => sum + parseFloat(s.ttlv || '0'), 0) / classroomStats.length;
+    const avgHeadDown = classroomStats.reduce((sum, s) => sum + parseFloat(s.dtlv || '0'), 0) / classroomStats.length;
+    prompt += `平均专注度：${avgAttention.toFixed(2)}%，平均活跃度：${avgActivity.toFixed(2)}%\n`;
+    prompt += `平均抬头率：${avgHeadUp.toFixed(2)}%，平均低头率：${avgHeadDown.toFixed(2)}%\n\n`;
+  }
+
+  // 督导记录
+  if (supervisionRecords.length > 0) {
+    prompt += `## 二、督导听课记录\n`;
+    prompt += `共 ${supervisionRecords.length} 次督导听课\n`;
+    supervisionRecords.forEach((record, index) => {
+      prompt += `${index + 1}. ${record.xnxqmc}，参评人：${record.cprxm}，总分：${record.zf}分\n`;
+      if (record.pjjy) prompt += `   评价建议：${record.pjjy.slice(0, 100)}${record.pjjy.length > 100 ? '...' : ''}\n`;
+      if (record.pgzjyj) prompt += `   专家意见：${record.pgzjyj.slice(0, 100)}${record.pgzjyj.length > 100 ? '...' : ''}\n`;
+    });
+    prompt += `\n`;
+  }
+
+  // 成绩数据
+  if (grades.length > 0) {
+    const validGrades = grades.filter(g => g.sfyx === '1');
+    const passCount = validGrades.filter(g => g.sfjg === '1').length;
+    const avgScore = validGrades.reduce((sum, g) => sum + parseFloat(g.kccj || '0'), 0) / validGrades.length;
+    const avgGPA = validGrades.reduce((sum, g) => sum + parseFloat(g.jd || '0'), 0) / validGrades.length;
+    
+    prompt += `## 三、学生成绩情况\n`;
+    prompt += `总人数：${grades.length}人，有效成绩：${validGrades.length}人\n`;
+    prompt += `及格人数：${passCount}人，及格率：${((passCount / validGrades.length) * 100).toFixed(2)}%\n`;
+    prompt += `平均分：${avgScore.toFixed(2)}分，平均绩点：${avgGPA.toFixed(2)}\n\n`;
+  }
+
+  // 课程思政（仅本科生）
+  if (courseType === 'undergraduate' && courseIdeology.length > 0) {
+    prompt += `## 四、课程思政建设\n`;
+    prompt += `共 ${courseIdeology.length} 个思政融入点\n`;
+    courseIdeology.forEach((item, index) => {
+      prompt += `${index + 1}. ${item.szrhd}\n`;
+      if (item.xqzj) prompt += `   选取章节：${item.xqzj}\n`;
+      if (item.szyrcl) prompt += `   育人策略：${item.szyrcl.slice(0, 80)}${item.szyrcl.length > 80 ? '...' : ''}\n`;
+    });
+    prompt += `\n`;
+  }
+
+  prompt += `\n请从以下几个方面进行分析和总结：\n`;
+  prompt += `1. 教学整体情况评价（课堂氛围、学生参与度、教学效果等）\n`;
+  prompt += `2. 存在的主要问题和不足\n`;
+  prompt += `3. 改进建议和措施\n`;
+  prompt += `4. 总体评价等级（优秀/良好/合格/需改进）及理由\n`;
+
+  return prompt;
+}
+
 // GET请求处理
 async function getHandler(request: NextRequest) {
   try {
@@ -429,6 +768,77 @@ async function getHandler(request: NextRequest) {
 
       const data = await getTextbooks(kcdm);
       return NextResponse.json({ success: true, data });
+    } else if (action === 'supervision-records') {
+      const jxbid = searchParams.get('jxbid');
+
+      if (!jxbid) {
+        return NextResponse.json(
+          { success: false, message: '缺少必要参数: jxbid' },
+          { status: 400 }
+        );
+      }
+
+      const data = await getSupervisionRecords(jxbid);
+      return NextResponse.json({ success: true, data });
+    } else if (action === 'grades') {
+      const jxbh = searchParams.get('jxbh');
+      const courseType = searchParams.get('course_type') as 'undergraduate' | 'graduate';
+
+      if (!jxbh || !courseType) {
+        return NextResponse.json(
+          { success: false, message: '缺少必要参数: jxbh 或 course_type' },
+          { status: 400 }
+        );
+      }
+
+      const data = courseType === 'graduate' 
+        ? await getGraduateGrades(jxbh)
+        : await getUndergraduateGrades(jxbh);
+      return NextResponse.json({ success: true, data });
+    } else if (action === 'course-ideology') {
+      const jxbh = searchParams.get('jxbh');
+
+      if (!jxbh) {
+        return NextResponse.json(
+          { success: false, message: '缺少必要参数: jxbh' },
+          { status: 400 }
+        );
+      }
+
+      const data = await getCourseIdeology(jxbh);
+      return NextResponse.json({ success: true, data });
+    } else if (action === 'ai-summary') {
+      const jxbh = searchParams.get('jxbh');
+      const courseType = searchParams.get('course_type') as 'undergraduate' | 'graduate';
+
+      if (!jxbh || !courseType) {
+        return NextResponse.json(
+          { success: false, message: '缺少必要参数: jxbh 或 course_type' },
+          { status: 400 }
+        );
+      }
+
+      // 获取所有相关数据
+      const classroomStats = await getClassroomStats(jxbh) as any[];
+      const supervisionRecords = await getSupervisionRecords(jxbh) as any[];
+      const grades = (courseType === 'graduate' 
+        ? await getGraduateGrades(jxbh)
+        : await getUndergraduateGrades(jxbh)) as any[];
+      const courseIdeology = (courseType === 'undergraduate' 
+        ? await getCourseIdeology(jxbh)
+        : []) as any[];
+
+      // 生成 AI 总结
+      const summary = await generateAISummary({
+        jxbh,
+        courseType,
+        classroomStats,
+        supervisionRecords,
+        grades,
+        courseIdeology,
+      });
+
+      return NextResponse.json({ success: true, data: summary });
     } else if (action === 'departments') {
       const courseType = searchParams.get('course_type') as 'undergraduate' | 'graduate' || 'undergraduate';
       const data = await getAllDepartments(courseType);
