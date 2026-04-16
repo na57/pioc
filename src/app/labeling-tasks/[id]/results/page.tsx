@@ -61,6 +61,7 @@ export default function TaskResultsPage() {
   const [dataEntriesMap, setDataEntriesMap] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 20 });
 
   useEffect(() => {
     if (taskId) {
@@ -318,7 +319,15 @@ export default function TaskResultsPage() {
             columns={columns}
             dataSource={results}
             loading={dataLoading}
-            pagination={{ pageSize: 20 }}
+            pagination={{
+              current: pagination.current,
+              pageSize: pagination.pageSize,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              onChange: (page, pageSize) => {
+                setPagination({ current: page, pageSize: pageSize || 20 });
+              },
+            }}
             scroll={{ x: 800 }}
           />
         </Card>

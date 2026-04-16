@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import * as tagGroupModel from '@/lib/database/models/tagGroup';
+import { query } from '@/lib/database/connection';
 
 const appUrl = '/tags';
+
+// 检查用户是否可以访问标签组（创建者或打标作业协作者）
+async function checkUserCanAccessTagGroup(groupId: number, userId: number): Promise<boolean> {
+  // 检查是否是创建者
+  const group = await tagGroupModel.findByIdAndUserId(groupId, userId);
+  if (group) return true;
+
+  // 检查是否是引用了该标签组的打标作业的协作者
+  const results = await query<{ count: number }[]>(`
+    SELECT COUNT(*) as count FROM pioc_labeling_tasks lt
+    JOIN pioc_labeling_task_collaborators ltc ON lt.id = ltc.task_id
+    WHERE lt.tag_group_id = ? AND ltc.user_id = ?
+  `, [groupId, userId]);
+
+  return results[0]?.count > 0;
+}
 
 // GET /api/tag-groups/:id - 获取分组详情
 async function getTagGroupHandler(
@@ -21,7 +38,17 @@ async function getTagGroupHandler(
       );
     }
 
-    const group = await tagGroupModel.findByIdAndUserId(groupId, session.userId);
+    // 检查用户是否有权限访问该标签组
+    const canAccess = await checkUserCanAccessTagGroup(groupId, session.userId);
+    if (!canAccess) {
+      return NextResponse.json(
+        { success: false, message: '分组不存在' },
+        { status: 404 }
+      );
+    }
+
+    // 使用 findById 获取分组详情（不限制创建者）
+    const group = await tagGroupModel.findById(groupId);
 
     if (!group) {
       return NextResponse.json(
