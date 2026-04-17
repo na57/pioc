@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安装所有依赖（包括开发依赖，用于构建）
-RUN npm ci
+RUN npm install
 
 # 复制源代码
 COPY . .
@@ -29,6 +29,16 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV HOSTNAME="0.0.0.0"
+
+# 修复安全漏洞：更新 npm 内置的依赖包
+RUN cd /usr/local/lib/node_modules/npm/node_modules && \
+    npm pack brace-expansion@2.0.3 && \
+    npm pack picomatch@4.0.4 && \
+    rm -rf brace-expansion picomatch && \
+    mkdir -p brace-expansion picomatch && \
+    tar -xzf brace-expansion-2.0.3.tgz -C brace-expansion --strip-components=1 && \
+    tar -xzf picomatch-4.0.4.tgz -C picomatch --strip-components=1 && \
+    rm -f *.tgz
 
 # 创建非root用户
 RUN addgroup --system --gid 1001 nodejs
