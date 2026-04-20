@@ -6,19 +6,37 @@ import mysql from 'mysql2/promise';
 
 const appUrl = '/course-center';
 
+// 课程中心默认配置（dataSourceId 必须配置，没有默认值）
+const defaultCourseCenterConfig = {
+  undergraduateCourseTableName: 't_dws_gxjx_bzkskcjbxxmx',
+  graduateCourseTableName: 't_dws_gxjx_yjskcxxmx',
+  undergraduateTeachingTableName: 't_dws_gxjx_bzksjsskxx_v11mx',
+  graduateTeachingTableName: 't_dws_gxjx_yjsjsskxxmx',
+  classroomStatsTableName: 't_ynu_gxjx_aikttjjg',
+  undergraduateTextbookTableName: 't_dws_gxjx_bzksjcsyxxmx',
+  supervisionRecordTableName: 't_dws_ydxt_ydxtddjlmx',
+  undergraduateGradeTableName: 't_dws_gxxs_bzkscjxx',
+  graduateGradeTableName: 't_dws_gxxs_yjscjxx',
+  courseIdeologyTableName: 't_dws_gxjx_bzkskcszmx',
+};
+
 // 获取数据源连接
 async function getDataSourceConnection() {
   const config = getConfig();
-  const appConfig = config.apps?.courseCenter;
+  const userConfig = config.apps?.courseCenter;
 
-  if (!appConfig) {
-    throw new Error('课程中心应用配置未找到，请在config.yaml中配置apps.courseCenter');
-  }
-
-  const { dataSourceId } = appConfig;
+  // dataSourceId 必须从用户配置中获取
+  const dataSourceId = userConfig?.dataSourceId;
 
   if (!dataSourceId) {
     throw new Error('数据源ID未配置，请在config.yaml中配置apps.courseCenter.dataSourceId');
+  }
+
+  // 合并用户配置和默认配置（表名等）
+  const appConfig = {
+    ...defaultCourseCenterConfig,
+    ...userConfig,
+    dataSourceId, // 确保使用用户配置的 dataSourceId
   }
 
   const dataSource = await findById(dataSourceId);
