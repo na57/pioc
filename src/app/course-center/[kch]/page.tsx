@@ -22,7 +22,7 @@ import {
   Descriptions,
   Collapse,
 } from 'antd';
-import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined, DownOutlined } from '@ant-design/icons';
+import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined, DownOutlined, CopyOutlined, FileTextOutlined, BulbOutlined, RobotOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import * as echarts from 'echarts';
@@ -299,10 +299,9 @@ export default function CourseDetailPage() {
   const [aiSummaryDrawerVisible, setAiSummaryDrawerVisible] = useState(false);
   const [aiSummaryJxbh, setAiSummaryJxbh] = useState<string>('');
   const [displayedSummary, setDisplayedSummary] = useState<string>('');
-  const [aiSummaryParsed, setAiSummaryParsed] = useState<{thinkContent: string; formalContent: string}>({thinkContent: '', formalContent: ''});
 
   // 解析 AI 总结内容，分离思考过程和正式内容
-  const parseAiSummary = (content: string): {thinkContent: string; formalContent: string} => {
+  const parseAiSummary = useCallback((content: string): {thinkContent: string; formalContent: string} => {
     const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
     if (thinkMatch) {
       const thinkContent = thinkMatch[1].trim();
@@ -310,7 +309,10 @@ export default function CourseDetailPage() {
       return { thinkContent, formalContent };
     }
     return { thinkContent: '', formalContent: content };
-  };
+  }, []);
+
+  // 实时解析显示的内容
+  const aiSummaryParsed = useMemo(() => parseAiSummary(displayedSummary), [displayedSummary, parseAiSummary]);
 
   // 获取课程详情
   const fetchCourseDetail = useCallback(async () => {
@@ -514,7 +516,6 @@ export default function CourseDetailPage() {
     setAiSummaryLoading(true);
     setAiSummary('');
     setDisplayedSummary('');
-    setAiSummaryParsed({ thinkContent: '', formalContent: '' });
     try {
       const response = await fetch(`/api/course-center?action=ai-summary&jxbh=${jxbh}&course_type=${courseType}`);
       const result = await response.json();
@@ -530,8 +531,6 @@ export default function CourseDetailPage() {
             index++;
           } else {
             clearInterval(interval);
-            // 逐字显示完成后，解析内容
-            setAiSummaryParsed(parseAiSummary(text));
           }
         }, 30); // 每30毫秒显示一个字符
       } else {
@@ -925,17 +924,17 @@ export default function CourseDetailPage() {
             onClick={() => handleViewSupervision(record.jxbh)}
           />
           <ActionButton
-            icon={<BookOutlined />}
+            icon={<FileTextOutlined />}
             tooltip="查看成绩"
             onClick={() => handleViewGrades(record.jxbh)}
           />
           <ActionButton
-            icon={<BookOutlined />}
+            icon={<BulbOutlined />}
             tooltip="查看课程思政"
             onClick={() => handleViewCourseIdeology(record.jxbh)}
           />
           <ActionButton
-            icon={<BarChartOutlined />}
+            icon={<RobotOutlined />}
             tooltip="AI总结"
             onClick={() => handleViewAiSummary(record.jxbh)}
           />
@@ -1731,11 +1730,6 @@ export default function CourseDetailPage() {
         size="large"
         open={aiSummaryDrawerVisible}
         onClose={() => setAiSummaryDrawerVisible(false)}
-        extra={
-          <Button icon={<CloseOutlined />} onClick={() => setAiSummaryDrawerVisible(false)}>
-            关闭
-          </Button>
-        }
       >
         <Spin spinning={aiSummaryLoading} description="AI 正在分析教学数据...">
           {displayedSummary ? (
@@ -1787,8 +1781,7 @@ export default function CourseDetailPage() {
                   }}
                   className="ai-summary-content"
                 >
-                  {aiSummaryParsed.formalContent ? (
-                    <ReactMarkdown
+                  <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[rehypeHighlight]}
                       components={{
@@ -1841,16 +1834,36 @@ export default function CourseDetailPage() {
                         ),
                       }}
                     >
-                      {aiSummaryParsed.formalContent}
+                      {aiSummaryParsed.formalContent || displayedSummary}
                     </ReactMarkdown>
-                  ) : (
-                    <div>
-                      {displayedSummary}
-                      {aiSummaryLoading && displayedSummary.length < aiSummary.length && (
-                        <span style={{ color: '#1890ff' }}>|</span>
-                      )}
-                    </div>
-                  )}
+                    {aiSummaryLoading && displayedSummary.length < aiSummary.length && (
+                      <span style={{ color: '#1890ff' }}>|</span>
+                    )}
+                </div>
+
+                {/* 复制内容按钮 - 放在内容底部 */}
+                <Divider style={{ margin: '16px 0' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <Button
+                    type="primary"
+                    ghost
+                    icon={<CopyOutlined />}
+                    onClick={async () => {
+                      const textToCopy = aiSummaryParsed.formalContent || aiSummary || displayedSummary;
+                      if (textToCopy) {
+                        try {
+                          await navigator.clipboard.writeText(textToCopy);
+                          message.success('内容已复制到剪贴板');
+                        } catch (err) {
+                          message.error('复制失败，请手动复制');
+                        }
+                      }
+                    }}
+                    disabled={!displayedSummary}
+                    size="large"
+                  >
+                    复制内容
+                  </Button>
                 </div>
               </Card>
             </Space>
