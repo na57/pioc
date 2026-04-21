@@ -20,13 +20,19 @@ import {
   Select,
   Input,
   Descriptions,
+  Collapse,
 } from 'antd';
-import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined } from '@ant-design/icons';
+import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined, DownOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import * as echarts from 'echarts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import 'highlight.js/styles/github.css';
 
 const { Title } = Typography;
+const { Panel } = Collapse;
 const { Option } = Select;
 
 // 课程类型
@@ -293,6 +299,18 @@ export default function CourseDetailPage() {
   const [aiSummaryDrawerVisible, setAiSummaryDrawerVisible] = useState(false);
   const [aiSummaryJxbh, setAiSummaryJxbh] = useState<string>('');
   const [displayedSummary, setDisplayedSummary] = useState<string>('');
+  const [aiSummaryParsed, setAiSummaryParsed] = useState<{thinkContent: string; formalContent: string}>({thinkContent: '', formalContent: ''});
+
+  // 解析 AI 总结内容，分离思考过程和正式内容
+  const parseAiSummary = (content: string): {thinkContent: string; formalContent: string} => {
+    const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+    if (thinkMatch) {
+      const thinkContent = thinkMatch[1].trim();
+      const formalContent = content.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+      return { thinkContent, formalContent };
+    }
+    return { thinkContent: '', formalContent: content };
+  };
 
   // 获取课程详情
   const fetchCourseDetail = useCallback(async () => {
@@ -496,6 +514,7 @@ export default function CourseDetailPage() {
     setAiSummaryLoading(true);
     setAiSummary('');
     setDisplayedSummary('');
+    setAiSummaryParsed({ thinkContent: '', formalContent: '' });
     try {
       const response = await fetch(`/api/course-center?action=ai-summary&jxbh=${jxbh}&course_type=${courseType}`);
       const result = await response.json();
@@ -511,6 +530,8 @@ export default function CourseDetailPage() {
             index++;
           } else {
             clearInterval(interval);
+            // 逐字显示完成后，解析内容
+            setAiSummaryParsed(parseAiSummary(text));
           }
         }, 30); // 每30毫秒显示一个字符
       } else {
@@ -1718,19 +1739,121 @@ export default function CourseDetailPage() {
       >
         <Spin spinning={aiSummaryLoading} description="AI 正在分析教学数据...">
           {displayedSummary ? (
-            <Card>
-              <div style={{ 
-                whiteSpace: 'pre-wrap', 
-                lineHeight: 1.8, 
-                fontSize: 14,
-                minHeight: 200 
-              }}>
-                {displayedSummary}
-                {aiSummaryLoading && displayedSummary.length < aiSummary.length && (
-                  <span style={{ color: '#1890ff' }}>|</span>
-                )}
-              </div>
-            </Card>
+            <Space orientation="vertical" style={{ width: '100%' }}>
+              {/* 思考过程 - 可折叠 */}
+              {aiSummaryParsed.thinkContent && (
+                <Collapse
+                  defaultActiveKey={[]}
+                  style={{
+                    backgroundColor: '#f6ffed',
+                    borderRadius: 8,
+                    border: '1px solid #b7eb8f',
+                  }}
+                  items={[
+                    {
+                      key: 'think',
+                      label: (
+                        <Space>
+                          <DownOutlined />
+                          <span style={{ color: '#52c41a', fontWeight: 500 }}>思考过程</span>
+                          <Tag color="success">AI 内部推理</Tag>
+                        </Space>
+                      ),
+                      children: (
+                        <div
+                          style={{
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.8,
+                            fontSize: 13,
+                            color: '#389e0d',
+                            padding: '8px 0',
+                          }}
+                        >
+                          {aiSummaryParsed.thinkContent}
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+
+              {/* 正式内容 - Markdown 渲染 */}
+              <Card>
+                <div
+                  style={{
+                    lineHeight: 1.8,
+                    fontSize: 14,
+                    minHeight: 200,
+                  }}
+                  className="ai-summary-content"
+                >
+                  {aiSummaryParsed.formalContent ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight]}
+                      components={{
+                        h1: ({ children }) => <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 16, marginTop: 24 }}>{children}</h1>,
+                        h2: ({ children }) => <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 12, marginTop: 20 }}>{children}</h2>,
+                        h3: ({ children }) => <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, marginTop: 16 }}>{children}</h3>,
+                        p: ({ children }) => <p style={{ marginBottom: 12, lineHeight: 1.8 }}>{children}</p>,
+                        ul: ({ children }) => <ul style={{ marginBottom: 12, paddingLeft: 24 }}>{children}</ul>,
+                        ol: ({ children }) => <ol style={{ marginBottom: 12, paddingLeft: 24 }}>{children}</ol>,
+                        li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
+                        code: ({ children, className }) => (
+                          <code
+                            className={className}
+                            style={{
+                              backgroundColor: '#f6f8fa',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontFamily: 'monospace',
+                              fontSize: 13,
+                            }}
+                          >
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre
+                            style={{
+                              backgroundColor: '#f6f8fa',
+                              padding: 16,
+                              borderRadius: 8,
+                              overflow: 'auto',
+                              marginBottom: 12,
+                            }}
+                          >
+                            {children}
+                          </pre>
+                        ),
+                        blockquote: ({ children }) => (
+                          <blockquote
+                            style={{
+                              borderLeft: '4px solid #d9d9d9',
+                              paddingLeft: 16,
+                              marginLeft: 0,
+                              color: '#666',
+                              fontStyle: 'italic',
+                            }}
+                          >
+                            {children}
+                          </blockquote>
+                        ),
+                      }}
+                    >
+                      {aiSummaryParsed.formalContent}
+                    </ReactMarkdown>
+                  ) : (
+                    <div>
+                      {displayedSummary}
+                      {aiSummaryLoading && displayedSummary.length < aiSummary.length && (
+                        <span style={{ color: '#1890ff' }}>|</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </Space>
           ) : (
             <Empty description={aiSummaryLoading ? 'AI 正在分析中...' : '暂无数据'} />
           )}

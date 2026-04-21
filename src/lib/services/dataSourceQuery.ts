@@ -270,7 +270,7 @@ class DataSourceQueryService {
   }
 
   // 获取 MySQL 表字段注释
-  private async getMySQLFieldComments(
+  async getMySQLFieldComments(
     dataSource: DataSource,
     queryStatement: string
   ): Promise<FieldComment[]> {

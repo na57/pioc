@@ -291,6 +291,49 @@ docker exec mysql mysql -uroot -proot123 mydb -e "SET NAMES utf8mb4; SELECT kch,
 
 ---
 
+### 9. Ant Design List 组件已弃用，使用 Row/Col 替代
+
+**规则**: Ant Design v6 中 `List` 组件已被标记为弃用，将在下一个主要版本中移除。应使用 `Row` 和 `Col` 组件替代。
+
+**示例**:
+
+```tsx
+import { Row, Col, Card } from 'antd';
+
+// ✅ 正确用法 - 使用 Row 和 Col 实现网格布局
+<Row gutter={[16, 16]}>
+  {dataList.map((item, index) => (
+    <Col key={index} xs={24} sm={12} md={8} lg={8} xl={6} xxl={6}>
+      <Card
+        size="small"
+        hoverable
+        onClick={() => handleClick(item)}
+        title={item.title}
+      >
+        {item.content}
+      </Card>
+    </Col>
+  ))}
+</Row>
+
+// ❌ 错误用法 - 使用已弃用的 List 组件
+import { List } from 'antd';
+
+<List
+  grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 3, xl: 4, xxl: 4 }}
+  dataSource={dataList}
+  renderItem={(item) => (
+    <List.Item>
+      <Card>...</Card>
+    </List.Item>
+  )}
+/>
+```
+
+**原因**: Ant Design v6 中 `List` 组件已被弃用，使用 `Row` 和 `Col` 替代可获得更好的灵活性和性能。
+
+---
+
 ## 检查清单
 
 在提交代码前，请检查：
@@ -305,3 +348,4 @@ docker exec mysql mysql -uroot -proot123 mydb -e "SET NAMES utf8mb4; SELECT kch,
 - [ ] Spin 组件是否使用了 description 属性而非 tip 属性
 - [ ] SQL 脚本是否包含 `SET NAMES utf8mb4;` 字符集设置
 - [ ] 插入的中文数据是否正确显示，无乱码
+- [ ] 是否避免使用已弃用的 List 组件（使用 Row/Col 替代）

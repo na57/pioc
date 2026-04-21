@@ -225,9 +225,13 @@ export default function CourseCenterPage() {
     },
     {
       title: '开设单位',
-      dataIndex: 'kcksdwmc',
-      key: 'kcksdwmc',
+      dataIndex: 'gsyxmc',
+      key: 'gsyxmc',
       width: 200,
+      render: (text: string, record: Course) => {
+        // 本科课程使用 gsyxmc，研究生课程使用 kcksdwmc
+        return courseType === 'undergraduate' ? record.gsyxmc : record.kcksdwmc;
+      },
     },
     {
       title: '学分',

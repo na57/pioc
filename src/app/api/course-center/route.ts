@@ -76,13 +76,13 @@ async function getUndergraduateCourses(params: {
     const queryParams: (string | number)[] = [];
 
     if (params.keyword) {
-      whereConditions.push('(kch LIKE ? OR kcmc LIKE ? OR kcksdwmc LIKE ? OR kcfzrh LIKE ?)');
+      whereConditions.push('(kch LIKE ? OR kcmc LIKE ? OR gsyxmc LIKE ? OR kcfzrh LIKE ?)');
       const keyword = `%${params.keyword}%`;
       queryParams.push(keyword, keyword, keyword, keyword);
     }
 
     if (params.dept) {
-      whereConditions.push('kcksdwh = ?');
+      whereConditions.push('gsyxbm = ?');
       queryParams.push(params.dept);
     }
 

@@ -82,12 +82,24 @@ async function queryHandler(
       _display: renderTemplate(dataObject.display_template, item as Record<string, unknown>),
     }));
 
+    // 获取字段注释（仅 MySQL）
+    let fieldComments: { name: string; comment: string }[] = [];
+    if (dataSource.type === 'mysql') {
+      try {
+        fieldComments = await queryService.getMySQLFieldComments(dataSource, dataObject.query_statement);
+      } catch (error) {
+        console.warn('获取字段注释失败:', error);
+        // 获取注释失败不影响主功能
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         display_template: dataObject.display_template,
         primary_key: dataObject.primary_key,
         list,
+        fieldComments,
         pagination: {
           page,
           pageSize,

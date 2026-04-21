@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
-  List,
   Tag,
   Drawer,
   Descriptions,
@@ -13,6 +12,8 @@ import {
   Pagination,
   Empty,
   App,
+  Row,
+  Col,
 } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -29,6 +30,7 @@ interface QueryResult {
   display_template: string;
   primary_key: string;
   list: Record<string, unknown>[];
+  fieldComments?: { name: string; comment: string }[];
   pagination: {
     page: number;
     pageSize: number;
@@ -49,6 +51,7 @@ export default function DataObjectQueryPage() {
   const [pageSize, setPageSize] = useState(20);
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<Record<string, unknown> | null>(null);
+  const [fieldCommentsMap, setFieldCommentsMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchDataObject();
@@ -86,6 +89,14 @@ export default function DataObjectQueryPage() {
       const data = await response.json();
       if (data.success) {
         setQueryResult(data.data);
+        // 保存字段注释映射
+        if (data.data.fieldComments) {
+          const commentsMap: Record<string, string> = {};
+          data.data.fieldComments.forEach((field: { name: string; comment: string }) => {
+            commentsMap[field.name] = field.comment;
+          });
+          setFieldCommentsMap(commentsMap);
+        }
       } else {
         message.error(data.message || '查询失败');
       }
@@ -148,13 +159,11 @@ export default function DataObjectQueryPage() {
           </div>
         ) : queryResult?.list && queryResult.list.length > 0 ? (
           <>
-            <List
-              grid={{ gutter: 16, xs: 1, sm: 2, md: 3, lg: 3, xl: 4, xxl: 4 }}
-              dataSource={queryResult.list}
-              renderItem={(item) => {
+            <Row gutter={[16, 16]}>
+              {queryResult.list.map((item, index) => {
                 const pkValue = item[dataObject.primary_key];
                 return (
-                  <List.Item>
+                  <Col key={index} xs={24} sm={12} md={8} lg={8} xl={6} xxl={6}>
                     <Card
                       size="small"
                       hoverable
@@ -169,10 +178,10 @@ export default function DataObjectQueryPage() {
                         {renderDisplayContent(item)}
                       </div>
                     </Card>
-                  </List.Item>
+                  </Col>
                 );
-              }}
-            />
+              })}
+            </Row>
             <div style={{ marginTop: 24, textAlign: 'right' }}>
               <Pagination
                 current={currentPage}
@@ -192,7 +201,7 @@ export default function DataObjectQueryPage() {
       <Drawer
         title="数据详情"
         placement="right"
-        width={600}
+        size="large"
         open={drawerVisible}
         onClose={() => setDrawerVisible(false)}
       >
@@ -200,17 +209,22 @@ export default function DataObjectQueryPage() {
           <Descriptions bordered column={1}>
             {Object.entries(selectedRecord)
               .filter(([key]) => !key.startsWith('_'))
-              .map(([key, value]) => (
-                <Descriptions.Item key={key} label={key}>
-                  {typeof value === 'object' ? (
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                      {JSON.stringify(value, null, 2)}
-                    </pre>
-                  ) : (
-                    String(value)
-                  )}
-                </Descriptions.Item>
-              ))}
+              .map(([key, value]) => {
+                // 获取字段标签：如果有注释则显示 注释(字段名)，否则只显示字段名
+                const comment = fieldCommentsMap[key];
+                const label = comment ? `${comment}(${key})` : key;
+                return (
+                  <Descriptions.Item key={key} label={label}>
+                    {typeof value === 'object' ? (
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                        {JSON.stringify(value, null, 2)}
+                      </pre>
+                    ) : (
+                      String(value)
+                    )}
+                  </Descriptions.Item>
+                );
+              })}
           </Descriptions>
         )}
       </Drawer>

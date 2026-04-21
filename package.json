@@ -1,6 +1,6 @@
 {
   "name": "pioc",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 8080",
@@ -16,6 +16,7 @@
     "bcryptjs": "^3.0.3",
     "cookie": "^1.1.1",
     "echarts": "^6.0.0",
+    "highlight.js": "^11.11.1",
     "jose": "^6.2.2",
     "js-yaml": "^4.1.1",
     "jsonwebtoken": "^9.0.3",
@@ -28,7 +29,10 @@
     "picomatch": "^4.0.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
     "redis": "^5.11.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
