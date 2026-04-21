@@ -18,13 +18,12 @@ async function getHandler(
     const dataSourceId = searchParams.get('dataSourceId') || undefined;
     const status = searchParams.get('status') ? parseInt(searchParams.get('status')!) : undefined;
 
-    const result = await dataObjectModel.findAll({
+    const result = await dataObjectModel.findAllAccessibleByUserId(session.userId, {
       page,
       pageSize,
       name,
       dataSourceId,
       status,
-      createdBy: session.userId,
     });
 
     return NextResponse.json({

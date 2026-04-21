@@ -17,6 +17,13 @@ export interface DataObject {
 export interface DataObjectWithDataSource extends DataObject {
   data_source_name?: string;
   data_source_type?: string;
+  creator_name?: string;
+}
+
+export interface DataObjectWithShareInfo extends DataObjectWithDataSource {
+  is_shared?: boolean;
+  shared_by?: number;
+  shared_by_name?: string;
 }
 
 export interface CreateDataObjectData {
@@ -102,9 +109,11 @@ export async function findById(id: number): Promise<DataObjectWithDataSource | n
   const results = await query<DataObjectWithDataSource[]>(
     `SELECT do.*, ds.name as data_source_name, ds.type as data_source_type,
             ds.host as data_source_host, ds.port as data_source_port, 
-            ds.db_name as data_source_database, ds.username as data_source_username
+            ds.db_name as data_source_database, ds.username as data_source_username,
+            u.name as creator_name
      FROM pioc_data_objects do
      LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
+     LEFT JOIN pioc_users u ON do.created_by = u.id
      WHERE do.id = ?`,
     [id]
   );
@@ -120,6 +129,77 @@ export async function findByIdAndUserId(id: number, userId: number): Promise<Dat
      LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
      WHERE do.id = ? AND do.created_by = ?`,
     [id, userId]
+  );
+  return results[0] || null;
+}
+
+// 查询用户可访问的数据对象列表（创建的 + 被分享的）
+export async function findAllAccessibleByUserId(userId: number, params?: ListParams): Promise<{ list: DataObjectWithShareInfo[]; total: number }> {
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 10;
+  const offset = (page - 1) * pageSize;
+
+  let whereClause = 'WHERE (do.created_by = ? OR do.id IN (SELECT data_object_id FROM pioc_data_object_shares WHERE shared_to = ?))';
+  const queryParams: unknown[] = [userId, userId];
+
+  if (params?.name) {
+    whereClause += ' AND do.name LIKE ?';
+    queryParams.push(`%${params.name}%`);
+  }
+
+  if (params?.dataSourceId) {
+    whereClause += ' AND do.data_source_id = ?';
+    queryParams.push(params.dataSourceId);
+  }
+
+  if (params?.status !== undefined) {
+    whereClause += ' AND do.status = ?';
+    queryParams.push(params.status);
+  }
+
+  // Get total count
+  const countResult = await query<{ total: number }[]>(
+    `SELECT COUNT(*) as total FROM pioc_data_objects do ${whereClause}`,
+    queryParams
+  );
+  const total = countResult[0]?.total || 0;
+
+  // Get list with data source info and share info
+  const list = await query<DataObjectWithShareInfo[]>(
+    `SELECT do.*, ds.name as data_source_name, ds.type as data_source_type,
+            CASE WHEN do.created_by != ? THEN 1 ELSE 0 END as is_shared,
+            ds_share.shared_by as shared_by,
+            u_share.name as shared_by_name
+     FROM pioc_data_objects do
+     LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
+     LEFT JOIN pioc_data_object_shares ds_share ON do.id = ds_share.data_object_id AND ds_share.shared_to = ?
+     LEFT JOIN pioc_users u_share ON ds_share.shared_by = u_share.id
+     ${whereClause}
+     ORDER BY do.created_at DESC
+     LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`,
+    [userId, userId, ...queryParams]
+  );
+
+  return { list, total };
+}
+
+// 根据ID查询用户可访问的数据对象（创建的 + 被分享的）
+export async function findByIdAccessibleByUserId(id: number, userId: number): Promise<DataObjectWithShareInfo | null> {
+  const results = await query<DataObjectWithShareInfo[]>(
+    `SELECT do.*, ds.name as data_source_name, ds.type as data_source_type,
+            ds.host as data_source_host, ds.port as data_source_port, 
+            ds.db_name as data_source_database, ds.username as data_source_username,
+            CASE WHEN do.created_by != ? THEN 1 ELSE 0 END as is_shared,
+            ds_share.shared_by as shared_by,
+            u_share.name as shared_by_name
+     FROM pioc_data_objects do
+     LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
+     LEFT JOIN pioc_data_object_shares ds_share ON do.id = ds_share.data_object_id AND ds_share.shared_to = ?
+     LEFT JOIN pioc_users u_share ON ds_share.shared_by = u_share.id
+     WHERE do.id = ? AND (do.created_by = ? OR do.id IN (
+       SELECT data_object_id FROM pioc_data_object_shares WHERE shared_to = ?
+     ))`,
+    [userId, userId, id, userId, userId]
   );
   return results[0] || null;
 }

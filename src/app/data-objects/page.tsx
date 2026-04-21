@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Table,
@@ -12,7 +12,6 @@ import {
   Input,
   Select,
   App,
-  Popconfirm,
   Card,
   Typography,
   Steps,
@@ -20,6 +19,7 @@ import {
   Alert,
   Table as AntTable,
   Descriptions,
+  Tooltip,
 } from 'antd';
 import {
   EditOutlined,
@@ -31,10 +31,12 @@ import {
   CodeOutlined,
   FormatPainterOutlined,
   PlayCircleOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
 import Image from 'next/image';
 import ActionButton from '@/app/tags/components/ActionButton';
+import FriendlyTime from '@/components/FriendlyTime';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -67,25 +69,18 @@ interface DataObject {
   primary_key: string;
   display_template: string;
   status: number;
+  created_by?: number;
   created_at: string;
   updated_at: string;
+  is_shared?: boolean;
+  shared_by?: number;
+  shared_by_name?: string;
 }
 
 interface DataSource {
   id: string;
   name: string;
   type: 'mysql' | 'mongodb';
-}
-
-interface QueryResult {
-  display_template: string;
-  primary_key: string;
-  list: Record<string, unknown>[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-  };
 }
 
 export default function DataObjectsPage() {
@@ -105,7 +100,7 @@ export default function DataObjectsPage() {
   const [form] = Form.useForm();
   const { message } = App.useApp();
 
-  // 搜索表单 - 使用useMemo确保只创建一次
+  // 搜索表单
   const [searchForm] = Form.useForm();
 
   useEffect(() => {
@@ -218,6 +213,10 @@ export default function DataObjectsPage() {
     router.push(`/data-objects/${record.id}/query`);
   };
 
+  const handleManageShares = (record: DataObject) => {
+    router.push(`/data-objects/${record.id}/shares`);
+  };
+
   const handlePreviewQuery = async () => {
     const values = form.getFieldsValue();
     if (!values.data_source_id || !values.query_statement) {
@@ -236,16 +235,16 @@ export default function DataObjectsPage() {
       const data = await response.json();
       if (data.success && data.data.length > 0) {
         setPreviewData(data.data);
-        
+
         // 保存字段注释
-        let commentsMap: Record<string, string> = {};
+        const commentsMap: Record<string, string> = {};
         if (data.fieldComments && Array.isArray(data.fieldComments)) {
           data.fieldComments.forEach((field: { name: string; comment: string }) => {
             commentsMap[field.name] = field.comment;
           });
           setFieldComments(commentsMap);
         }
-        
+
         // 动态生成列（使用字段注释）
         const firstRow = data.data[0];
         const columns = Object.keys(firstRow).map((key) => ({
@@ -284,7 +283,7 @@ export default function DataObjectsPage() {
     try {
       // 根据当前步骤验证相应字段
       let fieldsToValidate: string[] = [];
-      
+
       if (currentStep === 0) {
         fieldsToValidate = ['name', 'data_source_id'];
       } else if (currentStep === 1) {
@@ -414,17 +413,24 @@ export default function DataObjectsPage() {
       title: '数据对象名称',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 220,
       render: (name: string, record: DataObject) => (
-        <Button type="link" onClick={() => handleShowDetail(record)} style={{ padding: 0 }}>
-          {name}
-        </Button>
+        <Space>
+          <Button type="link" onClick={() => handleShowDetail(record)} style={{ padding: 0 }}>
+            {name}
+          </Button>
+          {record.is_shared && (
+            <Tooltip title={`由 ${record.shared_by_name} 分享`}>
+              <Tag color="blue" style={{ fontSize: 12 }}>共享</Tag>
+            </Tooltip>
+          )}
+        </Space>
       ),
     },
     {
       title: '数据源',
       key: 'data_source',
-      width: 220,
+      width: 200,
       render: (_, record: DataObject) => (
         <Space>
           {record.data_source_type && <DbIcon type={record.data_source_type} />}
@@ -442,14 +448,14 @@ export default function DataObjectsPage() {
       title: '显示模板',
       dataIndex: 'display_template',
       key: 'display_template',
-      width: 200,
+      width: 180,
       ellipsis: true,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 80,
       render: (status: number) => (
         <Tag color={status === 1 ? 'green' : 'red'}>{status === 1 ? '启用' : '禁用'}</Tag>
       ),
@@ -457,7 +463,7 @@ export default function DataObjectsPage() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 220,
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
@@ -466,19 +472,30 @@ export default function DataObjectsPage() {
             tooltip="查询数据"
             onClick={() => handleQuery(record)}
           />
-          <ActionButton
-            icon={<EditOutlined />}
-            tooltip="编辑"
-            onClick={() => handleEdit(record)}
-          />
-          <ActionButton
-            icon={<DeleteOutlined />}
-            tooltip="删除"
-            danger
-            confirmTitle="确认删除"
-            confirmDescription="确定要删除此数据对象吗？"
-            onConfirm={() => handleDelete(record.id)}
-          />
+          {!record.is_shared ? (
+            <>
+              <ActionButton
+                icon={<EditOutlined />}
+                tooltip="编辑"
+                onClick={() => handleEdit(record)}
+              />
+              <ActionButton
+                icon={<ShareAltOutlined />}
+                tooltip="管理分享"
+                onClick={() => handleManageShares(record)}
+              />
+              <ActionButton
+                icon={<DeleteOutlined />}
+                tooltip="删除"
+                danger
+                confirmTitle="确认删除"
+                confirmDescription="确定要删除此数据对象吗？"
+                onConfirm={() => handleDelete(record.id)}
+              />
+            </>
+          ) : (
+            <Tag color="default" style={{ marginLeft: 8, fontSize: 12 }}>只读</Tag>
+          )}
         </Space>
       ),
     },
@@ -724,7 +741,7 @@ export default function DataObjectsPage() {
           rowKey="id"
           loading={loading}
           pagination={{ pageSize: 10 }}
-          scroll={{ x: 900 }}
+          scroll={{ x: 1000 }}
         />
       </Card>
 
@@ -786,7 +803,14 @@ export default function DataObjectsPage() {
         {selectedDataObject && (
           <Descriptions bordered column={1}>
             <Descriptions.Item label="ID">{selectedDataObject.id}</Descriptions.Item>
-            <Descriptions.Item label="名称">{selectedDataObject.name}</Descriptions.Item>
+            <Descriptions.Item label="名称">
+              <Space>
+                {selectedDataObject.name}
+                {selectedDataObject.is_shared && (
+                  <Tag color="blue">由 {selectedDataObject.shared_by_name} 分享</Tag>
+                )}
+              </Space>
+            </Descriptions.Item>
             <Descriptions.Item label="描述">
               {selectedDataObject.description || '-'}
             </Descriptions.Item>
@@ -809,10 +833,10 @@ export default function DataObjectsPage() {
               </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="创建时间">
-              {new Date(selectedDataObject.created_at).toLocaleString('zh-CN')}
+              <FriendlyTime date={selectedDataObject.created_at} />
             </Descriptions.Item>
             <Descriptions.Item label="更新时间">
-              {new Date(selectedDataObject.updated_at).toLocaleString('zh-CN')}
+              <FriendlyTime date={selectedDataObject.updated_at} />
             </Descriptions.Item>
           </Descriptions>
         )}

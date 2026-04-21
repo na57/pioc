@@ -21,7 +21,7 @@ async function getHandler(
       );
     }
 
-    const dataObject = await dataObjectModel.findByIdAndUserId(dataObjectId, session.userId);
+    const dataObject = await dataObjectModel.findByIdAccessibleByUserId(dataObjectId, session.userId);
 
     if (!dataObject) {
       return NextResponse.json(
