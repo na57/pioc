@@ -1,0 +1,254 @@
+# 课程中心应用配置
+# 将此文件复制为 course-center.yaml 并修改为你的实际配置
+
+# ============================================
+# 配置方式说明
+# ============================================
+#
+# 本配置文件支持两种数据表指定方式：
+#
+# 方式一：数据对象ID（推荐）
+#   - 在"数据对象"管理应用中创建数据对象
+#   - 配置 dataObjectId 为对应的数据对象ID
+#   - 优点：复用已有的数据对象定义，支持复杂查询
+#
+# 方式二：直接表名
+#   - 配置 name 为数据库表名
+#   - 配置全局 dataSourceId
+#   - 优点：简单直接，适合简单表查询
+#
+# 优先级：dataObjectId > name
+# 如果同时配置，优先使用 dataObjectId
+
+# ============================================
+# 全局数据源配置（方式二需要）
+# ============================================
+# 当使用方式二（直接表名）时，需要配置此项
+# 如果使用方式一（数据对象ID），此项可选
+dataSourceId: ""
+
+# ============================================
+# 表配置
+# ============================================
+tables:
+  # 本科生课程信息表
+  undergraduateCourse:
+    # 方式一：使用数据对象ID
+    # dataObjectId: 1
+    
+    # 方式二：使用直接表名
+    name: "t_dws_gxjx_bzkskcjbxxmx"
+    
+    # 字段映射配置
+    fields:
+      courseCode: "kch"              # 课程号
+      courseName: "kcmc"             # 课程名称
+      responsiblePerson: "kcfzrh"    # 课程负责人
+      deptCode: "gsyxbm"             # 开设单位编码
+      deptName: "gsyxmc"             # 开设单位名称
+      credits: "xf"                  # 学分
+      totalHours: "zxs"              # 总学时
+      theoryHours: "llxs"            # 理论学时
+      practiceHours: "syxs"          # 实验学时
+      practiceWeeks: "sjxs"          # 实践周数
+      introduction: "kcjj"           # 课程简介
+      materials: "jc"                # 教材
+      referenceMaterials: "cksm"     # 参考书籍
+      natureCode: "kcccm"            # 课程性质代码
+      natureName: "kcccmc"           # 课程性质名称
+      categoryCode: "kcflm"          # 课程分类代码
+      categoryName: "kcflmc"         # 课程分类名称
+      teachingMethodCode: "jxfsdm"   # 教学方式代码
+      languageCode: "skyzdm"         # 授课语种代码
+      languageName: "skyzmc"         # 授课语种名称
+      statusCode: "kcztdm"           # 课程状态代码
+      examTypeCode: "kslxdm"         # 考试类型代码
+      examTypeName: "kslxdmmc"       # 考试类型名称
+      description: "kcsm"            # 课程说明
+      objectives: "kcmb"             # 课程目标
+      englishObjectives: "ywkcmb"    # 英文课程目标
+      comprehensiveHours: "zhxs"     # 综合学时
+      englishName: "kcywmc"          # 课程英文名称
+      timestamp: "tstamp"            # 时间戳
+
+  # 研究生课程信息表
+  graduateCourse:
+    # dataObjectId: 2
+    name: "t_dws_gxjx_yjskcxxmx"
+    fields:
+      courseCode: "kch"
+      courseName: "kcmc"
+      responsiblePerson: "kcfzrh"
+      deptCode: "kcksdwh"            # 研究生使用不同字段
+      deptName: "kcksdwmc"
+      credits: "xf"
+      totalHours: "zxs"
+      theoryHours: "llxs"
+      practiceHours: "syxs"
+      practiceWeeks: "sjxs"
+      introduction: "kcjj"
+      materials: "jc"
+      referenceMaterials: "cksm"
+      natureCode: "kcccm"
+      natureName: "kcccmc"
+      categoryCode: "kcflm"
+      categoryName: "kcflmc"
+      teachingMethodCode: "jxfsdm"
+      languageCode: "skyzdm"
+      languageName: "skyzmc"
+      statusCode: "sfyx"             # 研究生使用 sfyx 作为状态字段
+      examTypeCode: "kslxdm"
+      examTypeName: "kslxdmmc"
+      description: "kcsm"
+      objectives: "kcmb"
+      englishObjectives: "ywkcmb"
+      comprehensiveHours: "zhxs"
+      englishName: "kcywmc"
+      timestamp: "tstamp"
+
+  # 本科生教学班表
+  undergraduateTeaching:
+    # dataObjectId: 3
+    name: "t_dws_gxjx_bzksjsskxx_v11mx"
+    fields:
+      classCode: "jxbh"              # 教学班号
+      teacherCode: "jsgh"            # 教师工号
+      teacherName: "jsxm"            # 教师姓名
+      semesterCode: "xnxqdm"         # 学年学期代码
+      semesterName: "xnxqmc"         # 学年学期名称
+      courseCode: "kcdm"             # 课程代码
+      courseName: "kcmc"             # 课程名称
+      weekInfo: "skzc"               # 上课周次
+      dayOfWeek: "skxq"              # 上课星期
+      className: "skbjmc"            # 上课班级名称
+      deptName: "kcksdwmc"           # 开课单位名称
+      campusCode: "xnqdm"            # 校区代码
+      campusName: "xnqmc"            # 校区名称
+      buildingCode: "jxlm"           # 教学楼代码
+      buildingName: "jxlmc"          # 教学楼名称
+      roomCode: "jsm"                # 教室码
+      roomName: "jsmc"               # 教室名称
+      seatCount: "zws"               # 座位数
+      studentCount: "xkrs"           # 选课人数
+
+  # 研究生教学班表
+  graduateTeaching:
+    # dataObjectId: 4
+    name: "t_dws_gxjx_yjsjsskxxmx"
+    fields:
+      classCode: "jxbh"
+      teacherCode: "jsgh"
+      teacherName: "jsxm"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      weekInfo: "zc"                 # 研究生使用 zc 字段
+      dayOfWeek: "xq"                # 研究生使用 xq 字段
+      className: "xszyjc"            # 研究生使用 xszyjc 字段
+      deptName: "yxmc"               # 研究生使用 yxmc 字段
+      campusCode: "xnqdm"
+      campusName: "xnqmc"
+      buildingCode: "jxlm"
+      buildingName: "jxlmc"
+      roomCode: "jsm"
+      roomName: "jsmc"
+      seatCount: "zws"
+      studentCount: "xkrs"
+
+  # 课堂统计表
+  classroomStats:
+    # dataObjectId: 5
+    name: "t_ynu_gxjx_aikttjjg"
+    fields:
+      classCode: "jxbh"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      teacherName: "jsxm"
+      date: "sksj"                   # 上课时间
+      studentCount: "sdrs"           # 实到人数
+      attendanceRate: "cqkl"         # 出勤率
+      raiseHandCount: "jssc"         # 举手次数
+      respondCount: "hdsc"           # 互动次数
+      focusRate: "zxdl"              # 专注度率
+
+  # 本科教材表
+  undergraduateTextbook:
+    # dataObjectId: 6
+    name: "t_dws_gxjx_bzksjcsyxxmx"
+    fields:
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      textbookName: "jcmc"           # 教材名称
+      isbn: "isbn"
+      author: "zz"                   # 作者
+      publisher: "cbs"               # 出版社
+      publishDate: "cbrq"            # 出版日期
+      isNewEdition: "sfzxjcsyqk"     # 是否最新教材使用情況
+
+  # 督导记录表
+  supervisionRecord:
+    # dataObjectId: 7
+    name: "t_dws_ydxt_ydxtddjlmx"
+    fields:
+      classCode: "jxbid"             # 教学班ID
+      teacherName: "jsxm"
+      semesterCode: "xnxqm"
+      supervisorName: "ddzxm"        # 督导组长姓名
+      supervisionType: "ddlxmc"      # 督导类型名称
+      supervisionDate: "tksj"        # 听课时间
+      evaluation: "pj"               # 评价
+      rating: "sypf"                 # 实验评分
+
+  # 本科生成绩表
+  undergraduateGrade:
+    # dataObjectId: 8
+    name: "t_dws_gxxs_bzkscjxx"
+    fields:
+      classCode: "jxbh"
+      semesterCode: "xnxqm"
+      studentId: "xh"                # 学号
+      studentName: "xm"              # 姓名
+      courseCode: "kch"
+      courseName: "kcmc"
+      regularScore: "pscj"           # 平时成绩
+      midtermScore: "qzcj"           # 期中成绩
+      finalScore: "qmcj"             # 期末成绩
+      totalScore: "zzcj"             # 总评成绩
+      gradePoint: "jd"               # 绩点
+      credit: "xf"
+
+  # 研究生成绩表
+  graduateGrade:
+    # dataObjectId: 9
+    name: "t_dws_gxxs_yjscjxx"
+    fields:
+      classCode: "jxbh"
+      semesterCode: "xnxqm"
+      studentId: "xh"
+      studentName: "xm"
+      courseCode: "kch"
+      courseName: "kcmc"
+      regularScore: "pscj"
+      midtermScore: "qzcj"
+      finalScore: "qmcj"
+      totalScore: "zzcj"
+      gradePoint: "jd"
+      credit: "xf"
+
+  # 课程思政表
+  courseIdeology:
+    # dataObjectId: 10
+    name: "t_dws_gxjx_bzkskcszmx"
+    fields:
+      classCode: "jxbh"
+      semesterCode: "xnxqm"
+      courseCode: "kch"
+      courseName: "kcmc"
+      teacherName: "jsxm"
+      ideologyPoint: "szfxzd"        # 思政方向重点
+      sequence: "px"                 # 排序

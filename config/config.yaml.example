@@ -156,6 +156,11 @@ apps:
     semesterTableName: "t_yzsj_dm_xb_xnxqm"
     # 教师授课信息表名
     teachingInfoTableName: "t_dws_gxjx_bzksjsskxx_v11mx"
+  # 课程中心配置
+  # 支持两种方式：
+  # 1. 简单配置（仅配置表名）：在下方直接配置
+  # 2. 完整配置（表名+字段名）：创建 config/course-center.yaml 文件，参考 config/course-center.yaml.example
+  # 如果存在 config/course-center.yaml，则优先使用它，下方的配置将被忽略
   courseCenter:
     # 数据源ID（从数据源管理应用中获取）
     dataSourceId: ""
@@ -169,6 +174,16 @@ apps:
     graduateTeachingTableName: "t_dws_gxjx_yjsjsskxxmx"
     # 课堂统计数据表名
     classroomStatsTableName: "t_ynu_gxjx_aikttjjg"
+    # 本科课程教材使用情况表名
+    undergraduateTextbookTableName: "t_dws_gxjx_bzksjcsyxxmx"
+    # 督导记录表名
+    supervisionRecordTableName: "t_dws_ydxt_ydxtddjlmx"
+    # 本科生成绩信息表名
+    undergraduateGradeTableName: "t_dws_gxxs_bzkscjxx"
+    # 研究生成绩信息表名
+    graduateGradeTableName: "t_dws_gxxs_yjscjxx"
+    # 课程思政表名
+    courseIdeologyTableName: "t_dws_gxjx_bzkskcszmx"
 
 #------------------------------------------
 # AI 模型配置 (OpenAI 兼容)

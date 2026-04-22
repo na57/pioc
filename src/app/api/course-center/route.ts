@@ -1,42 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { getConfig } from '@/lib/config';
+import { getCourseCenterConfig } from '@/lib/config/course-center';
 import { findById } from '@/lib/database/models/dataSource';
 import mysql from 'mysql2/promise';
 
 const appUrl = '/course-center';
 
-// 课程中心默认配置（dataSourceId 必须配置，没有默认值）
-const defaultCourseCenterConfig = {
-  undergraduateCourseTableName: 't_dws_gxjx_bzkskcjbxxmx',
-  graduateCourseTableName: 't_dws_gxjx_yjskcxxmx',
-  undergraduateTeachingTableName: 't_dws_gxjx_bzksjsskxx_v11mx',
-  graduateTeachingTableName: 't_dws_gxjx_yjsjsskxxmx',
-  classroomStatsTableName: 't_ynu_gxjx_aikttjjg',
-  undergraduateTextbookTableName: 't_dws_gxjx_bzksjcsyxxmx',
-  supervisionRecordTableName: 't_dws_ydxt_ydxtddjlmx',
-  undergraduateGradeTableName: 't_dws_gxxs_bzkscjxx',
-  graduateGradeTableName: 't_dws_gxxs_yjscjxx',
-  courseIdeologyTableName: 't_dws_gxjx_bzkskcszmx',
-};
-
 // 获取数据源连接
 async function getDataSourceConnection() {
-  const config = getConfig();
-  const userConfig = config.apps?.courseCenter;
-
-  // dataSourceId 必须从用户配置中获取
-  const dataSourceId = userConfig?.dataSourceId;
+  const config = getCourseCenterConfig();
+  const { dataSourceId } = config;
 
   if (!dataSourceId) {
-    throw new Error('数据源ID未配置，请在config.yaml中配置apps.courseCenter.dataSourceId');
-  }
-
-  // 合并用户配置和默认配置（表名等）
-  const appConfig = {
-    ...defaultCourseCenterConfig,
-    ...userConfig,
-    dataSourceId, // 确保使用用户配置的 dataSourceId
+    throw new Error('数据源ID未配置，请在 config/course-center.yaml 中配置 dataSourceId');
   }
 
   const dataSource = await findById(dataSourceId);
@@ -57,7 +34,7 @@ async function getDataSourceConnection() {
     connectionLimit: 5,
   });
 
-  return { pool, appConfig };
+  return { pool, config };
 }
 
 // 获取本科生课程列表
@@ -68,33 +45,35 @@ async function getUndergraduateCourses(params: {
   page?: number;
   per_page?: number;
 }) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { undergraduateCourseTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.undergraduateCourse;
+  const f = table.fields;
 
   try {
     const whereConditions: string[] = [];
     const queryParams: (string | number)[] = [];
 
     if (params.keyword) {
-      whereConditions.push('(kch LIKE ? OR kcmc LIKE ? OR gsyxmc LIKE ? OR kcfzrh LIKE ?)');
+      whereConditions.push(`(${f.courseCode} LIKE ? OR ${f.courseName} LIKE ? OR ${f.deptName} LIKE ? OR ${f.responsiblePerson} LIKE ?)`);
       const keyword = `%${params.keyword}%`;
       queryParams.push(keyword, keyword, keyword, keyword);
     }
 
     if (params.dept) {
-      whereConditions.push('gsyxbm = ?');
+      whereConditions.push(`${f.deptCode} = ?`);
       queryParams.push(params.dept);
     }
 
     if (params.status) {
-      whereConditions.push('kcztdm = ?');
+      whereConditions.push(`${f.statusCode} = ?`);
       queryParams.push(params.status);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     const [countRows] = await pool.execute(
-      `SELECT COUNT(*) as total FROM ${undergraduateCourseTableName} ${whereClause}`,
+      `SELECT COUNT(*) as total FROM ${table.name} ${whereClause}`,
       queryParams
     );
     const total = (countRows as Array<{ total: number }>)[0]?.total || 0;
@@ -105,38 +84,38 @@ async function getUndergraduateCourses(params: {
 
     const [rows] = await pool.query(
       `SELECT
-        kch,
-        kcmc,
-        kcfzrh,
-        gsyxbm,
-        gsyxmc,
-        xf,
-        zxs,
-        llxs,
-        syxs,
-        sjxs,
-        kcjj,
-        jc,
-        cksm,
-        kcccm,
-        kcccmc,
-        kcflm,
-        kcflmc,
-        jxfsdm,
-        skyzdm,
-        skyzmc,
-        kcztdm,
-        kslxdm,
-        kslxdmmc,
-        kcsm,
-        kcmb,
-        ywkcmb,
-        zhxs,
-        kcywmc,
-        tstamp
-      FROM ${undergraduateCourseTableName}
+        ${f.courseCode},
+        ${f.courseName},
+        ${f.responsiblePerson},
+        ${f.deptCode},
+        ${f.deptName},
+        ${f.credits},
+        ${f.totalHours},
+        ${f.theoryHours},
+        ${f.practiceHours},
+        ${f.practiceWeeks},
+        ${f.introduction},
+        ${f.materials},
+        ${f.referenceMaterials},
+        ${f.natureCode},
+        ${f.natureName},
+        ${f.categoryCode},
+        ${f.categoryName},
+        ${f.teachingMethodCode},
+        ${f.languageCode},
+        ${f.languageName},
+        ${f.statusCode},
+        ${f.examTypeCode},
+        ${f.examTypeName},
+        ${f.description},
+        ${f.objectives},
+        ${f.englishObjectives},
+        ${f.comprehensiveHours},
+        ${f.englishName},
+        ${f.timestamp}
+      FROM ${table.name}
       ${whereClause}
-      ORDER BY kch
+      ORDER BY ${f.courseCode}
       LIMIT ${per_page} OFFSET ${offset}`,
       queryParams
     );
@@ -163,33 +142,35 @@ async function getGraduateCourses(params: {
   page?: number;
   per_page?: number;
 }) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { graduateCourseTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.graduateCourse;
+  const f = table.fields;
 
   try {
     const whereConditions: string[] = [];
     const queryParams: (string | number)[] = [];
 
     if (params.keyword) {
-      whereConditions.push('(kch LIKE ? OR kcmc LIKE ? OR kcksdwmc LIKE ? OR kcfzrh LIKE ?)');
+      whereConditions.push(`(${f.courseCode} LIKE ? OR ${f.courseName} LIKE ? OR ${f.deptName} LIKE ? OR ${f.responsiblePerson} LIKE ?)`);
       const keyword = `%${params.keyword}%`;
       queryParams.push(keyword, keyword, keyword, keyword);
     }
 
     if (params.dept) {
-      whereConditions.push('kcksdwh = ?');
+      whereConditions.push(`${f.deptCode} = ?`);
       queryParams.push(params.dept);
     }
 
     if (params.status) {
-      whereConditions.push('sfyx = ?');
+      whereConditions.push(`${f.statusCode} = ?`);
       queryParams.push(params.status);
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     const [countRows] = await pool.execute(
-      `SELECT COUNT(*) as total FROM ${graduateCourseTableName} ${whereClause}`,
+      `SELECT COUNT(*) as total FROM ${table.name} ${whereClause}`,
       queryParams
     );
     const total = (countRows as Array<{ total: number }>)[0]?.total || 0;
@@ -200,33 +181,38 @@ async function getGraduateCourses(params: {
 
     const [rows] = await pool.query(
       `SELECT
-        kch,
-        kcmc,
-        kcywmc,
-        zhxs,
-        zxs,
-        llxs,
-        syxs,
-        kcjj,
-        kcjbm,
-        kcjbmc,
-        kclbm,
-        kclbmc,
-        jc,
-        cksm,
-        skyylxm,
-        kcfzrh,
-        kcksdwh,
-        kcksdwmc,
-        kcksrq,
-        sfyjc,
-        sfyx,
-        xf,
-        sjxs,
-        tstamp
-      FROM ${graduateCourseTableName}
+        ${f.courseCode},
+        ${f.courseName},
+        ${f.responsiblePerson},
+        ${f.deptCode},
+        ${f.deptName},
+        ${f.credits},
+        ${f.totalHours},
+        ${f.theoryHours},
+        ${f.practiceHours},
+        ${f.practiceWeeks},
+        ${f.introduction},
+        ${f.materials},
+        ${f.referenceMaterials},
+        ${f.natureCode},
+        ${f.natureName},
+        ${f.categoryCode},
+        ${f.categoryName},
+        ${f.teachingMethodCode},
+        ${f.languageCode},
+        ${f.languageName},
+        ${f.statusCode},
+        ${f.examTypeCode},
+        ${f.examTypeName},
+        ${f.description},
+        ${f.objectives},
+        ${f.englishObjectives},
+        ${f.comprehensiveHours},
+        ${f.englishName},
+        ${f.timestamp}
+      FROM ${table.name}
       ${whereClause}
-      ORDER BY kch
+      ORDER BY ${f.courseCode}
       LIMIT ${per_page} OFFSET ${offset}`,
       queryParams
     );
@@ -247,17 +233,15 @@ async function getGraduateCourses(params: {
 
 // 获取所有开设单位
 async function getAllDepartments(courseType: 'undergraduate' | 'graduate') {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { undergraduateCourseTableName, graduateCourseTableName } = appConfig;
-  const tableName = courseType === 'graduate' ? graduateCourseTableName : undergraduateCourseTableName;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  
+  const table = courseType === 'graduate' ? tables.graduateCourse : tables.undergraduateCourse;
+  const f = table.fields;
 
   try {
-    // 本科课程使用 gsyxbm/gsyxmc 字段，研究生课程使用 kcksdwh/kcksdwmc 字段
-    const codeField = courseType === 'undergraduate' ? 'gsyxbm' : 'kcksdwh';
-    const nameField = courseType === 'undergraduate' ? 'gsyxmc' : 'kcksdwmc';
-    
     const [rows] = await pool.execute(
-      `SELECT DISTINCT ${codeField} as code, ${nameField} as name FROM ${tableName} WHERE ${codeField} IS NOT NULL AND ${codeField} != '' AND ${nameField} IS NOT NULL AND ${nameField} != '' ORDER BY ${nameField}`
+      `SELECT DISTINCT ${f.deptCode} as code, ${f.deptName} as name FROM ${table.name} WHERE ${f.deptCode} IS NOT NULL AND ${f.deptCode} != '' AND ${f.deptName} IS NOT NULL AND ${f.deptName} != '' ORDER BY ${f.deptName}`
     );
     return (rows as Array<{ code: string; name: string }>).map(row => ({
       code: row.code,
@@ -273,64 +257,38 @@ async function getTeachingClasses(params: {
   kcdm: string;
   courseType: 'undergraduate' | 'graduate';
 }) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { undergraduateTeachingTableName, graduateTeachingTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
 
   const isGraduate = params.courseType === 'graduate';
-  const tableName = isGraduate 
-    ? graduateTeachingTableName 
-    : undergraduateTeachingTableName;
-
-  // 本科生和研究生表的字段名不同
-  const weekField = isGraduate ? 'zc as skzc' : 'skzc';
-  const weekDayField = isGraduate ? 'xq as skxq' : 'skxq';
-  const classNameField = isGraduate ? 'xszyjc as skbjmc' : 'skbjmc';
-  const deptNameField = isGraduate ? 'yxmc as kcksdwmc' : 'kcksdwmc';
+  const table = isGraduate ? tables.graduateTeaching : tables.undergraduateTeaching;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        jxbh,
-        jsgh,
-        jsxm,
-        xnxqdm,
-        xnxqmc,
-        kcdm,
-        kcmc,
-        ${weekField},
-        ${weekDayField},
-        ksjc,
-        jsjc,
-        jasdm,
-        jxdd,
-        jsszxqh,
-        jsszxqmc,
-        skbjh,
-        ${classNameField},
-        kxh,
-        kcksdwh,
-        ${deptNameField},
-        kkxnd,
-        kkxqm,
-        sksj,
-        jxzy,
-        krl,
-        xdrs,
-        xkxqh,
-        xkrsxd,
-        xknj,
-        pkyq,
-        jslxm,
-        qsz,
-        zzz,
-        kcxzm,
-        jxbmc,
-        jxtz,
-        kksm,
-        tstamp
-      FROM ${tableName}
-      WHERE kcdm = ?
-      ORDER BY xnxqdm DESC, jxbh`,
+        ${f.classCode},
+        ${f.teacherCode},
+        ${f.teacherName},
+        ${f.semesterCode},
+        ${f.semesterName},
+        ${f.courseCode},
+        ${f.courseName},
+        ${f.weekInfo},
+        ${f.dayOfWeek},
+        ${f.className},
+        ${f.deptName},
+        ${f.campusCode},
+        ${f.campusName},
+        ${f.buildingCode},
+        ${f.buildingName},
+        ${f.roomCode},
+        ${f.roomName},
+        ${f.seatCount},
+        ${f.studentCount}
+      FROM ${table.name}
+      WHERE ${f.courseCode} = ?
+      ORDER BY ${f.semesterCode} DESC, ${f.classCode}`,
       [params.kcdm]
     );
 
@@ -342,31 +300,25 @@ async function getTeachingClasses(params: {
 
 // 获取课堂统计数据
 async function getClassroomStats(jxbh: string) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { classroomStatsTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.classroomStats;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        xnxqmc,
-        kckssj,
-        kcjssj,
-        rwcs,
-        zzd,
-        hyd,
-        jszb,
-        bszb,
-        ysjlv,
-        sjd,
-        cjsj,
-        dtlv,
-        ttlv,
-        tstamp,
-        jxbh,
-        wybs
-      FROM ${classroomStatsTableName}
-      WHERE jxbh = ?
-      ORDER BY kckssj ASC`,
+        ${f.semesterName},
+        ${f.teacherName},
+        ${f.date},
+        ${f.studentCount},
+        ${f.attendanceRate},
+        ${f.raiseHandCount},
+        ${f.respondCount},
+        ${f.focusRate}
+      FROM ${table.name}
+      WHERE ${f.classCode} = ?
+      ORDER BY ${f.date} ASC`,
       [jxbh]
     );
 
@@ -378,25 +330,23 @@ async function getClassroomStats(jxbh: string) {
 
 // 获取教材使用情况
 async function getTextbooks(kcdm: string) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { undergraduateTextbookTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.undergraduateTextbook;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        wybs,
-        cbh,
-        jcmc,
-        kcdm,
-        bc,
-        cbrq,
-        sfzxjcsyqk,
-        cbs,
-        bzzzs,
-        tstamp
-      FROM ${undergraduateTextbookTableName}
-      WHERE kcdm = ?
-      ORDER BY sfzxjcsyqk DESC, cbrq DESC`,
+        ${f.textbookName},
+        ${f.isbn},
+        ${f.author},
+        ${f.publisher},
+        ${f.publishDate},
+        ${f.isNewEdition}
+      FROM ${table.name}
+      WHERE ${f.courseCode} = ?
+      ORDER BY ${f.isNewEdition} DESC, ${f.publishDate} DESC`,
       [kcdm]
     );
 
@@ -408,45 +358,24 @@ async function getTextbooks(kcdm: string) {
 
 // 获取督导记录
 async function getSupervisionRecords(jxbid: string) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { supervisionRecordTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.supervisionRecord;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        wybs,
-        wjdm,
-        bpr,
-        bprxm,
-        cpr,
-        cprxm,
-        kcdm,
-        kcmc,
-        jxbid,
-        zf,
-        ydrs,
-        sdrs,
-        tksj,
-        xnxqdm,
-        xnxqmc,
-        pglxdm,
-        pgwjwybs,
-        pgwjdm,
-        pgbpr,
-        pgbprxm,
-        pgcpr,
-        pgcprxm,
-        pgkcdm,
-        pgkcmc,
-        pgzjyj,
-        pgysjg,
-        pgjxbid,
-        pgglwid,
-        pjjy,
-        tstamp
-      FROM ${supervisionRecordTableName}
-      WHERE jxbid = ?
-      ORDER BY tksj DESC`,
+        ${f.teacherName},
+        ${f.semesterCode},
+        ${f.supervisorName},
+        ${f.supervisionType},
+        ${f.supervisionDate},
+        ${f.evaluation},
+        ${f.rating}
+      FROM ${table.name}
+      WHERE ${f.classCode} = ?
+      ORDER BY ${f.supervisionDate} DESC`,
       [jxbid]
     );
 
@@ -458,57 +387,27 @@ async function getSupervisionRecords(jxbid: string) {
 
 // 获取本科生成绩
 async function getUndergraduateGrades(jxbh: string) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { undergraduateGradeTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.undergraduateGrade;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        wybs,
-        xh,
-        xm,
-        ksrq,
-        kch,
-        kcmc,
-        xnxqdm,
-        xnxqmc,
-        ksfsm,
-        ksfsmmc,
-        ksxzm,
-        ksxsm,
-        kccj,
-        cjlrrh,
-        cjlrrxm,
-        cjlrsj,
-        xf,
-        jd,
-        sfyx,
-        sfyxmc,
-        sfjg,
-        sfjgmc,
-        sfzx,
-        sfzxmc,
-        sfcyxfjjs,
-        sfcyxfjjsmc,
-        bz,
-        pscj,
-        qzcj,
-        qmcj,
-        sycj,
-        djlkscj,
-        xs,
-        xn,
-        xqm,
-        fslkscj,
-        kcdjcjm,
-        rkjsgh,
-        rkjsxm,
-        cjlrrq,
-        tstamp,
-        jxbh
-      FROM ${undergraduateGradeTableName}
-      WHERE jxbh = ?
-      ORDER BY xh ASC`,
+        ${f.studentId},
+        ${f.studentName},
+        ${f.courseCode},
+        ${f.courseName},
+        ${f.regularScore},
+        ${f.midtermScore},
+        ${f.finalScore},
+        ${f.totalScore},
+        ${f.gradePoint},
+        ${f.credit}
+      FROM ${table.name}
+      WHERE ${f.classCode} = ?
+      ORDER BY ${f.studentId} ASC`,
       [jxbh]
     );
 
@@ -520,63 +419,27 @@ async function getUndergraduateGrades(jxbh: string) {
 
 // 获取研究生成绩
 async function getGraduateGrades(jxbh: string) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { graduateGradeTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.graduateGrade;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        wybs,
-        xh,
-        xm,
-        xnxqdm,
-        njdm,
-        yxdm,
-        yxmc,
-        zydm,
-        kch,
-        kcmc,
-        kkdwbm,
-        kkdwmc,
-        bjdm,
-        kccj,
-        cjxsz,
-        cjfzdm,
-        cjfzmc,
-        sfjg,
-        sfjgmc,
-        jd,
-        kclbdm,
-        kclbdmmc,
-        xf,
-        sfyx,
-        sfyxmc,
-        khlxdm,
-        kslx,
-        ksxzm,
-        ksxzmmc,
-        xn,
-        xqm,
-        ksrq,
-        pscj,
-        ksfsm,
-        ksfsmmc,
-        ksxsm,
-        fslkscj,
-        djlkscj,
-        kcdjcjm,
-        rkjsgh,
-        rkjsxm,
-        cjlrrh,
-        cjlrrq,
-        cjlrsj,
-        xs,
-        tstamp,
-        jxbh,
-        zymc
-      FROM ${graduateGradeTableName}
-      WHERE jxbh = ?
-      ORDER BY xh ASC`,
+        ${f.studentId},
+        ${f.studentName},
+        ${f.courseCode},
+        ${f.courseName},
+        ${f.regularScore},
+        ${f.midtermScore},
+        ${f.finalScore},
+        ${f.totalScore},
+        ${f.gradePoint},
+        ${f.credit}
+      FROM ${table.name}
+      WHERE ${f.classCode} = ?
+      ORDER BY ${f.studentId} ASC`,
       [jxbh]
     );
 
@@ -588,23 +451,24 @@ async function getGraduateGrades(jxbh: string) {
 
 // 获取课程思政数据
 async function getCourseIdeology(jxbh: string) {
-  const { pool, appConfig } = await getDataSourceConnection();
-  const { courseIdeologyTableName } = appConfig;
+  const { pool, config } = await getDataSourceConnection();
+  const { tables } = config;
+  const table = tables.courseIdeology;
+  const f = table.fields;
 
   try {
     const [rows] = await pool.execute(
       `SELECT
-        px,
-        szrhd,
-        xqzj,
-        zsdqr,
-        szjhd,
-        szyrcl,
-        tstamp,
-        jxbh
-      FROM ${courseIdeologyTableName}
-      WHERE jxbh = ?
-      ORDER BY px ASC`,
+        ${f.classCode},
+        ${f.semesterCode},
+        ${f.courseCode},
+        ${f.courseName},
+        ${f.teacherName},
+        ${f.ideologyPoint},
+        ${f.sequence}
+      FROM ${table.name}
+      WHERE ${f.classCode} = ?
+      ORDER BY ${f.sequence} ASC`,
       [jxbh]
     );
 
