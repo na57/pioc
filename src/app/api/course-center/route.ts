@@ -108,8 +108,8 @@ async function getUndergraduateCourses(params: {
         kch,
         kcmc,
         kcfzrh,
-        kcksdwh,
-        kcksdwmc,
+        gsyxbm,
+        gsyxmc,
         xf,
         zxs,
         llxs,
@@ -133,8 +133,6 @@ async function getUndergraduateCourses(params: {
         ywkcmb,
         zhxs,
         kcywmc,
-        gsyxbm,
-        gsyxmc,
         tstamp
       FROM ${undergraduateCourseTableName}
       ${whereClause}
