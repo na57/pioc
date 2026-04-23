@@ -282,6 +282,83 @@ async function getAllDepartments(courseType: 'undergraduate' | 'graduate') {
   }
 }
 
+// 通过数据对象ID查询数据
+// 使用子查询包装，保留数据对象SQL的完整性，同时支持动态添加筛选、排序和分页
+async function queryByDataObjectId(
+  dataObjectId: number,
+  whereClause?: string,
+  orderBy?: string,
+  params?: unknown[],
+  page?: number,
+  perPage?: number
+): Promise<{ rows: unknown[]; total: number }> {
+  const dataObject = await findDataObjectById(dataObjectId);
+  if (!dataObject) {
+    throw new Error(`数据对象不存在: ${dataObjectId}`);
+  }
+  if (dataObject.status !== 1) {
+    throw new Error(`数据对象已禁用: ${dataObjectId}`);
+  }
+
+  // 获取数据源
+  const dataSource = await findById(dataObject.data_source_id);
+  if (!dataSource) {
+    throw new Error(`数据源不存在: ${dataObject.data_source_id}`);
+  }
+
+  // 将数据对象的SQL作为子查询包装
+  // 这样即使用户SQL包含WHERE、ORDER BY、GROUP BY等，也不会冲突
+  const innerSql = dataObject.query_statement.trim();
+  
+  // 构建外层查询
+  let outerWhere = '';
+  if (whereClause) {
+    outerWhere = 'WHERE ' + whereClause;
+  }
+  
+  let outerOrderBy = '';
+  if (orderBy) {
+    outerOrderBy = 'ORDER BY ' + orderBy;
+  }
+
+  // 计数查询（使用相同的子查询）
+  const countSql = `SELECT COUNT(*) as total FROM (${innerSql}) AS t ${outerWhere}`;
+  
+  // 数据查询
+  let dataSql = `SELECT * FROM (${innerSql}) AS t ${outerWhere}`;
+  if (outerOrderBy) {
+    dataSql += ' ' + outerOrderBy;
+  }
+  // 添加分页
+  if (page && perPage) {
+    const offset = (page - 1) * perPage;
+    dataSql += ` LIMIT ${perPage} OFFSET ${offset}`;
+  }
+
+  // 执行查询
+  const connection = await mysql.createConnection({
+    host: dataSource.host,
+    port: dataSource.port,
+    user: dataSource.username,
+    password: dataSource.password,
+    database: dataSource.db_name,
+    connectTimeout: 10000,
+  });
+
+  try {
+    // 获取总数
+    const [countResult] = await connection.query(countSql, params);
+    const total = (countResult as Array<{ total: number }>)[0]?.total || 0;
+    
+    // 获取数据
+    const [rows] = await connection.query(dataSql, params);
+    
+    return { rows: rows as unknown[], total };
+  } finally {
+    await connection.end();
+  }
+}
+
 // 获取教学班列表
 async function getTeachingClasses(params: {
   kcdm: string;
@@ -293,6 +370,17 @@ async function getTeachingClasses(params: {
   const isGraduate = params.courseType === 'graduate';
   const table = isGraduate ? tables.graduateTeaching : tables.undergraduateTeaching;
   const f = table.fields;
+
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.courseCode} = ?`,
+      `${f.semesterCode} DESC, ${f.classCode}`,
+      [params.kcdm]
+    );
+    return rows;
+  }
 
   try {
     const [rows] = await pool.execute(
@@ -335,6 +423,17 @@ async function getClassroomStats(jxbh: string) {
   const table = tables.classroomStats;
   const f = table.fields;
 
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.classCode} = ?`,
+      `${f.date} ASC`,
+      [jxbh]
+    );
+    return rows;
+  }
+
   try {
     const [rows] = await pool.execute(
       `SELECT
@@ -365,6 +464,17 @@ async function getTextbooks(kcdm: string) {
   const table = tables.undergraduateTextbook;
   const f = table.fields;
 
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.courseCode} = ?`,
+      `${f.isNewEdition} DESC, ${f.publishDate} DESC`,
+      [kcdm]
+    );
+    return rows;
+  }
+
   try {
     const [rows] = await pool.execute(
       `SELECT
@@ -392,6 +502,17 @@ async function getSupervisionRecords(jxbid: string) {
   const { tables } = config;
   const table = tables.supervisionRecord;
   const f = table.fields;
+
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.classCode} = ?`,
+      `${f.supervisionDate} DESC`,
+      [jxbid]
+    );
+    return rows;
+  }
 
   try {
     const [rows] = await pool.execute(
@@ -421,6 +542,17 @@ async function getUndergraduateGrades(jxbh: string) {
   const { tables } = config;
   const table = tables.undergraduateGrade;
   const f = table.fields;
+
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.classCode} = ?`,
+      `${f.studentId} ASC`,
+      [jxbh]
+    );
+    return rows;
+  }
 
   try {
     const [rows] = await pool.execute(
@@ -454,6 +586,17 @@ async function getGraduateGrades(jxbh: string) {
   const table = tables.graduateGrade;
   const f = table.fields;
 
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.classCode} = ?`,
+      `${f.studentId} ASC`,
+      [jxbh]
+    );
+    return rows;
+  }
+
   try {
     const [rows] = await pool.execute(
       `SELECT
@@ -485,6 +628,17 @@ async function getCourseIdeology(jxbh: string) {
   const { tables } = config;
   const table = tables.courseIdeology;
   const f = table.fields;
+
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.classCode} = ?`,
+      `${f.sequence} ASC`,
+      [jxbh]
+    );
+    return rows;
+  }
 
   try {
     const [rows] = await pool.execute(
