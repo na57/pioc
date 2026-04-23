@@ -3,17 +3,47 @@ import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { getConfig } from '@/lib/config';
 import { getCourseCenterConfig } from '@/lib/config/course-center';
 import { findById } from '@/lib/database/models/dataSource';
+import { findById as findDataObjectById } from '@/lib/database/models/dataObject';
 import mysql from 'mysql2/promise';
 
 const appUrl = '/course-center';
 
 // 获取数据源连接
-async function getDataSourceConnection() {
+// 支持两种方式：
+// 1. 从配置中获取全局 dataSourceId
+// 2. 从数据对象中获取数据源ID（当表配置了 dataObjectId 时）
+async function getDataSourceConnection(preferredDataObjectId?: number) {
   const config = getCourseCenterConfig();
-  const { dataSourceId } = config;
+  let dataSourceId = config.dataSourceId;
+
+  // 如果指定了优先使用的数据对象ID，从数据对象获取数据源ID
+  if (preferredDataObjectId) {
+    const dataObject = await findDataObjectById(preferredDataObjectId);
+    if (!dataObject) {
+      throw new Error(`数据对象不存在: ${preferredDataObjectId}`);
+    }
+    if (dataObject.status !== 1) {
+      throw new Error(`数据对象已禁用: ${preferredDataObjectId}`);
+    }
+    dataSourceId = dataObject.data_source_id;
+  }
+
+  // 如果没有全局 dataSourceId，尝试从第一个配置了 dataObjectId 的表获取
+  if (!dataSourceId) {
+    const tables = config.tables;
+    for (const [, tableConfig] of Object.entries(tables)) {
+      if (tableConfig.dataObjectId) {
+        const dataObject = await findDataObjectById(tableConfig.dataObjectId);
+        if (dataObject && dataObject.status === 1) {
+          dataSourceId = dataObject.data_source_id;
+          break;
+        }
+      }
+    }
+  }
 
   if (!dataSourceId) {
-    throw new Error('数据源ID未配置，请在 config/course-center.yaml 中配置 dataSourceId');
+    throw new Error('数据源ID未配置，请在 config/course-center.yaml 中配置 dataSourceId，或为表配置 dataObjectId');
   }
 
   const dataSource = await findById(dataSourceId);

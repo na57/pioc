@@ -30,13 +30,24 @@ dataSourceId: ""
 # ============================================
 # 表配置
 # ============================================
+#
+# 每个表可以独立选择使用方式：
+# - 某些表使用 dataObjectId（复用数据对象定义）
+# - 某些表使用 name（直接表名）
+#
+# 混合配置示例：
+#   undergraduateCourse:
+#     dataObjectId: 1           # 使用数据对象
+#   graduateCourse:
+#     name: "t_dws_gxjx_yjskcxxmx"  # 使用直接表名
+# ============================================
 tables:
-  # 本科生课程信息表
+  # 本科生课程信息表 - 使用数据对象（示例）
   undergraduateCourse:
-    # 方式一：使用数据对象ID
+    # 方式一：使用数据对象ID（推荐，适合复杂查询）
     # dataObjectId: 1
     
-    # 方式二：使用直接表名
+    # 方式二：使用直接表名（简单直接）
     name: "t_dws_gxjx_bzkskcjbxxmx"
     
     # 字段映射配置
@@ -252,3 +263,40 @@ tables:
       teacherName: "jsxm"
       ideologyPoint: "szfxzd"        # 思政方向重点
       sequence: "px"                 # 排序
+
+# ============================================
+# 混合配置示例
+# ============================================
+# 以下是一个实际的混合配置示例，展示如何同时使用两种方式：
+#
+# dataSourceId: "5"  # 全局数据源（用于方式二）
+#
+# tables:
+#   # 使用数据对象（复用已有定义，支持复杂查询）
+#   undergraduateCourse:
+#     dataObjectId: 1
+#     fields:
+#       courseCode: "kch"
+#       courseName: "kcmc"
+#       ...
+#
+#   # 使用直接表名（简单快速）
+#   graduateCourse:
+#     name: "t_dws_gxjx_yjskcxxmx"
+#     fields:
+#       courseCode: "kch"
+#       courseName: "kcmc"
+#       ...
+#
+#   # 其他表也可以独立选择方式
+#   undergraduateTeaching:
+#     dataObjectId: 3      # 使用数据对象
+#   
+#   graduateTeaching:
+#     name: "t_dws_gxjx_yjsjsskxxmx"  # 使用直接表名
+#
+# 优势：
+# - 常用/复杂的表使用数据对象，统一管理
+# - 简单/临时的表使用直接表名，快速配置
+# - 两种方式的表可以共存，互不影响
+# ============================================

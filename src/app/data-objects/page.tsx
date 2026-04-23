@@ -419,11 +419,11 @@ export default function DataObjectsPage() {
           <Button type="link" onClick={() => handleShowDetail(record)} style={{ padding: 0 }}>
             {name}
           </Button>
-          {record.is_shared && (
+          {record.is_shared ? (
             <Tooltip title={`由 ${record.shared_by_name} 分享`}>
               <Tag color="blue" style={{ fontSize: 12 }}>共享</Tag>
             </Tooltip>
-          )}
+          ) : null}
         </Space>
       ),
     },
