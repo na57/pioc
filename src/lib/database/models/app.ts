@@ -15,6 +15,8 @@ export const BUILTIN_APPS = {
   TAG_MANAGEMENT: 11,    // 标签管理
   LABELING_TASKS: 12,    // 打标作业
   COURSE_CENTER: 13,     // 课程中心
+  WECOM_ACCOUNTS: 14,    // 企微账号
+  WECOM_APPS: 15,        // 企微应用
 } as const;
 
 // 内置应用URL映射
@@ -32,6 +34,8 @@ export const BUILTIN_APP_URLS = {
   '/tags': BUILTIN_APPS.TAG_MANAGEMENT,
   '/labeling-tasks': BUILTIN_APPS.LABELING_TASKS,
   '/course-center': BUILTIN_APPS.COURSE_CENTER,
+  '/wecom-accounts': BUILTIN_APPS.WECOM_ACCOUNTS,
+  '/wecom-apps': BUILTIN_APPS.WECOM_APPS,
 } as const;
 
 export interface App {

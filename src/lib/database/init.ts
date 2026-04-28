@@ -268,6 +268,67 @@ CREATE TABLE IF NOT EXISTS pioc_labeling_results (
   FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 创建企微账号表
+CREATE TABLE IF NOT EXISTS pioc_wecom_accounts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL COMMENT '账号名称',
+  corp_id VARCHAR(100) NOT NULL UNIQUE COMMENT '企业微信CorpId',
+  corp_secret VARCHAR(255) COMMENT '企业微信CorpSecret',
+  description VARCHAR(500) COMMENT '描述',
+  status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者用户ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_name (name),
+  INDEX idx_corp_id (corp_id),
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建企微应用表
+CREATE TABLE IF NOT EXISTS pioc_wecom_apps (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  account_id INT NOT NULL COMMENT '所属企微账号ID',
+  name VARCHAR(100) NOT NULL COMMENT '应用名称',
+  agent_id VARCHAR(50) NOT NULL COMMENT '应用AgentId',
+  secret VARCHAR(255) COMMENT '应用Secret',
+  description VARCHAR(500) COMMENT '描述',
+  status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者用户ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_account_id (account_id),
+  INDEX idx_name (name),
+  INDEX idx_agent_id (agent_id),
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (account_id) REFERENCES pioc_wecom_accounts(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建企微应用智能表格表
+CREATE TABLE IF NOT EXISTS pioc_wecom_smart_sheets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  app_id INT NOT NULL COMMENT '所属企微应用ID',
+  docid VARCHAR(100) NOT NULL COMMENT '智能表格ID',
+  name VARCHAR(200) NOT NULL COMMENT '表格名称',
+  url VARCHAR(500) COMMENT '表格链接',
+  description VARCHAR(500) COMMENT '描述',
+  sheets_json TEXT COMMENT '工作表信息JSON',
+  status TINYINT DEFAULT 1 COMMENT '1-启用，0-禁用',
+  created_by INT NOT NULL COMMENT '创建者用户ID',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_app_id (app_id),
+  INDEX idx_docid (docid),
+  INDEX idx_name (name),
+  INDEX idx_status (status),
+  INDEX idx_created_by (created_by),
+  FOREIGN KEY (app_id) REFERENCES pioc_wecom_apps(id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 插入默认角色（内置角色）
 INSERT IGNORE INTO pioc_roles (id, name, description, is_builtin) VALUES
   (1, 'admin', '系统管理员', 1),
@@ -288,7 +349,9 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (10, '数据对象管理', '管理数据对象，配置外部数据源查询', 'DatabaseOutlined', '/data-objects', 1),
   (11, '标签管理', '管理系统标签，包括标签的增删改查和分组管理', 'TagsOutlined', '/tags', 1),
   (12, '打标作业', '创建和管理数据打标作业，支持多人协作打标', 'FlagOutlined', '/labeling-tasks', 1),
-  (13, '课程中心', '查看本科生和研究生课程信息，支持课程查询、教学班和课堂统计查看', 'BookOutlined', '/course-center', 1);
+  (13, '课程中心', '查看本科生和研究生课程信息，支持课程查询、教学班和课堂统计查看', 'BookOutlined', '/course-center', 1),
+  (14, '企微账号', '管理企业微信账号信息，包括CorpId、名称等', 'WechatOutlined', '/wecom-accounts', 1),
+  (15, '企微应用', '管理企业微信应用信息，包括应用名称、Secret、AgentId等', 'AppstoreOutlined', '/wecom-apps', 1);
 
 -- 插入默认菜单
 INSERT IGNORE INTO pioc_menus (id, name, path, icon, parent_id, sort_order, status, app_id) VALUES
@@ -402,8 +465,8 @@ async function assignMenuAppPermission(connection: mysql.PoolConnection) {
 
 async function assignAdditionalAppPermissions(connection: mysql.PoolConnection) {
   try {
-    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13）
-    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13];
+    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15）
+    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
     for (const appId of additionalAppIds) {
       await connection.execute(
         'INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (?, ?)',
