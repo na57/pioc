@@ -21,11 +21,12 @@ async function getWecomAccountHandler(
       );
     }
 
-    const account = await wecomAccountModel.findById(accountId);
+    // 使用用户隔离的方法查询
+    const account = await wecomAccountModel.findByIdAndUser(accountId, session.userId);
 
     if (!account) {
       return NextResponse.json(
-        { success: false, message: '企微账号不存在' },
+        { success: false, message: '企微账号不存在或无权限访问' },
         { status: 404 }
       );
     }
@@ -59,11 +60,11 @@ async function updateWecomAccountHandler(
 
     const body = await request.json();
 
-    // 检查账号是否存在
-    const existingAccount = await wecomAccountModel.findById(accountId);
+    // 检查账号是否存在（使用用户隔离方法）
+    const existingAccount = await wecomAccountModel.findByIdAndUser(accountId, session.userId);
     if (!existingAccount) {
       return NextResponse.json(
-        { success: false, message: '企微账号不存在' },
+        { success: false, message: '企微账号不存在或无权限访问' },
         { status: 404 }
       );
     }
@@ -79,7 +80,8 @@ async function updateWecomAccountHandler(
       }
     }
 
-    await wecomAccountModel.update(accountId, {
+    // 使用用户隔离方法更新
+    const updated = await wecomAccountModel.updateByUser(accountId, session.userId, {
       name: body.name,
       corp_id: body.corp_id,
       corp_secret: body.corp_secret,
@@ -87,7 +89,14 @@ async function updateWecomAccountHandler(
       status: body.status,
     });
 
-    const account = await wecomAccountModel.findById(accountId);
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, message: '更新失败，企微账号不存在或无权限' },
+        { status: 404 }
+      );
+    }
+
+    const account = await wecomAccountModel.findByIdAndUser(accountId, session.userId);
 
     return NextResponse.json({
       success: true,
@@ -143,16 +152,15 @@ async function deleteWecomAccountHandler(
       );
     }
 
-    // 检查账号是否存在
-    const existingAccount = await wecomAccountModel.findById(accountId);
-    if (!existingAccount) {
+    // 使用用户隔离方法删除
+    const deleted = await wecomAccountModel.removeByUser(accountId, session.userId);
+
+    if (!deleted) {
       return NextResponse.json(
-        { success: false, message: '企微账号不存在' },
+        { success: false, message: '删除失败，企微账号不存在或无权限' },
         { status: 404 }
       );
     }
-
-    await wecomAccountModel.remove(accountId);
 
     return NextResponse.json({
       success: true,

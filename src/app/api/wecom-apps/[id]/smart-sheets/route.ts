@@ -251,7 +251,10 @@ async function getSmartSheetsHandler(
     const status = searchParams.get('status') ? parseInt(searchParams.get('status')!, 10) : undefined;
     const all = searchParams.get('all') === 'true';
 
-    const filters: smartSheetModel.WecomSmartSheetFilters = { app_id: appId };
+    const filters: smartSheetModel.WecomSmartSheetFilters = { 
+      app_id: appId,
+      created_by: session.userId, // 用户隔离：只查询当前用户的数据
+    };
     if (name) filters.name = name;
     if (docid) filters.docid = docid;
     if (status !== undefined) filters.status = status;

@@ -64,6 +64,15 @@ async function createSheetHandler(
       );
     }
 
+    // 使用用户隔离方法检查智能表格权限
+    const existingSheet = await smartSheetModel.findByIdAndUser(sheetDbId, session.userId);
+    if (!existingSheet) {
+      return NextResponse.json(
+        { success: false, message: '智能表格不存在或无权限访问' },
+        { status: 404 }
+      );
+    }
+
     // 获取应用信息（包含应用的secret）
     const app = await wecomAppModel.findById(appId);
     if (!app) {
@@ -140,8 +149,7 @@ async function createSheetHandler(
       );
     }
 
-    // 更新本地数据库中的工作表列表
-    const existingSheet = await smartSheetModel.findById(sheetDbId);
+    // 更新本地数据库中的工作表列表（使用用户隔离方法）
     if (existingSheet && existingSheet.sheets_json) {
       try {
         const sheets = JSON.parse(existingSheet.sheets_json);
@@ -150,7 +158,7 @@ async function createSheetHandler(
           name: data.properties.title,
           type: 'smartsheet',
         });
-        await smartSheetModel.update(sheetDbId, {
+        await smartSheetModel.updateByUser(sheetDbId, session.userId, {
           sheets_json: JSON.stringify(sheets),
         });
       } catch (error) {

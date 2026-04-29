@@ -19,7 +19,9 @@ async function getWecomAppsHandler(
     const status = searchParams.get('status') ? parseInt(searchParams.get('status')!, 10) : undefined;
     const all = searchParams.get('all') === 'true';
 
-    const filters: wecomAppModel.WecomAppFilters = {};
+    const filters: wecomAppModel.WecomAppFilters = {
+      created_by: session.userId, // 用户隔离：只查询当前用户的数据
+    };
     if (account_id) filters.account_id = account_id;
     if (name) filters.name = name;
     if (agent_id) filters.agent_id = agent_id;

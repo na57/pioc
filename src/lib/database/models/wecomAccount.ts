@@ -33,6 +33,7 @@ export interface WecomAccountFilters {
   name?: string;
   corp_id?: string;
   status?: number;
+  created_by?: number;
 }
 
 // 获取所有企微账号（带分页）
@@ -44,6 +45,10 @@ export async function findAll(
   const whereConditions: string[] = [];
   const values: unknown[] = [];
 
+  if (filters?.created_by) {
+    whereConditions.push('created_by = ?');
+    values.push(filters.created_by);
+  }
   if (filters?.name) {
     whereConditions.push('name LIKE ?');
     values.push(`%${filters.name}%`);
@@ -83,6 +88,10 @@ export async function findAllWithoutPagination(
   const whereConditions: string[] = [];
   const values: unknown[] = [];
 
+  if (filters?.created_by) {
+    whereConditions.push('created_by = ?');
+    values.push(filters.created_by);
+  }
   if (filters?.name) {
     whereConditions.push('name LIKE ?');
     values.push(`%${filters.name}%`);
@@ -109,6 +118,15 @@ export async function findById(id: number): Promise<WecomAccount | null> {
   const results = await query<WecomAccount[]>(
     'SELECT * FROM pioc_wecom_accounts WHERE id = ?',
     [id]
+  );
+  return results[0] || null;
+}
+
+// 根据ID和用户ID获取企微账号（用于用户隔离）
+export async function findByIdAndUser(id: number, userId: number): Promise<WecomAccount | null> {
+  const results = await query<WecomAccount[]>(
+    'SELECT * FROM pioc_wecom_accounts WHERE id = ? AND created_by = ?',
+    [id, userId]
   );
   return results[0] || null;
 }
@@ -178,11 +196,59 @@ export async function update(id: number, data: UpdateWecomAccountData): Promise<
   return result.affectedRows > 0;
 }
 
+// 更新企微账号（带用户隔离）
+export async function updateByUser(id: number, userId: number, data: UpdateWecomAccountData): Promise<boolean> {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (data.name !== undefined) {
+    fields.push('name = ?');
+    values.push(data.name);
+  }
+  if (data.corp_id !== undefined) {
+    fields.push('corp_id = ?');
+    values.push(data.corp_id);
+  }
+  if (data.corp_secret !== undefined) {
+    fields.push('corp_secret = ?');
+    values.push(data.corp_secret);
+  }
+  if (data.description !== undefined) {
+    fields.push('description = ?');
+    values.push(data.description);
+  }
+  if (data.status !== undefined) {
+    fields.push('status = ?');
+    values.push(data.status);
+  }
+
+  if (fields.length === 0) return false;
+
+  fields.push('updated_at = NOW()');
+  values.push(id);
+  values.push(userId);
+
+  const result = await query<{ affectedRows: number }>(
+    `UPDATE pioc_wecom_accounts SET ${fields.join(', ')} WHERE id = ? AND created_by = ?`,
+    values
+  );
+  return result.affectedRows > 0;
+}
+
 // 删除企微账号
 export async function remove(id: number): Promise<boolean> {
   const result = await query<{ affectedRows: number }>(
     'DELETE FROM pioc_wecom_accounts WHERE id = ?',
     [id]
+  );
+  return result.affectedRows > 0;
+}
+
+// 删除企微账号（带用户隔离）
+export async function removeByUser(id: number, userId: number): Promise<boolean> {
+  const result = await query<{ affectedRows: number }>(
+    'DELETE FROM pioc_wecom_accounts WHERE id = ? AND created_by = ?',
+    [id, userId]
   );
   return result.affectedRows > 0;
 }

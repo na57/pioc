@@ -160,11 +160,12 @@ async function getSmartSheetHandler(
       );
     }
 
-    const sheet = await smartSheetModel.findById(id);
+    // 使用用户隔离的方法查询
+    const sheet = await smartSheetModel.findByIdAndUser(id, session.userId);
 
     if (!sheet) {
       return NextResponse.json(
-        { success: false, message: '智能表格不存在' },
+        { success: false, message: '智能表格不存在或无权限访问' },
         { status: 404 }
       );
     }
@@ -197,10 +198,11 @@ async function syncSmartSheetHandler(
       );
     }
 
-    const existingSheet = await smartSheetModel.findById(sheetDbId);
+    // 使用用户隔离方法检查
+    const existingSheet = await smartSheetModel.findByIdAndUser(sheetDbId, session.userId);
     if (!existingSheet) {
       return NextResponse.json(
-        { success: false, message: '智能表格不存在' },
+        { success: false, message: '智能表格不存在或无权限访问' },
         { status: 404 }
       );
     }
@@ -214,14 +216,21 @@ async function syncSmartSheetHandler(
       );
     }
 
-    // 更新数据库中的表格信息
-    await smartSheetModel.update(sheetDbId, {
+    // 使用用户隔离方法更新数据库中的表格信息
+    const updated = await smartSheetModel.updateByUser(sheetDbId, session.userId, {
       name: sheetInfo.name,
       url: sheetInfo.url,
       sheets_json: JSON.stringify(sheetInfo.sheets),
     });
 
-    const sheet = await smartSheetModel.findById(sheetDbId);
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, message: '同步失败，智能表格不存在或无权限' },
+        { status: 404 }
+      );
+    }
+
+    const sheet = await smartSheetModel.findByIdAndUser(sheetDbId, session.userId);
 
     return NextResponse.json({
       success: true,
@@ -254,15 +263,15 @@ async function deleteSmartSheetHandler(
       );
     }
 
-    const existingSheet = await smartSheetModel.findById(id);
-    if (!existingSheet) {
+    // 使用用户隔离方法删除
+    const deleted = await smartSheetModel.removeByUser(id, session.userId);
+
+    if (!deleted) {
       return NextResponse.json(
-        { success: false, message: '智能表格不存在' },
+        { success: false, message: '删除失败，智能表格不存在或无权限' },
         { status: 404 }
       );
     }
-
-    await smartSheetModel.remove(id);
 
     return NextResponse.json({
       success: true,

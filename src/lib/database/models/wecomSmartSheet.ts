@@ -42,6 +42,7 @@ export interface WecomSmartSheetFilters {
   name?: string;
   docid?: string;
   status?: number;
+  created_by?: number;
 }
 
 // 获取所有智能表格（带分页）
@@ -53,6 +54,10 @@ export async function findAll(
   const whereConditions: string[] = [];
   const values: unknown[] = [];
 
+  if (filters?.created_by) {
+    whereConditions.push('s.created_by = ?');
+    values.push(filters.created_by);
+  }
   if (filters?.app_id) {
     whereConditions.push('s.app_id = ?');
     values.push(filters.app_id);
@@ -101,6 +106,10 @@ export async function findAllWithoutPagination(
   const whereConditions: string[] = [];
   const values: unknown[] = [];
 
+  if (filters?.created_by) {
+    whereConditions.push('s.created_by = ?');
+    values.push(filters.created_by);
+  }
   if (filters?.app_id) {
     whereConditions.push('s.app_id = ?');
     values.push(filters.app_id);
@@ -138,6 +147,18 @@ export async function findById(id: number): Promise<WecomSmartSheet | null> {
      LEFT JOIN pioc_wecom_apps app ON s.app_id = app.id 
      WHERE s.id = ?`,
     [id]
+  );
+  return results[0] || null;
+}
+
+// 根据ID和用户ID获取智能表格（用于用户隔离）
+export async function findByIdAndUser(id: number, userId: number): Promise<WecomSmartSheet | null> {
+  const results = await query<WecomSmartSheet[]>(
+    `SELECT s.*, app.name as app_name 
+     FROM pioc_wecom_smart_sheets s 
+     LEFT JOIN pioc_wecom_apps app ON s.app_id = app.id 
+     WHERE s.id = ? AND s.created_by = ?`,
+    [id, userId]
   );
   return results[0] || null;
 }
@@ -222,11 +243,67 @@ export async function update(id: number, data: UpdateWecomSmartSheetData): Promi
   return result.affectedRows > 0;
 }
 
+// 更新智能表格（带用户隔离）
+export async function updateByUser(id: number, userId: number, data: UpdateWecomSmartSheetData): Promise<boolean> {
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (data.app_id !== undefined) {
+    fields.push('app_id = ?');
+    values.push(data.app_id);
+  }
+  if (data.docid !== undefined) {
+    fields.push('docid = ?');
+    values.push(data.docid);
+  }
+  if (data.name !== undefined) {
+    fields.push('name = ?');
+    values.push(data.name);
+  }
+  if (data.url !== undefined) {
+    fields.push('url = ?');
+    values.push(data.url);
+  }
+  if (data.description !== undefined) {
+    fields.push('description = ?');
+    values.push(data.description);
+  }
+  if (data.sheets_json !== undefined) {
+    fields.push('sheets_json = ?');
+    values.push(data.sheets_json);
+  }
+  if (data.status !== undefined) {
+    fields.push('status = ?');
+    values.push(data.status);
+  }
+
+  if (fields.length === 0) return false;
+
+  fields.push('updated_at = NOW()');
+  values.push(id);
+  values.push(userId);
+
+  const result = await query<{ affectedRows: number }>(
+    `UPDATE pioc_wecom_smart_sheets SET ${fields.join(', ')} WHERE id = ? AND created_by = ?`,
+    values
+  );
+  return result.affectedRows > 0;
+}
+
 // 删除智能表格
 export async function remove(id: number): Promise<boolean> {
   const result = await query<{ affectedRows: number }>(
     'DELETE FROM pioc_wecom_smart_sheets WHERE id = ?',
     [id]
+  );
+  return result.affectedRows > 0;
+}
+
+// 删除智能表格（带用户隔离）
+export async function removeByUser(id: number, userId: number): Promise<boolean> {
+  const result = await query<{ affectedRows: number }>(
+    'DELETE FROM pioc_wecom_smart_sheets WHERE id = ? AND created_by = ?',
+    [id, userId]
   );
   return result.affectedRows > 0;
 }

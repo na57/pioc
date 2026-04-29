@@ -18,7 +18,9 @@ async function getWecomAccountsHandler(
     const status = searchParams.get('status') ? parseInt(searchParams.get('status')!, 10) : undefined;
     const all = searchParams.get('all') === 'true';
 
-    const filters: wecomAccountModel.WecomAccountFilters = {};
+    const filters: wecomAccountModel.WecomAccountFilters = {
+      created_by: session.userId, // 用户隔离：只查询当前用户的数据
+    };
     if (name) filters.name = name;
     if (corp_id) filters.corp_id = corp_id;
     if (status !== undefined) filters.status = status;

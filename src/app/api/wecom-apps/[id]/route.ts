@@ -21,11 +21,12 @@ async function getWecomAppHandler(
       );
     }
 
-    const app = await wecomAppModel.findById(appId);
+    // 使用用户隔离的方法查询
+    const app = await wecomAppModel.findByIdAndUser(appId, session.userId);
 
     if (!app) {
       return NextResponse.json(
-        { success: false, message: '企微应用不存在' },
+        { success: false, message: '企微应用不存在或无权限访问' },
         { status: 404 }
       );
     }
@@ -59,15 +60,17 @@ async function updateWecomAppHandler(
 
     const body = await request.json();
 
-    const existingApp = await wecomAppModel.findById(appId);
+    // 使用用户隔离方法检查
+    const existingApp = await wecomAppModel.findByIdAndUser(appId, session.userId);
     if (!existingApp) {
       return NextResponse.json(
-        { success: false, message: '企微应用不存在' },
+        { success: false, message: '企微应用不存在或无权限访问' },
         { status: 404 }
       );
     }
 
-    await wecomAppModel.update(appId, {
+    // 使用用户隔离方法更新
+    const updated = await wecomAppModel.updateByUser(appId, session.userId, {
       account_id: body.account_id,
       name: body.name,
       agent_id: body.agent_id,
@@ -76,7 +79,14 @@ async function updateWecomAppHandler(
       status: body.status,
     });
 
-    const app = await wecomAppModel.findById(appId);
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, message: '更新失败，企微应用不存在或无权限' },
+        { status: 404 }
+      );
+    }
+
+    const app = await wecomAppModel.findByIdAndUser(appId, session.userId);
 
     return NextResponse.json({
       success: true,
@@ -117,15 +127,15 @@ async function deleteWecomAppHandler(
       );
     }
 
-    const existingApp = await wecomAppModel.findById(appId);
-    if (!existingApp) {
+    // 使用用户隔离方法删除
+    const deleted = await wecomAppModel.removeByUser(appId, session.userId);
+
+    if (!deleted) {
       return NextResponse.json(
-        { success: false, message: '企微应用不存在' },
+        { success: false, message: '删除失败，企微应用不存在或无权限' },
         { status: 404 }
       );
     }
-
-    await wecomAppModel.remove(appId);
 
     return NextResponse.json({
       success: true,
