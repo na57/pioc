@@ -253,10 +253,24 @@ export async function removeByUser(id: number, userId: number): Promise<boolean>
   return result.affectedRows > 0;
 }
 
-// 检查CorpId是否已存在
+// 检查CorpId是否已存在（全表检查，用于迁移等场景）
 export async function checkCorpIdExists(corpId: string, excludeId?: number): Promise<boolean> {
   let sql = 'SELECT COUNT(*) as count FROM pioc_wecom_accounts WHERE corp_id = ?';
   const values: unknown[] = [corpId];
+
+  if (excludeId) {
+    sql += ' AND id != ?';
+    values.push(excludeId);
+  }
+
+  const results = await query<{ count: number }[]>(sql, values);
+  return results[0]?.count > 0;
+}
+
+// 检查CorpId是否已存在（用户隔离版本）
+export async function checkCorpIdExistsByUser(corpId: string, userId: number, excludeId?: number): Promise<boolean> {
+  let sql = 'SELECT COUNT(*) as count FROM pioc_wecom_accounts WHERE corp_id = ? AND created_by = ?';
+  const values: unknown[] = [corpId, userId];
 
   if (excludeId) {
     sql += ' AND id != ?';

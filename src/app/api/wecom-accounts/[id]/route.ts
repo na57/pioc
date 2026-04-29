@@ -69,9 +69,9 @@ async function updateWecomAccountHandler(
       );
     }
 
-    // 如果修改了corp_id，检查是否与其他账号冲突
+    // 如果修改了corp_id，检查是否与其他账号冲突（用户隔离：只检查当前用户的账号）
     if (body.corp_id && body.corp_id !== existingAccount.corp_id) {
-      const exists = await wecomAccountModel.checkCorpIdExists(body.corp_id, accountId);
+      const exists = await wecomAccountModel.checkCorpIdExistsByUser(body.corp_id, session.userId, accountId);
       if (exists) {
         return NextResponse.json(
           { success: false, message: `CorpId "${body.corp_id}" 已存在` },

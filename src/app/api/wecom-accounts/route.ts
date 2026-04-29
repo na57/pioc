@@ -74,8 +74,8 @@ async function createWecomAccountHandler(
       );
     }
 
-    // 检查CorpId是否已存在
-    const exists = await wecomAccountModel.checkCorpIdExists(body.corp_id);
+    // 检查CorpId是否已存在（用户隔离：只检查当前用户的账号）
+    const exists = await wecomAccountModel.checkCorpIdExistsByUser(body.corp_id, session.userId);
     if (exists) {
       return NextResponse.json(
         { success: false, message: `CorpId "${body.corp_id}" 已存在` },

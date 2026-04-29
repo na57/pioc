@@ -5,29 +5,25 @@
 -- 版本说明：
 --   - 从 v0.16.0 迁移到 v0.16.1
 --   - 新增用户隔离功能：用户只能访问自己创建的企微账号、应用和智能表格
+--
+-- ⚠️ 重要：执行本脚本前，请先执行 database-migration-wecom-corpid-unique.sql
+--    以移除 corp_id 的全局唯一约束
 
 -- 设置字符集
 SET NAMES utf8mb4;
 
 -- =============================================
--- 1. 添加/优化索引
+-- 1. 添加索引（如果出错说明索引已存在，可忽略）
 -- =============================================
 
--- 1.1 优化企微账号表的 created_by 索引
--- 确保查询性能
-ALTER TABLE pioc_wecom_accounts 
-DROP INDEX IF EXISTS idx_created_by,
-ADD INDEX idx_created_by (created_by);
+-- 1.1 为企微账号表添加 created_by 索引
+ALTER TABLE pioc_wecom_accounts ADD INDEX idx_created_by (created_by);
 
--- 1.2 优化企微应用表的 created_by 索引
-ALTER TABLE pioc_wecom_apps 
-DROP INDEX IF EXISTS idx_created_by,
-ADD INDEX idx_created_by (created_by);
+-- 1.2 为企微应用表添加 created_by 索引
+ALTER TABLE pioc_wecom_apps ADD INDEX idx_created_by (created_by);
 
--- 1.3 优化智能表格表的 created_by 索引
-ALTER TABLE pioc_wecom_smart_sheets 
-DROP INDEX IF EXISTS idx_created_by,
-ADD INDEX idx_created_by (created_by);
+-- 1.3 为智能表格表添加 created_by 索引
+ALTER TABLE pioc_wecom_smart_sheets ADD INDEX idx_created_by (created_by);
 
 -- =============================================
 -- 2. 为现有数据设置 created_by（如果为空）
@@ -48,19 +44,19 @@ SELECT '企微账号表索引' as check_item, INDEX_NAME, COLUMN_NAME, CARDINALI
 FROM INFORMATION_SCHEMA.STATISTICS 
 WHERE TABLE_SCHEMA = DATABASE() 
 AND TABLE_NAME = 'pioc_wecom_accounts' 
-AND INDEX_NAME LIKE 'idx_created_by';
+AND INDEX_NAME = 'idx_created_by';
 
 SELECT '企微应用表索引' as check_item, INDEX_NAME, COLUMN_NAME, CARDINALITY 
 FROM INFORMATION_SCHEMA.STATISTICS 
 WHERE TABLE_SCHEMA = DATABASE() 
 AND TABLE_NAME = 'pioc_wecom_apps' 
-AND INDEX_NAME LIKE 'idx_created_by';
+AND INDEX_NAME = 'idx_created_by';
 
 SELECT '智能表格表索引' as check_item, INDEX_NAME, COLUMN_NAME, CARDINALITY 
 FROM INFORMATION_SCHEMA.STATISTICS 
 WHERE TABLE_SCHEMA = DATABASE() 
 AND TABLE_NAME = 'pioc_wecom_smart_sheets' 
-AND INDEX_NAME LIKE 'idx_created_by';
+AND INDEX_NAME = 'idx_created_by';
 
 -- 统计每个用户的数据量
 SELECT '企微账号按用户统计' as check_item, created_by, COUNT(*) as count 
