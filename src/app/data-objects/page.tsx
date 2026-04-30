@@ -103,6 +103,13 @@ export default function DataObjectsPage() {
   // 搜索表单
   const [searchForm] = Form.useForm();
 
+  // 分页状态
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
+
   useEffect(() => {
     fetchDataObjects();
     fetchDataSources();
@@ -123,18 +130,25 @@ export default function DataObjectsPage() {
     }
   }, [modalVisible, editingDataObject, form]);
 
-  const fetchDataObjects = async (params?: { name?: string; dataSourceId?: string; status?: number }) => {
+  const fetchDataObjects = async (params?: { name?: string; dataSourceId?: string; status?: number; page?: number; pageSize?: number }) => {
     try {
       setLoading(true);
       const queryParams = new URLSearchParams();
       if (params?.name) queryParams.append('name', params.name);
       if (params?.dataSourceId) queryParams.append('dataSourceId', params.dataSourceId);
       if (params?.status !== undefined) queryParams.append('status', String(params.status));
+      queryParams.append('page', String(params?.page || pagination.current));
+      queryParams.append('pageSize', String(params?.pageSize || pagination.pageSize));
 
       const response = await fetch(`/api/data-objects?${queryParams.toString()}`);
       const data = await response.json();
       if (data.success) {
         setDataObjects(data.data.list);
+        setPagination({
+          current: data.data.pagination.page,
+          pageSize: data.data.pagination.pageSize,
+          total: data.data.pagination.total,
+        });
       } else if (response.status === 403) {
         message.error('您没有权限访问数据对象管理');
       } else {
@@ -160,7 +174,8 @@ export default function DataObjectsPage() {
   };
 
   const handleSearch = (values: { name?: string; dataSourceId?: string; status?: number }) => {
-    fetchDataObjects(values);
+    // 搜索时重置到第一页
+    fetchDataObjects({ ...values, page: 1 });
   };
 
   const handleReset = () => {
@@ -740,7 +755,21 @@ export default function DataObjectsPage() {
           dataSource={dataObjects}
           rowKey="id"
           loading={loading}
-          pagination={{ pageSize: 10 }}
+          pagination={{
+            current: pagination.current,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 条`,
+            onChange: (page, pageSize) => {
+              const searchValues = searchForm.getFieldsValue();
+              fetchDataObjects({
+                ...searchValues,
+                page,
+                pageSize,
+              });
+            },
+          }}
           scroll={{ x: 1000 }}
         />
       </Card>
