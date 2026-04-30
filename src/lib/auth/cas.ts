@@ -41,21 +41,26 @@ function buildCasUrl(path: string): string {
 
 const CAS_CALLBACK_PATH = '/api/auth/cas/callback';
 
-function buildServiceUrl(serviceUrl: string): string {
+function buildServiceUrl(serviceUrl: string, redirect?: string | null): string {
   // 移除 serviceUrl 末尾的斜杠，避免与 CAS_CALLBACK_PATH 拼接时产生双斜杠
   const baseUrl = serviceUrl.endsWith('/') ? serviceUrl.slice(0, -1) : serviceUrl;
-  return `${baseUrl}${CAS_CALLBACK_PATH}`;
+  const callbackUrl = `${baseUrl}${CAS_CALLBACK_PATH}`;
+  // 如果有 redirect 参数，将其编码到 service URL 中
+  if (redirect) {
+    return `${callbackUrl}?redirect=${encodeURIComponent(redirect)}`;
+  }
+  return callbackUrl;
 }
 
-export function getCasLoginUrl(): string {
+export function getCasLoginUrl(redirect?: string | null): string {
   const config = getConfig().cas;
-  const serviceUrl = buildServiceUrl(config.serviceUrl);
+  const serviceUrl = buildServiceUrl(config.serviceUrl, redirect);
   return buildCasUrl(config.loginPath) + `?service=${encodeURIComponent(serviceUrl)}`;
 }
 
-export function getCasValidateUrl(ticket: string): string {
+export function getCasValidateUrl(ticket: string, redirect?: string | null): string {
   const config = getConfig().cas;
-  const serviceUrl = buildServiceUrl(config.serviceUrl);
+  const serviceUrl = buildServiceUrl(config.serviceUrl, redirect);
   return buildCasUrl(config.validatePath) + `?service=${encodeURIComponent(serviceUrl)}&ticket=${ticket}`;
 }
 
@@ -77,12 +82,12 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   }, obj);
 }
 
-export async function validateCasTicket(ticket: string): Promise<{
+export async function validateCasTicket(ticket: string, redirect?: string | null): Promise<{
   valid: boolean;
   username?: string;
   attributes?: Record<string, string>;
 }> {
-  const validateUrl = getCasValidateUrl(ticket);
+  const validateUrl = getCasValidateUrl(ticket, redirect);
   const config = getConfig();
 
   console.log('CAS validate URL:', validateUrl);

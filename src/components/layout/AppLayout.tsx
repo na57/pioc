@@ -71,10 +71,10 @@ function AppLayout({ children }: AppLayoutProps) {
       if (data.success) {
         setUserInfo(data.data);
       } else {
-        router.push('/login');
+        router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
       }
     } catch {
-      router.push('/login');
+      router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
     } finally {
       setLoading(false);
     }

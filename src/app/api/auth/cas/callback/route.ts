@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const ticket = searchParams.get('ticket');
   const error = searchParams.get('error');
+  const redirect = searchParams.get('redirect');
 
   // 从配置文件获取基础 URL
   const baseUrl = getBaseUrl();
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/login?error=no_ticket', baseUrl));
   }
 
-  const validation = await validateCasTicket(ticket);
+  const validation = await validateCasTicket(ticket, redirect);
 
   if (!validation.valid || !validation.username) {
     return NextResponse.redirect(new URL('/login?error=invalid_ticket', baseUrl));
@@ -38,5 +39,6 @@ export async function GET(request: NextRequest) {
 
   await setSessionCookie(token);
 
-  return NextResponse.redirect(new URL('/my-apps', baseUrl));
+  // 如果有 redirect 参数，跳转到指定地址，否则默认跳转到 /my-apps
+  return NextResponse.redirect(new URL(redirect || '/my-apps', baseUrl));
 }

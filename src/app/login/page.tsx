@@ -39,7 +39,8 @@ function LoginForm() {
 
       if (data.success) {
         message.success('登录成功');
-        router.push('/my-apps');
+        const redirect = searchParams.get('redirect');
+        router.push(redirect || '/my-apps');
       } else {
         message.error(data.message || '登录失败');
       }
@@ -51,7 +52,11 @@ function LoginForm() {
   };
 
   const handleCasLogin = () => {
-    window.location.href = '/api/auth/cas/login';
+    const redirect = searchParams.get('redirect');
+    const casLoginUrl = redirect
+      ? `/api/auth/cas/login?redirect=${encodeURIComponent(redirect)}`
+      : '/api/auth/cas/login';
+    window.location.href = casLoginUrl;
   };
 
   return (
@@ -88,7 +93,7 @@ function LoginForm() {
         onClick={handleCasLogin}
         style={{ marginTop: 8 }}
       >
-        企业微信/SSO登录
+        CAS/OAuth 登录
       </Button>
     </>
   );
