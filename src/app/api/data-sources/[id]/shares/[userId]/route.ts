@@ -20,10 +20,10 @@ async function removeShareHandler(
     }
 
     const { id, userId: sharedToUserId } = await params;
-    const dataSourceId = Number(id);
+    const dataSourceId = id;
 
     // 检查数据源是否存在
-    const dataSource = await dataSourceModel.findById(String(dataSourceId));
+    const dataSource = await dataSourceModel.findById(dataSourceId);
     if (!dataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },

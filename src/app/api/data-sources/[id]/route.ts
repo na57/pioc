@@ -12,7 +12,7 @@ async function getDataSourceHandler(
 ) {
   try {
     const { id } = await params;
-    const dataSourceId = Number(id);
+    const dataSourceId = id;
 
     // 首先尝试获取用户自己的数据源（带创建者名称）
     const dataSourceWithCreator = await findByIdWithCreator(id);

@@ -21,7 +21,7 @@ async function getSharesHandler(
     }
 
     const { id } = await params;
-    const dataSourceId = Number(id);
+    const dataSourceId = id;
 
     // 检查用户是否可以访问该数据源
     const canAccess = await dataSourceShareModel.checkUserCanAccess(dataSourceId, user.id);
@@ -57,10 +57,10 @@ async function addShareHandler(
     }
 
     const { id } = await params;
-    const dataSourceId = Number(id);
+    const dataSourceId = id;
 
     // 检查数据源是否存在
-    const dataSource = await dataSourceModel.findById(String(dataSourceId));
+    const dataSource = await dataSourceModel.findById(dataSourceId);
     if (!dataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },

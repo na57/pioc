@@ -2,7 +2,7 @@ import { query } from '../connection';
 
 export interface DataSourceShare {
   id: number;
-  data_source_id: number;
+  data_source_id: string;
   shared_by: number;
   shared_to: number;
   created_at: Date;
@@ -15,7 +15,7 @@ export interface DataSourceShareWithUser extends DataSourceShare {
 }
 
 // 创建分享
-export async function createShare(dataSourceId: number, sharedBy: number, sharedTo: number): Promise<number> {
+export async function createShare(dataSourceId: string, sharedBy: number, sharedTo: number): Promise<number> {
   const result = await query<{ insertId: number }>(
     'INSERT INTO pioc_data_source_shares (data_source_id, shared_by, shared_to) VALUES (?, ?, ?)',
     [dataSourceId, sharedBy, sharedTo]
@@ -24,7 +24,7 @@ export async function createShare(dataSourceId: number, sharedBy: number, shared
 }
 
 // 删除分享
-export async function removeShare(dataSourceId: number, sharedTo: number): Promise<boolean> {
+export async function removeShare(dataSourceId: string, sharedTo: number): Promise<boolean> {
   const result = await query<{ affectedRows: number }>(
     'DELETE FROM pioc_data_source_shares WHERE data_source_id = ? AND shared_to = ?',
     [dataSourceId, sharedTo]
@@ -33,7 +33,7 @@ export async function removeShare(dataSourceId: number, sharedTo: number): Promi
 }
 
 // 根据数据源ID获取分享列表
-export async function findSharesByDataSourceId(dataSourceId: number): Promise<DataSourceShareWithUser[]> {
+export async function findSharesByDataSourceId(dataSourceId: string): Promise<DataSourceShareWithUser[]> {
   return query<DataSourceShareWithUser[]>(
     `SELECT ds.*, u.name as shared_to_name, u.username as shared_to_username
      FROM pioc_data_source_shares ds
@@ -45,7 +45,7 @@ export async function findSharesByDataSourceId(dataSourceId: number): Promise<Da
 }
 
 // 检查用户是否已被分享该数据源
-export async function checkUserHasShared(dataSourceId: number, userId: number): Promise<boolean> {
+export async function checkUserHasShared(dataSourceId: string, userId: number): Promise<boolean> {
   const results = await query<{ count: number }[]>(
     'SELECT COUNT(*) as count FROM pioc_data_source_shares WHERE data_source_id = ? AND shared_to = ?',
     [dataSourceId, userId]
@@ -54,7 +54,7 @@ export async function checkUserHasShared(dataSourceId: number, userId: number): 
 }
 
 // 检查用户是否可以访问数据源（创建者或被分享者）
-export async function checkUserCanAccess(dataSourceId: number, userId: number): Promise<boolean> {
+export async function checkUserCanAccess(dataSourceId: string, userId: number): Promise<boolean> {
   const results = await query<{ count: number }[]>(
     `SELECT COUNT(*) as count FROM pioc_data_sources
      WHERE id = ? AND (created_by = ? OR id IN (
@@ -66,7 +66,7 @@ export async function checkUserCanAccess(dataSourceId: number, userId: number): 
 }
 
 // 检查用户是否是数据源的创建者（有权限管理分享）
-export async function checkUserIsOwner(dataSourceId: number, userId: number): Promise<boolean> {
+export async function checkUserIsOwner(dataSourceId: string, userId: number): Promise<boolean> {
   const results = await query<{ count: number }[]>(
     'SELECT COUNT(*) as count FROM pioc_data_sources WHERE id = ? AND created_by = ?',
     [dataSourceId, userId]
@@ -75,8 +75,8 @@ export async function checkUserIsOwner(dataSourceId: number, userId: number): Pr
 }
 
 // 获取用户被分享的数据源ID列表
-export async function findSharedDataSourceIdsByUserId(userId: number): Promise<number[]> {
-  const results = await query<{ data_source_id: number }[]>(
+export async function findSharedDataSourceIdsByUserId(userId: number): Promise<string[]> {
+  const results = await query<{ data_source_id: string }[]>(
     'SELECT data_source_id FROM pioc_data_source_shares WHERE shared_to = ?',
     [userId]
   );

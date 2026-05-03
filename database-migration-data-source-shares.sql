@@ -1,9 +1,12 @@
 SET NAMES utf8mb4;
 
+-- 删除已创建的表（如果存在但结构错误）
+DROP TABLE IF EXISTS pioc_data_source_shares;
+
 -- 创建数据源分享表
 CREATE TABLE IF NOT EXISTS pioc_data_source_shares (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  data_source_id INT NOT NULL COMMENT '数据源ID',
+  data_source_id CHAR(36) NOT NULL COMMENT '数据源ID',
   shared_by INT NOT NULL COMMENT '分享者用户ID',
   shared_to INT NOT NULL COMMENT '被分享者用户ID',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

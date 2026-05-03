@@ -61,9 +61,9 @@ async function getDataSourcesHandler(
       const sharesInfo = await findSharesToUser(session.userId);
 
       const sharedDataSources = allDataSources
-        .filter(ds => sharedIds.includes(Number(ds.id)) && ds.created_by !== session.userId)
+        .filter(ds => sharedIds.includes(ds.id) && ds.created_by !== session.userId)
         .map(ds => {
-          const shareInfo = sharesInfo.find(s => Number(s.data_source_id) === Number(ds.id));
+          const shareInfo = sharesInfo.find(s => s.data_source_id === ds.id);
           return {
             ...ds,
             is_shared: true,
