@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Table,
   Button,
@@ -16,6 +17,7 @@ import {
   Card,
   Typography,
   Descriptions,
+  Tooltip,
 } from 'antd';
 import {
   EditOutlined,
@@ -24,6 +26,8 @@ import {
   ApiOutlined,
   LinkOutlined,
   CopyOutlined,
+  ShareAltOutlined,
+  EyeOutlined,
 } from '@ant-design/icons';
 import Image from 'next/image';
 import type { TableProps } from 'antd';
@@ -43,6 +47,10 @@ interface DataSource {
   description: string;
   status: number;
   created_at: string;
+  created_by?: number;
+  is_shared?: boolean;
+  shared_by?: number;
+  shared_by_name?: string;
 }
 
 interface DataSourceFormData {
@@ -73,6 +81,7 @@ const DbIcon = ({ type }: { type: string }) => {
 };
 
 export default function DataSourcesPage() {
+  const router = useRouter();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -164,6 +173,10 @@ export default function DataSourcesPage() {
     setDetailModalVisible(true);
   };
 
+  const handleShare = (id: string) => {
+    router.push(`/data-sources/${id}/shares`);
+  };
+
   const handleSubmit = async (values: DataSourceFormData) => {
     try {
       const submitData = {
@@ -227,16 +240,23 @@ export default function DataSourcesPage() {
       title: '数据源名称',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 240,
       render: (name: string, record: DataSource) => (
-        <Button
-          type="link"
-          icon={<LinkOutlined />}
-          onClick={() => handleShowDetail(record)}
-          style={{ padding: 0 }}
-        >
-          {name}
-        </Button>
+        <Space>
+          <Button
+            type="link"
+            icon={<LinkOutlined />}
+            onClick={() => handleShowDetail(record)}
+            style={{ padding: 0 }}
+          >
+            {name}
+          </Button>
+          {record.is_shared && (
+            <Tooltip title={`由 ${record.shared_by_name} 分享`}>
+              <Tag color="blue" style={{ fontSize: 12 }}>共享</Tag>
+            </Tooltip>
+          )}
+        </Space>
       ),
     },
     {
@@ -272,28 +292,46 @@ export default function DataSourcesPage() {
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 220,
       fixed: 'right',
       render: (_, record) => (
         <Space>
-          <ActionButton
-            icon={<ApiOutlined />}
-            tooltip="测试连接"
-            onClick={() => handleTestConnection(record.id)}
-          />
-          <ActionButton
-            icon={<EditOutlined />}
-            tooltip="编辑"
-            onClick={() => handleEdit(record)}
-          />
-          <ActionButton
-            icon={<DeleteOutlined />}
-            tooltip="删除"
-            danger
-            confirmTitle="确认删除"
-            confirmDescription="确定要删除此数据源吗？"
-            onConfirm={() => handleDelete(record.id)}
-          />
+          {!record.is_shared ? (
+            <>
+              <ActionButton
+                icon={<ApiOutlined />}
+                tooltip="测试连接"
+                onClick={() => handleTestConnection(record.id)}
+              />
+              <ActionButton
+                icon={<ShareAltOutlined />}
+                tooltip="分享"
+                onClick={() => handleShare(record.id)}
+              />
+              <ActionButton
+                icon={<EditOutlined />}
+                tooltip="编辑"
+                onClick={() => handleEdit(record)}
+              />
+              <ActionButton
+                icon={<DeleteOutlined />}
+                tooltip="删除"
+                danger
+                confirmTitle="确认删除"
+                confirmDescription="确定要删除此数据源吗？"
+                onConfirm={() => handleDelete(record.id)}
+              />
+            </>
+          ) : (
+            <>
+              <ActionButton
+                icon={<EyeOutlined />}
+                tooltip="查看详情"
+                onClick={() => handleShowDetail(record)}
+              />
+              <Tag color="default" style={{ fontSize: 12 }}>只读</Tag>
+            </>
+          )}
         </Space>
       ),
     },
@@ -422,7 +460,14 @@ export default function DataSourcesPage() {
 
       {/* 数据源详情弹窗 */}
       <Modal
-        title="数据源详情"
+        title={
+          <Space>
+            <span>数据源详情</span>
+            {selectedDataSource?.is_shared && (
+              <Tag color="blue">由 {selectedDataSource.shared_by_name} 分享</Tag>
+            )}
+          </Space>
+        }
         open={detailModalVisible}
         onCancel={() => setDetailModalVisible(false)}
         footer={[
@@ -458,10 +503,7 @@ export default function DataSourcesPage() {
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label="主机地址">
-              {selectedDataSource.host}
-            </Descriptions.Item>
-            <Descriptions.Item label="端口号">
-              {selectedDataSource.port}
+                {selectedDataSource.host}:{selectedDataSource.port}
             </Descriptions.Item>
             <Descriptions.Item label="用户名">
               {selectedDataSource.username}

@@ -41,6 +41,10 @@ export interface UpdateDataSourceData {
   status?: number;
 }
 
+export interface DataSourceWithCreator extends DataSource {
+  creator_name?: string;
+}
+
 export async function findAll(): Promise<DataSource[]> {
   return query<DataSource[]>('SELECT * FROM pioc_data_sources ORDER BY created_at DESC');
 }
@@ -51,6 +55,29 @@ export async function findByUserId(userId: number): Promise<DataSource[]> {
 
 export async function findById(id: string): Promise<DataSource | null> {
   const results = await query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE id = ?', [id]);
+  return results[0] || null;
+}
+
+export async function findByIdWithCreator(id: string): Promise<DataSourceWithCreator | null> {
+  const results = await query<DataSourceWithCreator[]>(
+    `SELECT ds.*, u.name as creator_name
+     FROM pioc_data_sources ds
+     LEFT JOIN pioc_users u ON ds.created_by = u.id
+     WHERE ds.id = ?`,
+    [id]
+  );
+  return results[0] || null;
+}
+
+// 获取数据源（不包含密码），用于被分享者查看
+export async function findByIdWithoutPassword(id: string): Promise<Omit<DataSourceWithCreator, 'password'> | null> {
+  const results = await query<Omit<DataSourceWithCreator, 'password'>[]>(
+    `SELECT ds.id, ds.name, ds.type, ds.host, ds.port, ds.username, ds.db_name, ds.description, ds.status, ds.created_by, ds.created_at, ds.updated_at, u.name as creator_name
+     FROM pioc_data_sources ds
+     LEFT JOIN pioc_users u ON ds.created_by = u.id
+     WHERE ds.id = ?`,
+    [id]
+  );
   return results[0] || null;
 }
 

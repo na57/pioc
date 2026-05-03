@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findByIdAndUserId, update, removeByIdAndUserId } from '@/lib/database/models/dataSource';
+import { findByIdAndUserId, findByIdWithCreator, findByIdWithoutPassword, update, removeByIdAndUserId, type DataSourceWithCreator } from '@/lib/database/models/dataSource';
+import { checkUserCanAccess } from '@/lib/database/models/dataSourceShare';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 
 const appUrl = '/data-sources';
@@ -11,14 +12,39 @@ async function getDataSourceHandler(
 ) {
   try {
     const { id } = await params;
-    const dataSource = await findByIdAndUserId(id, session.userId);
+    const dataSourceId = Number(id);
+
+    // 首先尝试获取用户自己的数据源（带创建者名称）
+    const dataSourceWithCreator = await findByIdWithCreator(id);
+    let isOwner = false;
+    let dataSource: DataSourceWithCreator | Omit<DataSourceWithCreator, 'password'> | null = null;
+
+    // 检查是否有权限访问（创建者或被分享者）
+    if (dataSourceWithCreator) {
+      isOwner = dataSourceWithCreator.created_by === session.userId;
+      if (isOwner) {
+        dataSource = dataSourceWithCreator;
+      } else {
+        // 不是创建者，检查是否被分享
+        const canAccess = await checkUserCanAccess(dataSourceId, session.userId);
+        if (!canAccess) {
+          dataSource = null;
+        } else {
+          // 被分享者只能查看不包含密码的数据源信息
+          dataSource = await findByIdWithoutPassword(id);
+        }
+      }
+    }
+
     if (!dataSource) {
       return NextResponse.json(
         { success: false, message: 'Data source not found' },
         { status: 404 }
       );
     }
-    return NextResponse.json({ success: true, data: dataSource });
+
+    // 添加 is_owner 字段到返回数据中，方便前端判断权限
+    return NextResponse.json({ success: true, data: { ...dataSource, is_owner: isOwner } });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: 'Failed to fetch data source', error: String(error) },
