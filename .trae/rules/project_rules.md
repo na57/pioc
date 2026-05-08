@@ -334,6 +334,185 @@ import { List } from 'antd';
 
 ---
 
+### 10. Ant Design Avatar 组件 src 属性不能传入空字符串
+
+**规则**: 使用 Ant Design 的 `Avatar` 组件时，`src` 属性不能传入空字符串 (`""`)，应该传入 `null` 或 `undefined`，否则会导致浏览器重新下载整个页面。
+
+**示例**:
+
+```tsx
+import { Avatar } from 'antd';
+import { UserOutlined } from '@ant-design/icons';
+
+// ✅ 正确用法 - 将空字符串转换为 null
+<Avatar
+  src={record.zp || null}
+  icon={<UserOutlined />}
+  size="small"
+/>
+
+<Avatar
+  src={user.avatar || null}
+  icon={<UserOutlined />}
+  size={80}
+/>
+
+// ❌ 错误用法 - 直接传入可能为空的字符串
+<Avatar
+  src={record.zp}  // 当 zp 为 "" 时会触发错误
+  icon={<UserOutlined />}
+  size="small"
+/>
+```
+
+**原因**: 当 `img` 标签的 `src` 属性为空字符串时，浏览器会将其解析为当前页面 URL，导致重新下载整个页面，产生性能问题和控制台警告。
+
+---
+
+### 11. Ant Design Tabs 组件必须使用 items 属性
+
+**规则**: 使用 Ant Design 的 `Tabs` 组件时，必须使用 `items` 属性来配置标签页，不要使用已弃用的 `TabPane` 子组件。
+
+**示例**:
+
+```tsx
+import { Tabs } from 'antd';
+
+// ✅ 正确用法 - 使用 items 属性
+<Tabs
+  activeKey={activeTab}
+  onChange={setActiveTab}
+  items={[
+    {
+      key: 'basic',
+      label: '基本信息',
+      children: <BasicInfo />,
+    },
+    {
+      key: 'detail',
+      label: '详细信息',
+      children: <DetailInfo />,
+    },
+  ]}
+/>
+
+// ❌ 错误用法 - 使用已弃用的 TabPane 子组件
+<Tabs activeKey={activeTab} onChange={setActiveTab}>
+  <TabPane tab="基本信息" key="basic">
+    <BasicInfo />
+  </TabPane>
+  <TabPane tab="详细信息" key="detail">
+    <DetailInfo />
+  </TabPane>
+</Tabs>
+```
+
+**原因**: Ant Design v6 中 `Tabs.TabPane` 组件已被弃用，使用 `items` 属性替代可获得更好的类型支持和性能。
+
+---
+
+### 12. Ant Design Table 组件 rowKey 不要使用 index 参数
+
+**规则**: 使用 Ant Design 的 `Table` 组件时，`rowKey` 属性如果是函数，不要使用第二个参数 `index`，应该使用数据本身的唯一字段或者从 record 中组合生成 key。
+
+**示例**:
+
+```tsx
+import { Table } from 'antd';
+
+// ✅ 正确用法 - 使用数据字段名（推荐）
+<Table
+  dataSource={papers}
+  rowKey="lwbh"  // 使用数据中的唯一字段
+/>
+
+// ✅ 正确用法 - 使用 record 组合生成 key
+<Table
+  dataSource={workloads}
+  rowKey={(record) => `${record.kch}-${record.xnxqdm}`}
+/>
+
+// ❌ 错误用法 - 使用 index 参数（已弃用）
+<Table
+  dataSource={papers}
+  rowKey={(record, index) => `paper-${index}`}  // index 参数已弃用
+/>
+```
+
+**原因**: Ant Design v6 中 `rowKey` 函数的第二个参数 `index` 已被弃用，不再保证按预期工作。使用数据本身的唯一标识字段可以获得更好的性能和稳定性。
+
+---
+
+### 13. Ant Design Timeline 组件必须使用 items 属性
+
+**规则**: 使用 Ant Design 的 `Timeline` 组件时，必须使用 `items` 属性来配置时间线节点，不要使用已弃用的 `Timeline.Item` 子组件。同时，`items` 中的内容字段应使用 `content` 而非 `children`。
+
+**示例**:
+
+```tsx
+import { Timeline } from 'antd';
+import type { TimelineProps } from 'antd';
+
+// ✅ 正确用法 - 使用 items 属性，内容字段使用 content
+const timelineItems: TimelineProps['items'] = items.map((item) => ({
+  key: item.id,
+  dot: typeIcons[item.type],
+  color: typeColors[item.type],
+  content: (
+    <div>
+      <div style={{ marginBottom: 8 }}>
+        <Tag color={typeColors[item.type]}>
+          <FriendlyTime date={item.date} />
+        </Tag>
+        {item.isCurrent && <Tag color="green">当前</Tag>}
+      </div>
+      <div style={{ fontWeight: 500 }}>{item.title}</div>
+      {item.description && (
+        <div style={{ color: '#666', marginTop: 4 }}>{item.description}</div>
+      )}
+    </div>
+  ),
+}));
+
+<Timeline mode="alternate" items={timelineItems} />
+
+// ❌ 错误用法 - 使用已弃用的 Timeline.Item 子组件
+<Timeline mode="alternate">
+  {items.map((item) => (
+    <Timeline.Item
+      key={item.id}
+      dot={typeIcons[item.type]}
+      color={typeColors[item.type]}
+    >
+      <div style={{ marginBottom: 8 }}>
+        <Tag color={typeColors[item.type]}>
+          <FriendlyTime date={item.date} />
+        </Tag>
+        {item.isCurrent && <Tag color="green">当前</Tag>}
+      </div>
+      <div style={{ fontWeight: 500 }}>{item.title}</div>
+      {item.description && (
+        <div style={{ color: '#666', marginTop: 4 }}>{item.description}</div>
+      )}
+    </Timeline.Item>
+  ))}
+</Timeline>
+
+// ❌ 错误用法 - items 中使用 children 而非 content
+const timelineItems: TimelineProps['items'] = items.map((item) => ({
+  key: item.id,
+  dot: typeIcons[item.type],
+  color: typeColors[item.type],
+  children: <div>...</div>,  // 错误！应使用 content
+}));
+```
+
+**原因**: 
+- Ant Design v6 中 `Timeline.Item` 子组件已被弃用，使用 `items` 属性替代可获得更好的类型支持和性能。
+- `items` 中的内容字段应使用 `content`，`children` 已被弃用。
+
+---
+
 ## 检查清单
 
 在提交代码前，请检查：
@@ -349,3 +528,7 @@ import { List } from 'antd';
 - [ ] SQL 脚本是否包含 `SET NAMES utf8mb4;` 字符集设置
 - [ ] 插入的中文数据是否正确显示，无乱码
 - [ ] 是否避免使用已弃用的 List 组件（使用 Row/Col 替代）
+- [ ] Avatar 组件的 src 属性是否为 null/undefined 而非空字符串
+- [ ] Tabs 组件是否使用了 items 属性而非 TabPane 子组件
+- [ ] Table 组件 rowKey 是否避免使用 index 参数
+- [ ] Timeline 组件是否使用了 items 属性而非 Timeline.Item 子组件

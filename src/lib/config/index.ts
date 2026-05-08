@@ -136,6 +136,9 @@ export interface AppConfig {
       graduateGradeTableName: string;
       courseIdeologyTableName: string;
     };
+    teacherCenter?: {
+      configFile?: string;
+    };
   };
   features: {
     allowUserRegistration: boolean;

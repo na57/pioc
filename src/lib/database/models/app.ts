@@ -17,6 +17,7 @@ export const BUILTIN_APPS = {
   COURSE_CENTER: 13,     // 课程中心
   WECOM_ACCOUNTS: 14,    // 企微账号
   WECOM_APPS: 15,        // 企微应用
+  TEACHER_CENTER: 16,    // 教师中心
 } as const;
 
 // 内置应用URL映射
@@ -36,6 +37,7 @@ export const BUILTIN_APP_URLS = {
   '/course-center': BUILTIN_APPS.COURSE_CENTER,
   '/wecom-accounts': BUILTIN_APPS.WECOM_ACCOUNTS,
   '/wecom-apps': BUILTIN_APPS.WECOM_APPS,
+  '/teacher-center': BUILTIN_APPS.TEACHER_CENTER,
 } as const;
 
 export interface App {

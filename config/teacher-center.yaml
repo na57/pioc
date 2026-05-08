@@ -1,0 +1,628 @@
+# ============================================
+# 教师中心配置
+# ============================================
+
+# 全局数据源ID（当表配置没有指定数据对象ID时使用）
+dataSourceId: "6"
+
+# AI 配置
+ai:
+  # AI Provider ID，对应 config.yaml 中 ai.providers 列表中的 providerId
+  providerId: "local-minimax"
+
+# 表配置
+tables:
+  # ============================================
+  # 基本信息类（6张表）
+  # ============================================
+
+  # 教职工基本信息
+  teacherBasic:
+    name: "t_dws_gxjg_jzgjbxxmx"
+    fields:
+      employeeId: "gh"
+      name: "xm"
+      departmentCode: "dwh"
+      departmentName: "dwmc"
+      genderCode: "xbm"
+      genderName: "xbmmc"
+      titleCode: "zyjszwdm"
+      titleName: "zyjszwdmmc"
+      position: "dzzw"
+      mobile: "yddh"
+      email: "dzyx"
+      photo: "zp"
+      statusCode: "dqztm"
+      statusName: "dqztmmc"
+      birthDate: "csrq"
+      politicalStatus: "zzmmmmc"
+      highestEducation: "zgxlmmc"
+      highestDegree: "zgxwmmc"
+      researchArea: "yjfx"
+      workDate: "cjgzny"
+      hireDate: "lxrq"
+
+  # 工人技术等级及职务
+  workerSkill:
+    name: "t_dws_gxjg_jzggrjsdjjzwxxmx"
+    fields:
+      employeeId: "gh"
+      skillLevel: "grjsdjmmc"
+      skillPosition: "grjszwmmc"
+      workType: "grgzmmc"
+      approvalDate: "djpdrq"
+      isCurrent: "sfxzwmmc"
+
+  # 联系信息
+  contactInfo:
+    name: "t_ynu_gxjg_jzglxxx"
+    fields:
+      employeeId: "zgh"
+      emergencyContact: "jjlxrxm"
+      emergencyPhone: "jjlxrdh"
+      mobile: "sj"
+      email: "dzxx"
+      address: "yxtxdz"
+      zipCode: "yxyzbm"
+
+  # 高层次人才
+  talent:
+    name: "t_dws_gxjg_jzgrcchxxmx"
+    fields:
+      employeeId: "gh"
+      talentCategory: "zjlbmmc"
+      talentLevel: "pzdwjbmmc"
+      approvalUnit: "pzdw"
+      approvalDate: "pzny"
+      major: "zyfx"
+
+  # 研究生导师
+  graduateSupervisor:
+    name: "t_dws_gxjx_yjsdsjbxxmx"
+    fields:
+      employeeId: "dsgh"
+      name: "xm"
+      isExternal: "sfxwds"
+      supervisorType: "dslbmmc"
+      researchArea: "xyjfx"
+      masterDate: "rsdny"
+      doctorDate: "rbdny"
+      unitName: "szdwmc"
+
+  # 社会兼职
+  socialPartTime:
+    name: "t_dws_gxjg_shjzxxmx"
+    fields:
+      employeeId: "gh"
+      partTimeType: "shjzmmc"
+      position: "jzzwmc"
+      startDate: "shjzqsrq"
+      endDate: "shjzzzrq"
+
+  # ============================================
+  # 教职生涯类（10张表）
+  # ============================================
+
+  # 专业技术职务
+  teacherTitle:
+    name: "t_dws_gxjg_jzgzyjszwxxmx"
+    fields:
+      employeeId: "gh"
+      titleName: "zyjszwmmc"
+      titleLevel: "zyjszwjbmmc"
+      approvalDate: "pdrq"
+      appointmentStartDate: "prqsrq"
+      appointmentEndDate: "przzrq"
+      isCurrent: "sfxzwmmc"
+
+  # 专技岗位聘任
+  positionAppointment:
+    name: "t_dws_gxjg_jzgzjgwprxxmx"
+    fields:
+      employeeId: "gh"
+      positionName: "gwmc"
+      positionLevel: "gwdjmmc"
+      appointmentDate: "prqsrq"
+
+  # 管理岗位聘任
+  managementAppointment:
+    name: "t_dws_gxjg_jzgglgwprxxmx"
+    fields:
+      employeeId: "gh"
+      positionName: "glgzmc"
+      positionLevel: "gwdjmmc"
+      appointmentDate: "glqsny"
+
+  # 工勤岗位聘任
+  workerAppointment:
+    name: "t_dws_gxjg_jzggqgwprxxmx"
+    fields:
+      employeeId: "gh"
+      positionName: "gwmc"
+      positionLevel: "gwdjmmc"
+      appointmentDate: "prqsrq"
+
+  # 考核信息
+  assessment:
+    name: "t_dws_gxjg_jzgkhxxmx"
+    fields:
+      employeeId: "gh"
+      assessmentDate: "jzgkhrq"
+      assessmentResult: "dwkhjgmmc"
+
+  # 奖励信息
+  award:
+    name: "t_dws_gxjg_jzgjlxxmx"
+    fields:
+      employeeId: "gh"
+      awardName: "jlmc"
+      awardLevel: "jljbmmc"
+      awardDate: "hjrq"
+
+  # 部门调动
+  departmentTransfer:
+    name: "t_dws_gxjg_jzgbmddxxmx"
+    fields:
+      employeeId: "gh"
+      transferDate: "bmddrq"
+      originalDepartment: "zzndcbmh"
+      newDepartment: "zzndrbmh"
+
+  # 聘用合同
+  contract:
+    name: "t_dws_gxjg_jzgpyhtglxxmx"
+    fields:
+      employeeId: "gh"
+      contractType: "pyhtlbmmc"
+      signDate: "qyrq"
+      expireDate: "jsriq"
+
+  # 学历学位
+  educationDegree:
+    name: "t_dws_gxjg_jzgxlxwxxmx"
+    fields:
+      employeeId: "gh"
+      educationLevel: "xlmmc"
+      degree: "hdxwmmc"
+      major: "sxzymmc"
+      school: "byyxxhdw"
+      startDate: "xxqsrq"
+      endDate: "xxzzrq"
+      graduationDate: "hxwrq"
+
+  # 工作简历
+  workResume:
+    name: "t_dws_gxjg_jzggzjlxxmx"
+    fields:
+      employeeId: "gh"
+      startDate: "gzqsrq"
+      endDate: "gzzzrq"
+      workUnit: "gzdw"
+      position: "crdzzw"
+      workContent: "gznr"
+
+  # ============================================
+  # 科研类（8张表）
+  # ============================================
+
+  # 科研论文
+  researchPaper:
+    name: "t_dws_gxky_kjlwjzzmx"
+    fields:
+      paperId: "lwbh"
+      paperTitle: "lwzwmc"
+      firstAuthorId: "lwdyzzgh"
+      firstAuthorName: "lwdyzzmc"
+      journalName: "fbkwmc"
+      publishDate: "lwfbrq"
+      indexStatus: "lzslqkmc"
+      impactFactor: "yxyz"
+      doi: "doih"
+
+  # 科研著作
+  researchBook:
+    name: "t_dws_gxky_kyzzjzzmx"
+    fields:
+      bookId: "zzbh"
+      bookTitle: "zzzwmc"
+      firstAuthorId: "zzdyzzgh"
+      firstAuthorName: "zzdyzzxm"
+      publisher: "cbs"
+      publishDate: "cbrq"
+      isbn: "isbnh"
+
+  # 科研专利
+  researchPatent:
+    name: "t_dws_gxky_kyzljzzmx"
+    fields:
+      patentId: "zlcgbh"
+      patentTitle: "zlcgmc"
+      firstInventorId: "dyfmrgh"
+      firstInventorName: "dyfmrxm"
+      patentType: "zllxmc"
+      applicationDate: "zlsqrq"
+      grantDate: "sqggrq"
+      patentStatus: "zlztmc"
+
+  # 科研获奖
+  researchAward:
+    name: "t_dws_gxky_kyhjcgjzzmx"
+    fields:
+      awardId: "hjcgbh"
+      awardName: "hjmc"
+      firstCompleterId: "dywcrgh"
+      firstCompleterName: "dywcrxm"
+      awardLevel: "hjjbmc"
+      awardDate: "hjrq"
+      awardCategory: "cghjlbmc"
+
+  # 科研鉴定成果
+  researchAppraisal:
+    name: "t_dws_gxky_kyjdcgjzzmx"
+    fields:
+      appraisalId: "jdcgbh"
+      appraisalName: "jdcgmc"
+      firstAuthorId: "dyzzgh"
+      firstAuthorName: "dyzzxm"
+      appraisalUnit: "jddwmc"
+      appraisalDate: "jdrq"
+      appraisalResult: "jdjlmc"
+
+  # 科研转化成果
+  researchTransfer:
+    name: "t_dws_gxky_kyzhcgjzzmx"
+    fields:
+      transferId: "cgzhbh"
+      transferName: "cgzhmc"
+      firstAuthorId: "zhdyzzgh"
+      firstAuthorName: "zhdyzzxm"
+      transferDate: "zhrq"
+      transferAmount: "cjje"
+      transferee: "srfmc"
+
+  # 研究报告
+  researchReport:
+    name: "t_dws_gxky_yjbgjzzmx"
+    fields:
+      reportId: "jdcgbh"
+      reportName: "jdcgmc"
+      firstAuthorId: "dyzzzgh"
+      firstAuthorName: "dyzzxm"
+      submitDate: "tjsj"
+      submitUnit: "tjdw"
+      isAdopted: "sfcnmc"
+
+  # 科研艺术作品
+  researchArtwork:
+    name: "t_dws_gxky_kyyszpjzzmx"
+    fields:
+      artworkId: "xmbh"
+      artworkName: "xmmc"
+      firstAuthorId: "dyzzgh"
+      firstAuthorName: "dyzzxm"
+      artworkType: "zplxmc"
+      publishDate: "fbrq"
+      isAwarded: "sfhjmc"
+      awardName: "hjmc"
+
+  # ============================================
+  # 教学类（19张表）
+  # ============================================
+
+  # 本科生授课
+  undergraduateTeaching:
+    name: "t_dws_gxjx_bzksjsskxx_v11mx"
+    dataSourceId: "7"
+    fields:
+      teacherId: "jsgh"
+      teacherName: "jsxm"
+      classId: "jxbh"
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      className: "skbjmc"
+      studentCount: "xdrs"
+      capacity: "krl"
+
+  # 研究生授课
+  graduateTeaching:
+    name: "t_dws_gxjx_yjsjsskxxmx"
+    dataSourceId: "7"
+    fields:
+      teacherId: "jsgh"
+      teacherName: "jsxm"
+      classId: "jxbh"
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      departmentName: "yxmc"
+      studentCount: "xdrs"
+
+  # 本科生工作量
+  undergraduateWorkload:
+    name: "t_ynu_gxjx_bzksjsskgzl"
+    dataSourceId: "6"
+    fields:
+      teacherId: "jsh"
+      teacherName: "jsm"
+      courseCode: "kch"
+      courseName: "kcm"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      studentCount: "xkrs"
+      hours: "xs"
+      scheduledHours: "pkxs"
+
+  # 研究生工作量
+  graduateWorkload:
+    name: "t_ynu_gxjx_yjsjsskgzl"
+    dataSourceId: "6"
+    fields:
+      teacherId: "jsgh"
+      teacherName: "qbrkjs"
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      semesterCode: "xnxqdm"
+      semesterName: "xnxqmc"
+      studentCount: "xkrs"
+      hours: "cdxs"
+
+  # 本科生教学项目
+  undergraduateTeachingProject:
+    name: "t_dws_gxjx_bzksjxyjxmxxmx"
+    dataSourceId: "6"
+    fields:
+      memberId: "xmcygh"
+      memberName: "xmcyxm"
+      projectName: "xmmc"
+      projectType: "xmlb"
+      startDate: "lxsj"
+      memberRank: "brpm"
+
+  # 研究生教学项目
+  graduateTeachingProject:
+    dataObjectId: 4
+    # name: "t_gxjx_yjsjsjxyjxm"
+    # dataSourceId: "6"
+    # fields:
+    #   teacherId: "zcrzgh"
+    #   teacherName: "zcr"
+    #   projectName: "xmmc"
+    #   projectType: "xmlb"
+    #   startDate: "xmkssj"
+    #   memberRank: "brpm"
+
+  # 督导记录
+  supervisionRecord:
+    name: "t_dws_ydxt_ydxtddjlmx"
+    dataSourceId: "7"
+    fields:
+      teacherId: "bpr"
+      teacherName: "bprxm"
+      courseCode: "kcdm"
+      courseName: "kcmc"
+      classId: "jxbid"
+      supervisionDate: "tksj"
+      totalScore: "zf"
+      evaluation: "pjjy"
+      expertComment: "pgzjyj"
+      semesterName: "xnxqmc"
+
+  # 课堂统计
+  classroomStats:
+    name: "t_ynu_gxjx_aikttjjg"
+    dataSourceId: "7"
+    fields:
+      classId: "jxbh"
+      semesterName: "xnxqmc"
+      startTime: "kckssj"
+      endTime: "kcjssj"
+      focusRate: "zzd"
+      activityRate: "hyd"
+      headUpRate: "ttlv"
+      headDownRate: "dtlv"
+      phoneUsageRate: "ysjlv"
+      sleepiness: "sjd"
+
+  # 指导学生竞赛获奖
+  studentCompetitionAward:
+    name: "t_ynu_gxjx_jzgzdbksjshjxx"
+    dataSourceId: "6"
+    fields:
+      teacherId: "jsgh"
+      teacherName: "jsxm"
+      competitionName: "jsmc"
+      awardLevel: "hjdj"
+      awardDate: "hjsj"
+      studentName: "hjxszzxm"
+
+  # 本科生课程信息
+  undergraduateCourseInfo:
+    name: "t_dws_gxjx_bzkskcjbxxmx"
+    dataSourceId: "7"
+    fields:
+      courseCode: "kch"
+      courseName: "kcmc"
+      courseEnglishName: "kcywmc"
+      totalHours: "zxs"
+      theoryHours: "llxs"
+      practiceHours: "sjxs"
+      experimentHours: "syxs"
+      credit: "xf"
+      courseLevel: "kcjbdm"
+      courseCategory: "kcflmc"
+      responsiblePersonId: "kcfzrh"
+      departmentCode: "kcksdwh"
+      departmentName: "gsyxmc"
+      courseIntro: "kcjj"
+      textbook: "jc"
+      referenceBooks: "cksm"
+      isValid: "kcztdm"
+
+  # 研究生课程信息
+  graduateCourseInfo:
+    name: "t_dws_gxjx_yjskcxxmx"
+    dataSourceId: "7"
+    fields:
+      courseCode: "kch"
+      courseName: "kcmc"
+      courseEnglishName: "kcywmc"
+      totalHours: "zxs"
+      theoryHours: "llxs"
+      practiceHours: "sjxs"
+      experimentHours: "syxs"
+      credit: "xf"
+      courseLevel: "kcjbmc"
+      courseCategory: "kclbmc"
+      responsiblePersonId: "kcfzrh"
+      departmentCode: "kcksdwh"
+      departmentName: "kcksdwmc"
+      courseIntro: "kcjj"
+      textbook: "jc"
+      referenceBooks: "cksm"
+      isValid: "sfyx"
+
+  # 本科生教材
+  undergraduateTextbook:
+    name: "t_dws_gxjx_bzksjcbjcxxmx"
+    dataSourceId: "6"
+    fields:
+      teacherId: "gh"
+      textbookId: "jcbh"
+      textbookName: "jcmc"
+      isbn: "isbn"
+      publisher: "cbsmc"
+      publishDate: "cbsj"
+      publisherLevel: "cbsjbmc"
+      authorRank: "brpm"
+
+  # 研究生教材
+  graduateTextbook:
+    name: "t_gxjx_yjsjsycbyjsjc"
+    dataSourceId: "6"
+    fields:
+      teacherId: "zbzgh"
+      textbookId: ""
+      textbookName: "jcmc"
+      isbn: "sh"
+      publisher: "cbsmc"
+      publishDate: "cbrq"
+      publisherLevel: "cbslb"
+      authorRank: "zbzgh"
+
+  # 本科生教学奖励
+  undergraduateTeachingAward:
+    name: "t_dws_gxjx_bzksjxjljjxjsxmxxmx"
+    dataSourceId: "6"
+    fields:
+      teacherId: "xmcygh"
+      awardId: "jxcgbh"
+      awardName: "jxcgmc"
+      awardLevel: "jljbm"
+      awardDate: "hjnf"
+      awardCategory: "xmlb"
+      authorRank: "brpm"
+
+  # 研究生教学奖励
+  graduateTeachingAward:
+    name: "t_gxjx_yjsjsjxjljjxjsxm"
+    dataSourceId: "6"
+    fields:
+      teacherId: "hjrzgh"
+      awardId: ""
+      awardName: "jxjlhjsxmmc"
+      awardLevel: "hjdj"
+      awardDate: "hjsj"
+      awardCategory: "yjlb"
+      authorRank: "grpm"
+
+  # 本科生教研论文
+  undergraduateTeachingPaper:
+    name: "t_dws_gxjx_bzksjsfblwxxmx"
+    dataSourceId: "6"
+    fields:
+      teacherId: "gh"
+      paperId: "lwbh"
+      paperTitle: "lwzwmc"
+      journalName: "fbqk"
+      publishDate: "fbsj"
+      journalCategory: "qklb"
+      authorRank: "brpm"
+
+  # 研究生教研论文
+  graduateTeachingPaper:
+    name: "t_gxjx_yjsjsgkfbjylw"
+    dataSourceId: "6"
+    fields:
+      teacherId: "dyzzgzh"
+      paperId: ""
+      paperTitle: "lwtm"
+      journalName: "qkmc"
+      publishDate: "fbrq"
+      journalCategory: "qklb"
+      authorRank: "dyzzgzh"
+
+  # 课程团队成员
+  undergraduateCourseTeam:
+    name: "t_dws_gxjx_bzkskcttcymx"
+    dataSourceId: "6"
+    fields:
+      courseId: "jxbh"
+      teamMember: "kctdcy"
+      responsiblePerson: "kcfzr"
+      outlineDate: "dgzdrq"
+
+  # 教材获奖
+  textbookAward:
+    name: "t_dws_gxjx_bzksjchjxxmx"
+    dataSourceId: "6"
+    fields:
+      teacherId: ""
+      awardId: "hjjcbh"
+      awardName: "hjmc"
+      textbookName: "jcmc"
+      awardLevel: "jljbm"
+      awardDate: "hjrq"
+      awardCategory: "hjxm"
+      authorRank: ""
+
+  # ============================================
+  # 预留表（配置但未查询）
+  # ============================================
+
+  # 岗位基本信息（预留）
+  positionBasic:
+    name: "t_dws_gxjg_gwjbxxmx"
+    fields:
+      positionId: "gwbh"
+      positionName: "gwmc"
+      departmentCode: "dwh"
+      departmentName: "dwmc"
+
+  # 家庭成员信息（预留）
+  familyMember:
+    name: "t_dws_gxjg_jzgjtcyxxmx"
+    fields:
+      employeeId: "gh"
+      memberName: "cyxm"
+      relationship: "yhzgxmc"
+
+  # 银行账户信息（预留）
+  bankAccount:
+    name: "t_dws_gxjg_jzgyhzhxxmx"
+    fields:
+      employeeId: "gh"
+      accountName: "zhmc"
+      bankName: "khh"
+      accountNumber: "zh"
+
+  # 研究生教学建设项目（预留）
+  graduateTeachingConstruction:
+    name: "t_dws_gxjx_yjsjsjsxjxmxxmx"
+    fields:
+      projectId: "xmbh"
+      projectName: "xmmc"
+      projectType: "xmlbmc"
+      startDate: "xmkssj"
