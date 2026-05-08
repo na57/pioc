@@ -34,10 +34,12 @@ ENV HOSTNAME="0.0.0.0"
 RUN cd /usr/local/lib/node_modules/npm/node_modules && \
     npm pack brace-expansion@2.0.3 && \
     npm pack picomatch@4.0.4 && \
-    rm -rf brace-expansion picomatch && \
-    mkdir -p brace-expansion picomatch && \
+    npm pack ip-address@10.1.1 && \
+    rm -rf brace-expansion picomatch ip-address && \
+    mkdir -p brace-expansion picomatch ip-address && \
     tar -xzf brace-expansion-2.0.3.tgz -C brace-expansion --strip-components=1 && \
     tar -xzf picomatch-4.0.4.tgz -C picomatch --strip-components=1 && \
+    tar -xzf ip-address-10.1.1.tgz -C ip-address --strip-components=1 && \
     rm -f *.tgz
 
 # 创建非root用户
