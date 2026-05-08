@@ -98,8 +98,8 @@ export async function findAll(params?: ListParams): Promise<{ list: DataObjectWi
      LEFT JOIN pioc_data_sources ds ON do.data_source_id = ds.id
      ${whereClause}
      ORDER BY do.created_at DESC
-     LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`,
-    queryParams
+     LIMIT ? OFFSET ?`,
+    [...queryParams, pageSize, offset]
   );
 
   return { list, total };
@@ -176,8 +176,8 @@ export async function findAllAccessibleByUserId(userId: number, params?: ListPar
      LEFT JOIN pioc_users u_share ON ds_share.shared_by = u_share.id
      ${whereClause}
      ORDER BY do.created_at DESC
-     LIMIT ${Number(pageSize)} OFFSET ${Number(offset)}`,
-    [userId, userId, ...queryParams]
+     LIMIT ? OFFSET ?`,
+    [userId, userId, ...queryParams, pageSize, offset]
   );
 
   return { list, total };

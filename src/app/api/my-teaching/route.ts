@@ -187,8 +187,8 @@ async function getMyTeachingInfoFromDB(
       FROM ${teachingInfoTableName}
       ${whereClause}
       ORDER BY xnxqdm DESC, kcdm
-      LIMIT ${per_page} OFFSET ${offset}`,
-      queryParams
+      LIMIT ? OFFSET ?`,
+      [...queryParams, per_page, offset]
     );
 
     const max_page = Math.ceil(total / per_page);

@@ -146,8 +146,8 @@ async function getUndergraduateCourses(params: {
       FROM ${table.name}
       ${whereClause}
       ORDER BY ${f.courseCode}
-      LIMIT ${per_page} OFFSET ${offset}`,
-      queryParams
+      LIMIT ? OFFSET ?`,
+      [...queryParams, per_page, offset]
     );
 
     const max_page = Math.ceil(total / per_page);
@@ -243,8 +243,8 @@ async function getGraduateCourses(params: {
       FROM ${table.name}
       ${whereClause}
       ORDER BY ${f.courseCode}
-      LIMIT ${per_page} OFFSET ${offset}`,
-      queryParams
+      LIMIT ? OFFSET ?`,
+      [...queryParams, per_page, offset]
     );
 
     const max_page = Math.ceil(total / per_page);
@@ -330,9 +330,11 @@ async function queryByDataObjectId(
     dataSql += ' ' + outerOrderBy;
   }
   // 添加分页
+  let queryParams = params || [];
   if (page && perPage) {
     const offset = (page - 1) * perPage;
-    dataSql += ` LIMIT ${perPage} OFFSET ${offset}`;
+    dataSql += ' LIMIT ? OFFSET ?';
+    queryParams = [...queryParams, perPage, offset];
   }
 
   // 执行查询
@@ -351,7 +353,7 @@ async function queryByDataObjectId(
     const total = (countResult as Array<{ total: number }>)[0]?.total || 0;
     
     // 获取数据
-    const [rows] = await connection.query(dataSql, params);
+    const [rows] = await connection.query(dataSql, queryParams);
     
     return { rows: rows as unknown[], total };
   } finally {

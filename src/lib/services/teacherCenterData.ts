@@ -580,10 +580,9 @@ export async function queryTeachers(params: {
       FROM ${tableConfig.name}
       ${whereClause}
       ORDER BY ${f.employeeId}
-      LIMIT ${pageSize} OFFSET ${offset}
+      LIMIT ? OFFSET ?
     `;
-
-    const data = await executeQuery<Teacher>(dataSourceId, dataSql, queryParams);
+    const data = await executeQuery<Teacher>(dataSourceId, dataSql, [...queryParams, pageSize, offset]);
 
     return { data, total };
   } catch (error) {

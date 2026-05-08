@@ -73,12 +73,14 @@ class DataSourceQueryService {
     try {
       // 添加分页限制
       let finalQuery = queryStatement;
+      let queryParams: unknown[] = [];
       if (options?.page && options?.pageSize) {
         const offset = (options.page - 1) * options.pageSize;
-        finalQuery = `${queryStatement} LIMIT ${options.pageSize} OFFSET ${offset}`;
+        finalQuery = `${queryStatement} LIMIT ? OFFSET ?`;
+        queryParams = [options.pageSize, offset];
       }
 
-      const [rows] = await connection.query(finalQuery);
+      const [rows] = await connection.query(finalQuery, queryParams);
       return rows as any[];
     } finally {
       await connection.end();

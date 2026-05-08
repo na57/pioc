@@ -135,13 +135,15 @@ async function queryByDataObjectId<T>(
   const total = await executeCountQuery(dataSource, querySql, options.params || []);
 
   // 添加分页
+  let queryParams = options.params || [];
   if (options.page && options.perPage) {
     const offset = (options.page - 1) * options.perPage;
-    querySql += ` LIMIT ${options.perPage} OFFSET ${offset}`;
+    querySql += ' LIMIT ? OFFSET ?';
+    queryParams = [...queryParams, options.perPage, offset];
   }
 
   // 执行查询
-  const data = await executeQuery<T>(dataSource, querySql, options.params || []);
+  const data = await executeQuery<T>(dataSource, querySql, queryParams);
 
   return {
     success: true,
@@ -218,13 +220,15 @@ async function queryByTableName<T>(
   const total = await executeCountQuery(dataSource, countSql, []);
 
   // 添加分页
+  let queryParams = options.params || [];
   if (options.page && options.perPage) {
     const offset = (options.page - 1) * options.perPage;
-    querySql += ` LIMIT ${options.perPage} OFFSET ${offset}`;
+    querySql += ' LIMIT ? OFFSET ?';
+    queryParams = [...queryParams, options.perPage, offset];
   }
 
   // 执行查询
-  const data = await executeQuery<T>(dataSource, querySql, options.params || []);
+  const data = await executeQuery<T>(dataSource, querySql, queryParams);
 
   return {
     success: true,
