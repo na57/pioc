@@ -15,6 +15,7 @@ import {
   ResearchStats,
   TeachingStats,
 } from '@/lib/services/teacherCenterData';
+import { getConfig } from '@/lib/config';
 
 // 定义API响应类型
 type ApiResponse<T> = {
@@ -90,6 +91,7 @@ interface TeachingResponse {
 // AI总结响应
 interface AISummaryResponse {
   summary: string;
+  timeout: number;
 }
 
 /**
@@ -333,6 +335,10 @@ async function handleAISummary(searchParams: URLSearchParams): Promise<NextRespo
     );
   }
 
+  // 获取AI配置中的timeout
+  const config = getConfig();
+  const timeout = config.ai?.timeout || 60;
+
   // 并行获取所有需要的数据
   const [basic, extended, career, research, teaching] = await Promise.all([
     queryTeacherBasic(gh),
@@ -359,6 +365,6 @@ async function handleAISummary(searchParams: URLSearchParams): Promise<NextRespo
 
   return NextResponse.json({
     success: true,
-    data: { summary },
+    data: { summary, timeout },
   });
 }

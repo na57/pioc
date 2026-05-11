@@ -3,7 +3,7 @@
 # ============================================
 
 # 全局数据源ID（当表配置没有指定数据对象ID时使用）
-dataSourceId: "6"
+dataSourceId: "9"
 
 # AI 配置
 ai:
@@ -312,7 +312,7 @@ tables:
   # 本科生授课
   undergraduateTeaching:
     name: "t_dws_gxjx_bzksjsskxx_v11mx"
-    dataSourceId: "7"
+    dataSourceId: "8"
     fields:
       teacherId: "jsgh"
       teacherName: "jsxm"
@@ -328,7 +328,7 @@ tables:
   # 研究生授课
   graduateTeaching:
     name: "t_dws_gxjx_yjsjsskxxmx"
-    dataSourceId: "7"
+    dataSourceId: "8"
     fields:
       teacherId: "jsgh"
       teacherName: "jsxm"
@@ -343,7 +343,6 @@ tables:
   # 本科生工作量
   undergraduateWorkload:
     name: "t_ynu_gxjx_bzksjsskgzl"
-    dataSourceId: "6"
     fields:
       teacherId: "jsh"
       teacherName: "jsm"
@@ -358,7 +357,6 @@ tables:
   # 研究生工作量
   graduateWorkload:
     name: "t_ynu_gxjx_yjsjsskgzl"
-    dataSourceId: "6"
     fields:
       teacherId: "jsgh"
       teacherName: "qbrkjs"
@@ -372,7 +370,6 @@ tables:
   # 本科生教学项目
   undergraduateTeachingProject:
     name: "t_dws_gxjx_bzksjxyjxmxxmx"
-    dataSourceId: "6"
     fields:
       memberId: "xmcygh"
       memberName: "xmcyxm"
@@ -383,21 +380,12 @@ tables:
 
   # 研究生教学项目
   graduateTeachingProject:
-    dataObjectId: 4
-    # name: "t_gxjx_yjsjsjxyjxm"
-    # dataSourceId: "6"
-    # fields:
-    #   teacherId: "zcrzgh"
-    #   teacherName: "zcr"
-    #   projectName: "xmmc"
-    #   projectType: "xmlb"
-    #   startDate: "xmkssj"
-    #   memberRank: "brpm"
+    dataObjectId: 5
 
   # 督导记录
   supervisionRecord:
     name: "t_dws_ydxt_ydxtddjlmx"
-    dataSourceId: "7"
+    dataSourceId: "8"
     fields:
       teacherId: "bpr"
       teacherName: "bprxm"
@@ -413,7 +401,7 @@ tables:
   # 课堂统计
   classroomStats:
     name: "t_ynu_gxjx_aikttjjg"
-    dataSourceId: "7"
+    dataSourceId: "8"
     fields:
       classId: "jxbh"
       semesterName: "xnxqmc"
@@ -429,7 +417,7 @@ tables:
   # 指导学生竞赛获奖
   studentCompetitionAward:
     name: "t_ynu_gxjx_jzgzdbksjshjxx"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "jsgh"
       teacherName: "jsxm"
@@ -441,7 +429,7 @@ tables:
   # 本科生课程信息
   undergraduateCourseInfo:
     name: "t_dws_gxjx_bzkskcjbxxmx"
-    dataSourceId: "7"
+    dataSourceId: "8"
     fields:
       courseCode: "kch"
       courseName: "kcmc"
@@ -464,7 +452,7 @@ tables:
   # 研究生课程信息
   graduateCourseInfo:
     name: "t_dws_gxjx_yjskcxxmx"
-    dataSourceId: "7"
+    dataSourceId: "8"
     fields:
       courseCode: "kch"
       courseName: "kcmc"
@@ -487,7 +475,7 @@ tables:
   # 本科生教材
   undergraduateTextbook:
     name: "t_dws_gxjx_bzksjcbjcxxmx"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "gh"
       textbookId: "jcbh"
@@ -501,7 +489,7 @@ tables:
   # 研究生教材
   graduateTextbook:
     name: "t_gxjx_yjsjsycbyjsjc"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "zbzgh"
       textbookId: ""
@@ -515,7 +503,7 @@ tables:
   # 本科生教学奖励
   undergraduateTeachingAward:
     name: "t_dws_gxjx_bzksjxjljjxjsxmxxmx"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "xmcygh"
       awardId: "jxcgbh"
@@ -528,7 +516,7 @@ tables:
   # 研究生教学奖励
   graduateTeachingAward:
     name: "t_gxjx_yjsjsjxjljjxjsxm"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "hjrzgh"
       awardId: ""
@@ -541,7 +529,7 @@ tables:
   # 本科生教研论文
   undergraduateTeachingPaper:
     name: "t_dws_gxjx_bzksjsfblwxxmx"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "gh"
       paperId: "lwbh"
@@ -554,7 +542,7 @@ tables:
   # 研究生教研论文
   graduateTeachingPaper:
     name: "t_gxjx_yjsjsgkfbjylw"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: "dyzzgzh"
       paperId: ""
@@ -567,7 +555,7 @@ tables:
   # 课程团队成员
   undergraduateCourseTeam:
     name: "t_dws_gxjx_bzkskcttcymx"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       courseId: "jxbh"
       teamMember: "kctdcy"
@@ -577,7 +565,7 @@ tables:
   # 教材获奖
   textbookAward:
     name: "t_dws_gxjx_bzksjchjxxmx"
-    dataSourceId: "6"
+    # dataSourceId: "6"
     fields:
       teacherId: ""
       awardId: "hjjcbh"

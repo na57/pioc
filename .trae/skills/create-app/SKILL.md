@@ -287,11 +287,167 @@ export const GET = wrapHandler(getItemHandler);
 - 点击"添加应用"
 - 选择新创建的应用
 
-### 6. 创建数据模型（可选）
+### 6. 创建应用配置（使用数据框架）⚡ 推荐
+
+**文件位置**: `src/lib/config/{your-app}.ts`
+
+使用通用数据访问框架创建应用配置，这是推荐的标准做法：
+
+```typescript
+/**
+ * {应用名称}配置
+ * 使用通用数据访问框架
+ */
+
+import {
+  TableConfig,
+  AppBaseConfig,
+  createConfigLoader,
+  createDataQueryService,
+  QueryOptions,
+  QueryResult,
+} from '@/lib/data-framework';
+
+// ============================================
+// 字段映射类型定义
+// ============================================
+
+export interface ExampleFieldMapping extends Record<string, string> {
+  id: string;
+  name: string;
+  // 其他字段映射：应用字段名 -> 数据库字段名
+}
+
+// ============================================
+// 应用配置类型
+// ============================================
+
+export interface {AppName}Config extends AppBaseConfig {
+  tables: {
+    exampleTable: TableConfig<ExampleFieldMapping>;
+    // 更多表配置...
+  };
+}
+
+// ============================================
+// 默认配置
+// ============================================
+
+const defaultConfig: {AppName}Config = {
+  dataSourceId: '1', // 默认数据源ID
+  tables: {
+    exampleTable: {
+      name: 't_example_table', // 数据库表名
+      // dataObjectId: 1,      // 或使用数据对象ID（二选一）
+      // dataSourceId: '2',    // 可选：覆盖全局数据源
+      fields: {
+        id: 'id',
+        name: 'name',
+        // 字段映射：应用字段名 -> 数据库字段名
+      },
+    },
+  },
+};
+
+// ============================================
+// 创建配置加载器和查询服务
+// ============================================
+
+const configLoader = createConfigLoader<{AppName}Config>(defaultConfig, {
+  configFileName: '{your-app}.yaml',
+  legacyConfigPath: 'apps.{yourAppName}',
+});
+
+const queryService = createDataQueryService(configLoader.getDataSourceId());
+
+// ============================================
+// 向后兼容的 API
+// ============================================
+
+export function load{AppName}Config(): {AppName}Config {
+  return configLoader.load();
+}
+
+export function get{AppName}Config(): {AppName}Config {
+  return configLoader.getConfig();
+}
+
+// ============================================
+// 新的便捷 API
+// ============================================
+
+export function get{AppName}ConfigLoader() {
+  return configLoader;
+}
+
+export function get{AppName}QueryService() {
+  return queryService;
+}
+
+/**
+ * 通用查询接口
+ */
+export async function query{AppName}Table<T = Record<string, unknown>>(
+  tableName: keyof {AppName}Config['tables'],
+  options: QueryOptions = {}
+): Promise<QueryResult<T>> {
+  const tableConfig = configLoader.getTableConfig(tableName);
+  return queryService.queryByTableConfig<T>(tableConfig, options);
+}
+
+// ============================================
+// 数据服务类
+// ============================================
+
+export class {AppName}DataService {
+  private configLoader = configLoader;
+  private queryService = queryService;
+
+  /**
+   * 查询示例表数据
+   */
+  async queryExampleData(page = 1, pageSize = 10) {
+    return query{AppName}Table('exampleTable', {
+      page,
+      perPage: pageSize,
+      orderBy: 'id DESC',
+    });
+  }
+
+  /**
+   * 根据ID查询
+   */
+  async queryById(id: string) {
+    return query{AppName}Table('exampleTable', {
+      where: { id },
+    });
+  }
+
+  /**
+   * 重新加载配置
+   */
+  reloadConfig() {
+    this.configLoader.reload();
+    const newDataSourceId = this.configLoader.getDataSourceId();
+    if (newDataSourceId) {
+      this.queryService.setGlobalDataSourceId(newDataSourceId);
+    }
+  }
+}
+
+// 导出默认实例
+export const {appName}DataService = new {AppName}DataService();
+
+export default configLoader;
+```
+
+### 7. 创建数据模型（可选，推荐用数据框架替代）
 
 **文件位置**: `src/lib/database/models/{your-model}.ts`
 
-如果应用需要操作数据库，创建数据模型：
+⚠️ **注意**: 推荐使用上面的数据框架配置方式，不再需要单独创建数据模型文件。
+
+如果确实需要，可以这样创建：
 
 ```tsx
 import { query } from '../connection';
@@ -307,24 +463,11 @@ export interface YourModel {
 export async function findAll(): Promise<YourModel[]> {
   return query<YourModel[]>('SELECT * FROM pioc_your_table ORDER BY created_at DESC');
 }
-
-export async function findById(id: number): Promise<YourModel | null> {
-  const results = await query<YourModel[]>('SELECT * FROM pioc_your_table WHERE id = ?', [id]);
-  return results[0] || null;
-}
-
-export async function create(data: Partial<YourModel>): Promise<number> {
-  const result = await query<{ insertId: number }>(
-    'INSERT INTO pioc_your_table (name, ...) VALUES (?, ...)',
-    [data.name, ...]
-  );
-  return result.insertId;
-}
 ```
 
 ## 完整示例
 
-创建一个名为"图书管理"的预装应用：
+创建一个名为"图书管理"的预装应用，使用数据框架：
 
 ### 1. 注册应用
 
@@ -360,57 +503,363 @@ export function getPreinstalledAppIdByUrl(url: string): number | null {
 }
 ```
 
-### 2. 创建页面
-`src/app/books/page.tsx`:
-```tsx
-'use client';
+### 2. 创建应用配置（使用数据框架）⭐
 
-import React, { useEffect, useState } from 'react';
-import { Table, Button, Card, message } from 'antd';
+**文件位置**: `src/lib/config/books.ts`
 
-export default function BooksPage() {
-  const [books, setBooks] = useState([]);
-  
-  useEffect(() => {
-    fetchBooks();
-  }, []);
-  
-  const fetchBooks = async () => {
-    const response = await fetch('/api/books');
-    const data = await response.json();
-    if (data.success) {
-      setBooks(data.data);
-    }
-  };
-  
-  return (
-    <Card title="图书管理">
-      <Table dataSource={books} />
-    </Card>
-  );
+```typescript
+/**
+ * 图书管理应用配置
+ * 使用通用数据访问框架
+ */
+
+import {
+  TableConfig,
+  AppBaseConfig,
+  createConfigLoader,
+  createDataQueryService,
+  QueryOptions,
+  QueryResult,
+} from '@/lib/data-framework';
+
+// ============================================
+// 字段映射类型定义
+// ============================================
+
+export interface BookFieldMapping extends Record<string, string> {
+  bookId: string;
+  title: string;
+  author: string;
+  isbn: string;
+  publisher: string;
+  publishDate: string;
+  category: string;
+  status: string;
+  location: string;
 }
+
+// ============================================
+// 应用配置类型
+// ============================================
+
+export interface BooksConfig extends AppBaseConfig {
+  tables: {
+    books: TableConfig<BookFieldMapping>;
+  };
+}
+
+// ============================================
+// 默认配置
+// ============================================
+
+const defaultConfig: BooksConfig = {
+  dataSourceId: '1', // 默认数据源ID
+  tables: {
+    books: {
+      name: 't_books', // 数据库表名
+      fields: {
+        bookId: 'id',
+        title: 'title',
+        author: 'author',
+        isbn: 'isbn',
+        publisher: 'publisher',
+        publishDate: 'publish_date',
+        category: 'category',
+        status: 'status',
+        location: 'location',
+      },
+    },
+  },
+};
+
+// ============================================
+// 创建配置加载器和查询服务
+// ============================================
+
+const configLoader = createConfigLoader<BooksConfig>(defaultConfig, {
+  configFileName: 'books.yaml',
+  legacyConfigPath: 'apps.books',
+});
+
+const queryService = createDataQueryService(configLoader.getDataSourceId());
+
+// ============================================
+// 便捷 API
+// ============================================
+
+export function getBooksConfigLoader() {
+  return configLoader;
+}
+
+export function getBooksQueryService() {
+  return queryService;
+}
+
+/**
+ * 通用查询接口
+ */
+export async function queryBooksTable<T = Record<string, unknown>>(
+  tableName: keyof BooksConfig['tables'],
+  options: QueryOptions = {}
+): Promise<QueryResult<T>> {
+  const tableConfig = configLoader.getTableConfig(tableName);
+  return queryService.queryByTableConfig<T>(tableConfig, options);
+}
+
+// ============================================
+// 数据服务类
+// ============================================
+
+export class BooksDataService {
+  private configLoader = configLoader;
+  private queryService = queryService;
+
+  /**
+   * 查询图书列表
+   */
+  async queryBooks(page = 1, pageSize = 10) {
+    return queryBooksTable('books', {
+      page,
+      perPage: pageSize,
+      orderBy: 'publish_date DESC',
+    });
+  }
+
+  /**
+   * 根据ID查询图书
+   */
+  async queryBookById(bookId: string) {
+    return queryBooksTable('books', {
+      where: { bookId },
+    });
+  }
+
+  /**
+   * 搜索图书
+   */
+  async searchBooks(keyword: string, page = 1, pageSize = 10) {
+    // 使用自定义查询
+    const tableConfig = this.configLoader.getTableConfig('books');
+    return this.queryService.executeRawQuery(
+      tableConfig.dataSourceId || this.configLoader.getDataSourceId() || '1',
+      `SELECT * FROM ${tableConfig.name} WHERE title LIKE ? OR author LIKE ? ORDER BY publish_date DESC LIMIT ? OFFSET ?`,
+      [`%${keyword}%`, `%${keyword}%`, pageSize, (page - 1) * pageSize]
+    );
+  }
+}
+
+// 导出默认实例
+export const booksDataService = new BooksDataService();
+
+export default configLoader;
 ```
 
-### 3. 创建API
-`src/app/api/books/route.ts`:
+### 3. 创建API（使用数据框架）
+
+**文件位置**: `src/app/api/books/route.ts`
+
 ```tsx
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
+import { booksDataService } from '@/lib/config/books';
 
 const appUrl = '/books';
 
+// GET 请求处理 - 查询图书列表
 async function getBooksHandler(request: NextRequest) {
-  // 实现获取图书列表逻辑
-  return NextResponse.json({ success: true, data: [] });
+  try {
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const pageSize = parseInt(searchParams.get('pageSize') || '10');
+    const keyword = searchParams.get('keyword') || '';
+
+    let result;
+    if (keyword) {
+      result = await booksDataService.searchBooks(keyword, page, pageSize);
+    } else {
+      result = await booksDataService.queryBooks(page, pageSize);
+    }
+
+    if (result.success) {
+      return NextResponse.json({ 
+        success: true, 
+        data: result.data,
+        total: result.total 
+      });
+    } else {
+      return NextResponse.json(
+        { success: false, message: result.error || '查询失败' },
+        { status: 500 }
+      );
+    }
+  } catch (error) {
+    console.error('查询图书失败:', error);
+    return NextResponse.json(
+      { success: false, message: '查询图书失败', error: String(error) },
+      { status: 500 }
+    );
+  }
 }
 
 export const GET = createAppProtectedHandler(getBooksHandler, appUrl);
 ```
 
-### 4. 配置权限（应用创建后）
+### 4. 创建页面
+
+**文件位置**: `src/app/books/page.tsx`
+
+```tsx
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { Table, Card, Input, Pagination, message } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
+import AppLayout from '@/components/layout/AppLayout';
+
+const { Search } = Input;
+
+interface Book {
+  bookId: string;
+  title: string;
+  author: string;
+  isbn: string;
+  publisher: string;
+  publishDate: string;
+  category: string;
+  status: string;
+  location: string;
+}
+
+export default function BooksPage() {
+  const [books, setBooks] = useState<Book[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [keyword, setKeyword] = useState('');
+
+  useEffect(() => {
+    fetchBooks();
+  }, [page, keyword]);
+
+  const fetchBooks = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      });
+      if (keyword) params.append('keyword', keyword);
+
+      const response = await fetch(`/api/books?${params}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setBooks(data.data);
+        setTotal(data.total || 0);
+      } else {
+        message.error(data.message || '获取图书列表失败');
+      }
+    } catch (error) {
+      message.error('网络错误');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const columns = [
+    { title: '书名', dataIndex: 'title', key: 'title' },
+    { title: '作者', dataIndex: 'author', key: 'author' },
+    { title: 'ISBN', dataIndex: 'isbn', key: 'isbn' },
+    { title: '出版社', dataIndex: 'publisher', key: 'publisher' },
+    { title: '出版日期', dataIndex: 'publishDate', key: 'publishDate' },
+    { title: '分类', dataIndex: 'category', key: 'category' },
+    { title: '状态', dataIndex: 'status', key: 'status' },
+    { title: '存放位置', dataIndex: 'location', key: 'location' },
+  ];
+
+  return (
+    <AppLayout>
+      <Card 
+        title="图书管理" 
+        extra={
+          <Search
+            placeholder="搜索书名或作者"
+            allowClear
+            enterButton={<SearchOutlined />}
+            onSearch={(value) => {
+              setKeyword(value);
+              setPage(1);
+            }}
+            style={{ width: 300 }}
+          />
+        }
+      >
+        <Table 
+          dataSource={books} 
+          columns={columns} 
+          rowKey="bookId"
+          loading={loading}
+          pagination={false}
+        />
+        <Pagination
+          current={page}
+          pageSize={pageSize}
+          total={total}
+          onChange={(p) => setPage(p)}
+          style={{ marginTop: 16, textAlign: 'right' }}
+        />
+      </Card>
+    </AppLayout>
+  );
+}
+```
+
+### 5. 创建布局文件
+
+**文件位置**: `src/app/books/layout.tsx`
+
+```tsx
+import AppLayout from '@/components/layout/AppLayout';
+
+export default function BooksLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <AppLayout>{children}</AppLayout>;
+}
+```
+
+### 6. 创建外部配置文件（可选）
+
+**文件位置**: `config/books.yaml`
+
+```yaml
+# 图书管理应用配置
+# 此配置将覆盖代码中的默认配置
+
+dataSourceId: "1"
+
+tables:
+  books:
+    name: "t_books"
+    fields:
+      bookId: "id"
+      title: "title"
+      author: "author"
+      isbn: "isbn"
+      publisher: "publisher"
+      publishDate: "publish_date"
+      category: "category"
+      status: "status"
+      location: "location"
+```
+
+### 7. 配置权限（应用创建后）
 在 `/roles` 页面为相应角色分配"图书管理"应用权限。
 
-### 5. 添加菜单（应用创建后）
+### 8. 添加菜单（应用创建后）
 在 `/menus` 页面将"图书管理"添加到合适的菜单组。
 
 ## 应用配置
@@ -560,18 +1009,129 @@ SELECT role_id, app_id FROM pioc_role_apps WHERE app_id = 13;
 
 创建新应用时，请确保完成以下所有步骤：
 
+### 📋 核心步骤（必须）
+
 - [ ] 1. 在 `src/lib/database/init.ts` 中添加应用初始化SQL
 - [ ] 2. 在 `src/lib/database/models/app.ts` 中添加应用常量
-- [ ] 3. 创建前端页面 `src/app/{url}/page.tsx`
-- [ ] 4. 创建布局文件 `src/app/{url}/layout.tsx`
-- [ ] 5. 创建API路由 `src/app/api/{api-path}/route.ts`
-- [ ] 6. 在 `config/config.yaml` 中添加应用配置
-- [ ] 7. 在 `config/config.yaml.example` 中同步配置示例
-- [ ] 8. 在 `src/lib/config/index.ts` 中添加类型定义
-- [ ] 9. 创建数据库迁移脚本 `database-migration-{应用名称}.sql`
-- [ ] 10. 执行数据库迁移脚本（已部署环境）
-- [ ] 11. 配置角色权限（在 `/roles` 页面）
-- [ ] 12. 添加菜单项（在 `/menus` 页面）
+- [ ] 3. **创建应用配置** `src/lib/config/{your-app}.ts` ⭐ **（使用数据框架）**
+- [ ] 4. 创建前端页面 `src/app/{url}/page.tsx`
+- [ ] 5. 创建布局文件 `src/app/{url}/layout.tsx`
+- [ ] 6. 创建API路由 `src/app/api/{api-path}/route.ts`（使用数据框架）
+
+### ⚙️ 配置步骤（必须）
+
+- [ ] 7. 创建外部配置文件 `config/{your-app}.yaml`（可选，用于覆盖默认配置）
+- [ ] 8. 在 `config/config.yaml` 中添加应用配置（向后兼容）
+- [ ] 9. 在 `config/config.yaml.example` 中同步配置示例
+- [ ] 10. 在 `src/lib/config/index.ts` 中添加类型定义（向后兼容）
+
+### 🗄️ 数据库步骤
+
+- [ ] 11. 创建数据库迁移脚本 `database-migration-{应用名称}.sql`
+- [ ] 12. 执行数据库迁移脚本（已部署环境）
+
+### 🔐 权限步骤（应用创建后）
+
+- [ ] 13. 配置角色权限（在 `/roles` 页面）
+- [ ] 14. 添加菜单项（在 `/menus` 页面）
+
+---
+
+### 💡 快速开始模板
+
+如果你只需要一个最简应用，只需完成以下 **5 步**：
+
+1. ✅ 在 `init.ts` 和 `app.ts` 中注册应用
+2. ✅ 创建 `src/lib/config/{app}.ts`（使用上面的模板）
+3. ✅ 创建 `src/app/{url}/page.tsx`
+4. ✅ 创建 `src/app/{url}/layout.tsx`
+5. ✅ 创建 `src/app/api/{api}/route.ts`
+
+然后就可在 `/roles` 和 `/menus` 中配置权限和菜单了！
+
+## 为什么使用数据框架？
+
+### 🎯 传统方式 vs 数据框架
+
+| 特性 | 传统方式 | 数据框架 |
+|------|----------|----------|
+| **代码量** | 每个表写查询函数 | 配置驱动，几乎不写代码 |
+| **新增表** | 修改代码 → 重启服务 | 改配置即可 |
+| **多数据源** | 手动管理连接 | 自动处理 |
+| **字段映射** | 硬编码在 SQL 中 | 配置文件中声明 |
+| **维护成本** | 高 | 低 |
+
+### 📊 实际效果对比
+
+**传统方式**（教师中心原有实现）：
+- 40+ 个硬编码查询函数
+- 新增表需要改代码
+- 每个查询都要写 SQL
+
+**数据框架方式**（课程中心新实现）：
+- 1 个通用查询接口
+- 新增表只需改配置
+- 框架自动生成 SQL
+
+### 🚀 数据框架的核心能力
+
+1. **配置驱动开发**
+   ```yaml
+   # 只需配置，无需代码
+   tables:
+     users:
+       name: "t_users"
+       fields:
+         userId: "id"
+         userName: "name"
+   ```
+
+2. **双模式查询支持**
+   - 方式一：使用 `dataObjectId`（复杂查询）
+   - 方式二：使用 `name`（简单表查询）
+
+3. **自动多数据源管理**
+   ```yaml
+   tables:
+     table1:
+       name: "t_table1"
+       dataSourceId: "6"  # 数据源6
+     table2:
+       name: "t_table2"
+       dataSourceId: "7"  # 数据源7
+   ```
+
+4. **统一查询接口**
+   ```typescript
+   // 一个接口处理所有表的查询
+   queryAppTable('users', { page: 1, perPage: 10 })
+   ```
+
+### 💡 何时使用数据框架？
+
+✅ **推荐使用**：
+- 需要访问多个数据库表
+- 有多数据源需求
+- 希望配置化管理数据访问
+- 需要快速开发原型
+
+❌ **可以不使用**：
+- 只需简单 CRUD 单表
+- 已有成熟的模型层
+- 复杂的业务逻辑查询
+
+### 📚 数据框架相关文件
+
+- **框架核心**: `src/lib/data-framework/`
+- **类型定义**: `src/lib/data-framework/types.ts`
+- **配置加载器**: `src/lib/data-framework/config-loader.ts`
+- **查询服务**: `src/lib/data-framework/query-service.ts`
+- **工具函数**: `src/lib/data-framework/utils.ts`
+
+### 🔗 参考实现
+
+- **课程中心**: `src/lib/config/course-center.ts`
+- **教师中心**: `src/lib/config/teacher-center.ts`
 
 ## 相关文件参考
 
@@ -582,3 +1142,4 @@ SELECT role_id, app_id FROM pioc_role_apps WHERE app_id = 13;
 - API示例: `src/app/api/apps/route.ts`
 - 配置类型定义: `src/lib/config/index.ts`
 - 迁移脚本示例: `database-migration-course-center.sql`
+- **数据框架**: `src/lib/data-framework/` ⚡ **新项目推荐使用**

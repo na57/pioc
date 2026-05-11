@@ -1,10 +1,22 @@
-import fs from 'fs';
-import path from 'path';
-import yaml from 'js-yaml';
-import { getConfig } from './index';
+/**
+ * 教师中心配置
+ * 使用通用数据访问框架重构
+ */
 
-// 字段映射配置 - 教职工基本信息
-export interface TeacherBasicFieldMapping {
+import {
+  TableConfig,
+  AppBaseConfig,
+  createConfigLoader,
+  createDataQueryService,
+  QueryOptions,
+  QueryResult,
+} from '@/lib/data-framework';
+
+// ============================================
+// 字段映射类型定义
+// ============================================
+
+export interface TeacherBasicFieldMapping extends Record<string, string> {
   employeeId: string;
   name: string;
   departmentCode: string;
@@ -28,8 +40,7 @@ export interface TeacherBasicFieldMapping {
   hireDate: string;
 }
 
-// 专业技术职务字段映射
-export interface TeacherTitleFieldMapping {
+export interface TeacherTitleFieldMapping extends Record<string, string> {
   employeeId: string;
   titleName: string;
   titleLevel: string;
@@ -39,63 +50,55 @@ export interface TeacherTitleFieldMapping {
   isCurrent: string;
 }
 
-// 岗位聘任字段映射
-export interface PositionAppointmentFieldMapping {
+export interface PositionAppointmentFieldMapping extends Record<string, string> {
   employeeId: string;
   positionName: string;
   positionLevel: string;
   appointmentDate: string;
 }
 
-// 管理岗位聘任字段映射
-export interface ManagementAppointmentFieldMapping {
+export interface ManagementAppointmentFieldMapping extends Record<string, string> {
   employeeId: string;
   positionName: string;
   positionLevel: string;
   appointmentDate: string;
 }
 
-// 工勤岗位聘任字段映射
-export interface WorkerAppointmentFieldMapping {
+export interface WorkerAppointmentFieldMapping extends Record<string, string> {
   employeeId: string;
   positionName: string;
   positionLevel: string;
   appointmentDate: string;
 }
 
-// 考核信息字段映射
-export interface AssessmentFieldMapping {
+export interface AssessmentFieldMapping extends Record<string, string> {
   employeeId: string;
   assessmentDate: string;
   assessmentResult: string;
 }
 
-// 奖励信息字段映射
-export interface AwardFieldMapping {
+export interface AwardFieldMapping extends Record<string, string> {
   employeeId: string;
   awardName: string;
   awardLevel: string;
   awardDate: string;
 }
 
-// 部门调动字段映射
-export interface DepartmentTransferFieldMapping {
+export interface DepartmentTransferFieldMapping extends Record<string, string> {
   employeeId: string;
   transferDate: string;
   originalDepartment: string;
   newDepartment: string;
 }
 
-// 聘用合同字段映射
-export interface ContractFieldMapping {
+export interface ContractFieldMapping extends Record<string, string> {
   employeeId: string;
   contractType: string;
   signDate: string;
   expireDate: string;
 }
 
-// 工人技术等级及职务字段映射
-export interface WorkerSkillFieldMapping {
+export interface WorkerSkillFieldMapping extends Record<string, string> {
   employeeId: string;
   skillLevel: string;
   skillPosition: string;
@@ -104,8 +107,7 @@ export interface WorkerSkillFieldMapping {
   isCurrent: string;
 }
 
-// 学历学位字段映射
-export interface EducationDegreeFieldMapping {
+export interface EducationDegreeFieldMapping extends Record<string, string> {
   employeeId: string;
   educationLevel: string;
   degree: string;
@@ -116,8 +118,7 @@ export interface EducationDegreeFieldMapping {
   graduationDate: string;
 }
 
-// 工作简历字段映射
-export interface WorkResumeFieldMapping {
+export interface WorkResumeFieldMapping extends Record<string, string> {
   employeeId: string;
   startDate: string;
   endDate: string;
@@ -126,8 +127,7 @@ export interface WorkResumeFieldMapping {
   workContent: string;
 }
 
-// 联系信息字段映射
-export interface ContactInfoFieldMapping {
+export interface ContactInfoFieldMapping extends Record<string, string> {
   employeeId: string;
   emergencyContact: string;
   emergencyPhone: string;
@@ -137,8 +137,7 @@ export interface ContactInfoFieldMapping {
   zipCode: string;
 }
 
-// 高层次人才字段映射
-export interface TalentFieldMapping {
+export interface TalentFieldMapping extends Record<string, string> {
   employeeId: string;
   talentCategory: string;
   talentLevel: string;
@@ -147,8 +146,7 @@ export interface TalentFieldMapping {
   major: string;
 }
 
-// 研究生导师字段映射
-export interface GraduateSupervisorFieldMapping {
+export interface GraduateSupervisorFieldMapping extends Record<string, string> {
   employeeId: string;
   name: string;
   isExternal: string;
@@ -159,8 +157,7 @@ export interface GraduateSupervisorFieldMapping {
   unitName: string;
 }
 
-// 社会兼职字段映射
-export interface SocialPartTimeFieldMapping {
+export interface SocialPartTimeFieldMapping extends Record<string, string> {
   employeeId: string;
   partTimeType: string;
   position: string;
@@ -168,8 +165,7 @@ export interface SocialPartTimeFieldMapping {
   endDate: string;
 }
 
-// 科研论文字段映射
-export interface ResearchPaperFieldMapping {
+export interface ResearchPaperFieldMapping extends Record<string, string> {
   paperId: string;
   paperTitle: string;
   firstAuthorId: string;
@@ -181,8 +177,7 @@ export interface ResearchPaperFieldMapping {
   doi: string;
 }
 
-// 科研著作字段映射
-export interface ResearchBookFieldMapping {
+export interface ResearchBookFieldMapping extends Record<string, string> {
   bookId: string;
   bookTitle: string;
   firstAuthorId: string;
@@ -192,8 +187,7 @@ export interface ResearchBookFieldMapping {
   isbn: string;
 }
 
-// 科研专利字段映射
-export interface ResearchPatentFieldMapping {
+export interface ResearchPatentFieldMapping extends Record<string, string> {
   patentId: string;
   patentTitle: string;
   firstInventorId: string;
@@ -204,8 +198,7 @@ export interface ResearchPatentFieldMapping {
   patentStatus: string;
 }
 
-// 科研获奖字段映射
-export interface ResearchAwardFieldMapping {
+export interface ResearchAwardFieldMapping extends Record<string, string> {
   awardId: string;
   awardName: string;
   firstCompleterId: string;
@@ -215,8 +208,7 @@ export interface ResearchAwardFieldMapping {
   awardCategory: string;
 }
 
-// 科研鉴定成果字段映射
-export interface ResearchAppraisalFieldMapping {
+export interface ResearchAppraisalFieldMapping extends Record<string, string> {
   appraisalId: string;
   appraisalName: string;
   firstAuthorId: string;
@@ -226,8 +218,7 @@ export interface ResearchAppraisalFieldMapping {
   appraisalResult: string;
 }
 
-// 科研转化成果字段映射
-export interface ResearchTransferFieldMapping {
+export interface ResearchTransferFieldMapping extends Record<string, string> {
   transferId: string;
   transferName: string;
   firstAuthorId: string;
@@ -237,8 +228,7 @@ export interface ResearchTransferFieldMapping {
   transferee: string;
 }
 
-// 研究报告字段映射
-export interface ResearchReportFieldMapping {
+export interface ResearchReportFieldMapping extends Record<string, string> {
   reportId: string;
   reportName: string;
   firstAuthorId: string;
@@ -248,8 +238,7 @@ export interface ResearchReportFieldMapping {
   isAdopted: string;
 }
 
-// 科研艺术作品字段映射
-export interface ResearchArtworkFieldMapping {
+export interface ResearchArtworkFieldMapping extends Record<string, string> {
   artworkId: string;
   artworkName: string;
   firstAuthorId: string;
@@ -260,8 +249,7 @@ export interface ResearchArtworkFieldMapping {
   awardName: string;
 }
 
-// 授课信息字段映射
-export interface TeachingFieldMapping {
+export type TeachingFieldMapping = {
   teacherId: string;
   teacherName: string;
   classId: string;
@@ -273,10 +261,9 @@ export interface TeachingFieldMapping {
   departmentName?: string;
   studentCount: string;
   capacity?: string;
-}
+} & Record<string, string>;
 
-// 教学工作量字段映射
-export interface WorkloadFieldMapping {
+export type WorkloadFieldMapping = {
   teacherId: string;
   teacherName: string;
   courseCode: string;
@@ -286,22 +273,61 @@ export interface WorkloadFieldMapping {
   studentCount: string;
   hours: string;
   scheduledHours?: string;
+} & Record<string, string>;
+
+export interface UndergraduateWorkloadFieldMapping extends Record<string, string> {
+  teacherId: string;
+  teacherName: string;
+  courseCode: string;
+  courseName: string;
+  semesterCode: string;
+  semesterName: string;
+  studentCount: string;
+  hours: string;
+  scheduledHours: string;
 }
 
-// 教学研究项目字段映射
-export interface TeachingProjectFieldMapping {
-  teacherId?: string;
-  teacherName?: string;
-  memberId?: string;
-  memberName?: string;
+export interface GraduateWorkloadFieldMapping extends Record<string, string> {
+  teacherId: string;
+  teacherName: string;
+  courseCode: string;
+  courseName: string;
+  semesterCode: string;
+  semesterName: string;
+  studentCount: string;
+  hours: string;
+}
+
+export interface TeachingProjectFieldMapping extends Record<string, string> {
+  teacherId: string;
+  teacherName: string;
+  memberId: string;
+  memberName: string;
   projectName: string;
   projectType: string;
   startDate: string;
   memberRank: string;
 }
 
-// 课程信息字段映射
-export interface CourseInfoFieldMapping {
+export interface UndergraduateTeachingProjectFieldMapping extends Record<string, string> {
+  memberId: string;
+  memberName: string;
+  projectName: string;
+  projectType: string;
+  startDate: string;
+  memberRank: string;
+}
+
+export interface GraduateTeachingProjectFieldMapping extends Record<string, string> {
+  teacherId: string;
+  teacherName: string;
+  projectName: string;
+  projectType: string;
+  startDate: string;
+  memberRank: string;
+}
+
+export interface CourseInfoFieldMapping extends Record<string, string> {
   courseCode: string;
   courseName: string;
   courseEnglishName: string;
@@ -321,8 +347,7 @@ export interface CourseInfoFieldMapping {
   isValid: string;
 }
 
-// 教材信息字段映射
-export interface TextbookFieldMapping {
+export interface TextbookFieldMapping extends Record<string, string> {
   teacherId: string;
   textbookId: string;
   textbookName: string;
@@ -333,8 +358,7 @@ export interface TextbookFieldMapping {
   authorRank: string;
 }
 
-// 教学奖励字段映射
-export interface TeachingAwardFieldMapping {
+export interface TeachingAwardFieldMapping extends Record<string, string> {
   teacherId: string;
   awardId: string;
   awardName: string;
@@ -342,11 +366,20 @@ export interface TeachingAwardFieldMapping {
   awardDate: string;
   awardCategory: string;
   authorRank: string;
-  textbookName?: string;
+  textbookName: string;
 }
 
-// 教研论文字段映射
-export interface TeachingPaperFieldMapping {
+export interface BasicTeachingAwardFieldMapping extends Record<string, string> {
+  teacherId: string;
+  awardId: string;
+  awardName: string;
+  awardLevel: string;
+  awardDate: string;
+  awardCategory: string;
+  authorRank: string;
+}
+
+export interface TeachingPaperFieldMapping extends Record<string, string> {
   teacherId: string;
   paperId: string;
   paperTitle: string;
@@ -356,16 +389,14 @@ export interface TeachingPaperFieldMapping {
   authorRank: string;
 }
 
-// 课程团队成员字段映射
-export interface CourseTeamFieldMapping {
+export interface CourseTeamFieldMapping extends Record<string, string> {
   courseId: string;
   teamMember: string;
   responsiblePerson: string;
   outlineDate: string;
 }
 
-// 督导记录字段映射
-export interface SupervisionRecordFieldMapping {
+export interface SupervisionRecordFieldMapping extends Record<string, string> {
   teacherId: string;
   teacherName: string;
   courseCode: string;
@@ -378,8 +409,7 @@ export interface SupervisionRecordFieldMapping {
   semesterName: string;
 }
 
-// 课堂统计字段映射
-export interface ClassroomStatsFieldMapping {
+export interface ClassroomStatsFieldMapping extends Record<string, string> {
   classId: string;
   semesterName: string;
   startTime: string;
@@ -392,8 +422,7 @@ export interface ClassroomStatsFieldMapping {
   sleepiness: string;
 }
 
-// 指导学生竞赛获奖字段映射
-export interface CompetitionAwardFieldMapping {
+export interface CompetitionAwardFieldMapping extends Record<string, string> {
   teacherId: string;
   teacherName: string;
   competitionName: string;
@@ -402,42 +431,29 @@ export interface CompetitionAwardFieldMapping {
   studentName: string;
 }
 
-// 表配置 - 支持两种方式：数据对象ID 或 表名
-export interface TableConfig<T> {
-  // 方式一：数据对象ID（优先级高）
-  dataObjectId?: number;
-  // 方式二：直接表名
-  name?: string;
-  // 方式三：指定数据源ID（覆盖全局配置）
-  dataSourceId?: string;
-  fields: T;
-}
+// ============================================
+// AI 配置接口
+// ============================================
 
-// AI 配置
 export interface AITeacherCenterConfig {
-  // AI Provider ID，对应 config.yaml 中 ai.providers 列表中的 providerId
   providerId?: string;
-  // 使用的模型名称
   model?: string;
 }
 
-// 教师中心完整配置
-export interface TeacherCenterConfig {
-  // 全局数据源ID（当表配置没有指定数据对象ID时使用）
-  dataSourceId?: string;
-  // AI 配置
+// ============================================
+// 教师中心配置类型
+// ============================================
+
+export interface TeacherCenterConfig extends AppBaseConfig {
   ai?: AITeacherCenterConfig;
   tables: {
-    // 核心表
     teacherBasic: TableConfig<TeacherBasicFieldMapping>;
     teacherTitle: TableConfig<TeacherTitleFieldMapping>;
-    // 基本信息扩展表
     workerSkill: TableConfig<WorkerSkillFieldMapping>;
     contactInfo: TableConfig<ContactInfoFieldMapping>;
     talent: TableConfig<TalentFieldMapping>;
     graduateSupervisor: TableConfig<GraduateSupervisorFieldMapping>;
     socialPartTime: TableConfig<SocialPartTimeFieldMapping>;
-    // 教职生涯表
     positionAppointment: TableConfig<PositionAppointmentFieldMapping>;
     managementAppointment: TableConfig<ManagementAppointmentFieldMapping>;
     workerAppointment: TableConfig<WorkerAppointmentFieldMapping>;
@@ -447,7 +463,6 @@ export interface TeacherCenterConfig {
     contract: TableConfig<ContractFieldMapping>;
     educationDegree: TableConfig<EducationDegreeFieldMapping>;
     workResume: TableConfig<WorkResumeFieldMapping>;
-    // 科研表
     researchPaper: TableConfig<ResearchPaperFieldMapping>;
     researchBook: TableConfig<ResearchBookFieldMapping>;
     researchPatent: TableConfig<ResearchPatentFieldMapping>;
@@ -456,23 +471,21 @@ export interface TeacherCenterConfig {
     researchTransfer: TableConfig<ResearchTransferFieldMapping>;
     researchReport: TableConfig<ResearchReportFieldMapping>;
     researchArtwork: TableConfig<ResearchArtworkFieldMapping>;
-    // 教学表
     undergraduateTeaching: TableConfig<TeachingFieldMapping>;
     graduateTeaching: TableConfig<TeachingFieldMapping>;
-    undergraduateWorkload: TableConfig<WorkloadFieldMapping>;
-    graduateWorkload: TableConfig<WorkloadFieldMapping>;
-    undergraduateTeachingProject: TableConfig<TeachingProjectFieldMapping>;
-    graduateTeachingProject: TableConfig<TeachingProjectFieldMapping>;
+    undergraduateWorkload: TableConfig<UndergraduateWorkloadFieldMapping>;
+    graduateWorkload: TableConfig<GraduateWorkloadFieldMapping>;
+    undergraduateTeachingProject: TableConfig<UndergraduateTeachingProjectFieldMapping>;
+    graduateTeachingProject: TableConfig<GraduateTeachingProjectFieldMapping>;
     supervisionRecord: TableConfig<SupervisionRecordFieldMapping>;
     classroomStats: TableConfig<ClassroomStatsFieldMapping>;
     studentCompetitionAward: TableConfig<CompetitionAwardFieldMapping>;
-    // 教学扩展表
     undergraduateCourseInfo: TableConfig<CourseInfoFieldMapping>;
     graduateCourseInfo: TableConfig<CourseInfoFieldMapping>;
     undergraduateTextbook: TableConfig<TextbookFieldMapping>;
     graduateTextbook: TableConfig<TextbookFieldMapping>;
-    undergraduateTeachingAward: TableConfig<TeachingAwardFieldMapping>;
-    graduateTeachingAward: TableConfig<TeachingAwardFieldMapping>;
+    undergraduateTeachingAward: TableConfig<BasicTeachingAwardFieldMapping>;
+    graduateTeachingAward: TableConfig<BasicTeachingAwardFieldMapping>;
     undergraduateTeachingPaper: TableConfig<TeachingPaperFieldMapping>;
     graduateTeachingPaper: TableConfig<TeachingPaperFieldMapping>;
     undergraduateCourseTeam: TableConfig<CourseTeamFieldMapping>;
@@ -480,7 +493,10 @@ export interface TeacherCenterConfig {
   };
 }
 
+// ============================================
 // 默认配置
+// ============================================
+
 const defaultConfig: TeacherCenterConfig = {
   dataSourceId: '6',
   ai: {
@@ -488,7 +504,6 @@ const defaultConfig: TeacherCenterConfig = {
     model: 'gpt-4o',
   },
   tables: {
-    // 教职工基本信息
     teacherBasic: {
       name: 't_dws_gxjg_jzgjbxxmx',
       fields: {
@@ -515,7 +530,6 @@ const defaultConfig: TeacherCenterConfig = {
         hireDate: 'lxrq',
       },
     },
-    // 专业技术职务
     teacherTitle: {
       name: 't_dws_gxjg_jzgzyjszwxxmx',
       fields: {
@@ -528,7 +542,6 @@ const defaultConfig: TeacherCenterConfig = {
         isCurrent: 'sfxzwmmc',
       },
     },
-    // 工人技术等级及职务
     workerSkill: {
       name: 't_dws_gxjg_jzggrjsdjjzwxxmx',
       fields: {
@@ -540,7 +553,6 @@ const defaultConfig: TeacherCenterConfig = {
         isCurrent: 'sfxzwmmc',
       },
     },
-    // 联系信息
     contactInfo: {
       name: 't_ynu_gxjg_jzglxxx',
       fields: {
@@ -553,7 +565,6 @@ const defaultConfig: TeacherCenterConfig = {
         zipCode: 'yxyzbm',
       },
     },
-    // 高层次人才
     talent: {
       name: 't_dws_gxjg_jzgrcchxxmx',
       fields: {
@@ -565,7 +576,6 @@ const defaultConfig: TeacherCenterConfig = {
         major: 'zyfx',
       },
     },
-    // 研究生导师
     graduateSupervisor: {
       name: 't_dws_gxjx_yjsdsjbxxmx',
       fields: {
@@ -579,7 +589,6 @@ const defaultConfig: TeacherCenterConfig = {
         unitName: 'szdwmc',
       },
     },
-    // 社会兼职
     socialPartTime: {
       name: 't_dws_gxjg_shjzxxmx',
       fields: {
@@ -590,7 +599,6 @@ const defaultConfig: TeacherCenterConfig = {
         endDate: 'shjzzzrq',
       },
     },
-    // 专技岗位聘任
     positionAppointment: {
       name: 't_dws_gxjg_jzgzjgwprxxmx',
       fields: {
@@ -600,7 +608,6 @@ const defaultConfig: TeacherCenterConfig = {
         appointmentDate: 'prqsrq',
       },
     },
-    // 管理岗位聘任
     managementAppointment: {
       name: 't_dws_gxjg_jzgglgwprxxmx',
       fields: {
@@ -610,7 +617,6 @@ const defaultConfig: TeacherCenterConfig = {
         appointmentDate: 'glqsny',
       },
     },
-    // 工勤岗位聘任
     workerAppointment: {
       name: 't_dws_gxjg_jzggqgwprxxmx',
       fields: {
@@ -620,7 +626,6 @@ const defaultConfig: TeacherCenterConfig = {
         appointmentDate: 'prqsrq',
       },
     },
-    // 考核信息
     assessment: {
       name: 't_dws_gxjg_jzgkhxxmx',
       fields: {
@@ -629,7 +634,6 @@ const defaultConfig: TeacherCenterConfig = {
         assessmentResult: 'dwkhjgmmc',
       },
     },
-    // 奖励信息
     award: {
       name: 't_dws_gxjg_jzgjlxxmx',
       fields: {
@@ -639,7 +643,6 @@ const defaultConfig: TeacherCenterConfig = {
         awardDate: 'hjrq',
       },
     },
-    // 部门调动
     departmentTransfer: {
       name: 't_dws_gxjg_jzgbmddxxmx',
       fields: {
@@ -649,7 +652,6 @@ const defaultConfig: TeacherCenterConfig = {
         newDepartment: 'zzndrbmh',
       },
     },
-    // 聘用合同
     contract: {
       name: 't_dws_gxjg_jzgpyhtglxxmx',
       fields: {
@@ -659,7 +661,6 @@ const defaultConfig: TeacherCenterConfig = {
         expireDate: 'jsriq',
       },
     },
-    // 学历学位
     educationDegree: {
       name: 't_dws_gxjg_jzgxlxwxxmx',
       fields: {
@@ -673,7 +674,6 @@ const defaultConfig: TeacherCenterConfig = {
         graduationDate: 'hxwrq',
       },
     },
-    // 工作简历
     workResume: {
       name: 't_dws_gxjg_jzggzjlxxmx',
       fields: {
@@ -685,7 +685,6 @@ const defaultConfig: TeacherCenterConfig = {
         workContent: 'gznr',
       },
     },
-    // 科研论文
     researchPaper: {
       name: 't_dws_gxky_kjlwjzzmx',
       fields: {
@@ -700,7 +699,6 @@ const defaultConfig: TeacherCenterConfig = {
         doi: 'doih',
       },
     },
-    // 科研著作
     researchBook: {
       name: 't_dws_gxky_kyzzjzzmx',
       fields: {
@@ -713,7 +711,6 @@ const defaultConfig: TeacherCenterConfig = {
         isbn: 'isbnh',
       },
     },
-    // 科研专利
     researchPatent: {
       name: 't_dws_gxky_kyzljzzmx',
       fields: {
@@ -727,7 +724,6 @@ const defaultConfig: TeacherCenterConfig = {
         patentStatus: 'zlztmc',
       },
     },
-    // 科研获奖
     researchAward: {
       name: 't_dws_gxky_kyhjcgjzzmx',
       fields: {
@@ -740,7 +736,6 @@ const defaultConfig: TeacherCenterConfig = {
         awardCategory: 'cghjlbmc',
       },
     },
-    // 科研鉴定成果
     researchAppraisal: {
       name: 't_dws_gxky_kyjdcgjzzmx',
       fields: {
@@ -753,7 +748,6 @@ const defaultConfig: TeacherCenterConfig = {
         appraisalResult: 'jdjlmc',
       },
     },
-    // 科研转化成果
     researchTransfer: {
       name: 't_dws_gxky_kyzhcgjzzmx',
       fields: {
@@ -766,7 +760,6 @@ const defaultConfig: TeacherCenterConfig = {
         transferee: 'srfmc',
       },
     },
-    // 研究报告
     researchReport: {
       name: 't_dws_gxky_yjbgjzzmx',
       fields: {
@@ -779,7 +772,6 @@ const defaultConfig: TeacherCenterConfig = {
         isAdopted: 'sfcnmc',
       },
     },
-    // 科研艺术作品
     researchArtwork: {
       name: 't_dws_gxky_kyyszpjzzmx',
       fields: {
@@ -793,7 +785,6 @@ const defaultConfig: TeacherCenterConfig = {
         awardName: 'hjmc',
       },
     },
-    // 本科生授课（数据源7）
     undergraduateTeaching: {
       name: 't_dws_gxjx_bzksjsskxx_v11mx',
       dataSourceId: '7',
@@ -806,11 +797,11 @@ const defaultConfig: TeacherCenterConfig = {
         semesterCode: 'xnxqdm',
         semesterName: 'xnxqmc',
         className: 'skbjmc',
+        departmentName: 'kcksdwmc',
         studentCount: 'xdrs',
         capacity: 'krl',
       },
     },
-    // 研究生授课（数据源7）
     graduateTeaching: {
       name: 't_dws_gxjx_yjsjsskxxmx',
       dataSourceId: '7',
@@ -824,12 +815,11 @@ const defaultConfig: TeacherCenterConfig = {
         semesterName: 'xnxqmc',
         departmentName: 'yxmc',
         studentCount: 'xdrs',
+        capacity: 'krl',
       },
     },
-    // 本科生工作量（数据源7）
     undergraduateWorkload: {
       name: 't_ynu_gxjx_bzksjsskgzl',
-      dataSourceId: '7',
       fields: {
         teacherId: 'jsh',
         teacherName: 'jsm',
@@ -842,10 +832,8 @@ const defaultConfig: TeacherCenterConfig = {
         scheduledHours: 'pkxs',
       },
     },
-    // 研究生工作量（数据源7）
     graduateWorkload: {
       name: 't_ynu_gxjx_yjsjsskgzl',
-      dataSourceId: '7',
       fields: {
         teacherId: 'jsgh',
         teacherName: 'qbrkjs',
@@ -857,7 +845,6 @@ const defaultConfig: TeacherCenterConfig = {
         hours: 'cdxs',
       },
     },
-    // 本科生教学项目（数据源7）
     undergraduateTeachingProject: {
       name: 't_dws_gxjx_bzksjxyjxmxxmx',
       dataSourceId: '7',
@@ -870,7 +857,6 @@ const defaultConfig: TeacherCenterConfig = {
         memberRank: 'brpm',
       },
     },
-    // 研究生教学项目（数据源6）
     graduateTeachingProject: {
       name: 't_gxjx_yjsjsjxyjxm',
       dataSourceId: '6',
@@ -883,7 +869,6 @@ const defaultConfig: TeacherCenterConfig = {
         memberRank: 'brpm',
       },
     },
-    // 督导记录（数据源7）
     supervisionRecord: {
       name: 't_dws_ydxt_ydxtddjlmx',
       dataSourceId: '7',
@@ -900,7 +885,6 @@ const defaultConfig: TeacherCenterConfig = {
         semesterName: 'xnxqmc',
       },
     },
-    // 课堂统计（数据源7）
     classroomStats: {
       name: 't_ynu_gxjx_aikttjjg',
       dataSourceId: '7',
@@ -917,7 +901,6 @@ const defaultConfig: TeacherCenterConfig = {
         sleepiness: 'sjd',
       },
     },
-    // 指导学生竞赛获奖（数据源7）
     studentCompetitionAward: {
       name: 't_ynu_gxjx_jzgzdbksjshjxx',
       dataSourceId: '7',
@@ -930,7 +913,6 @@ const defaultConfig: TeacherCenterConfig = {
         studentName: 'hjxszzxm',
       },
     },
-    // 本科生课程信息
     undergraduateCourseInfo: {
       name: 't_dws_gxjx_bzkskcjbxxmx',
       dataSourceId: '7',
@@ -954,7 +936,6 @@ const defaultConfig: TeacherCenterConfig = {
         isValid: 'sfyx',
       },
     },
-    // 研究生课程信息
     graduateCourseInfo: {
       name: 't_dws_gxjx_yjskcxxmx',
       dataSourceId: '7',
@@ -978,7 +959,6 @@ const defaultConfig: TeacherCenterConfig = {
         isValid: 'sfyx',
       },
     },
-    // 本科生教材
     undergraduateTextbook: {
       name: 't_dws_gxjx_bzksjcbjcxxmx',
       dataSourceId: '7',
@@ -993,13 +973,12 @@ const defaultConfig: TeacherCenterConfig = {
         authorRank: 'brpm',
       },
     },
-    // 研究生教材
     graduateTextbook: {
       name: 't_gxjx_yjsjsycbyjsjc',
       dataSourceId: '6',
       fields: {
         teacherId: 'zbzgh',
-        textbookId: '',
+        textbookId: 'jcbh',
         textbookName: 'jcmc',
         isbn: 'sh',
         publisher: 'cbsmc',
@@ -1008,7 +987,6 @@ const defaultConfig: TeacherCenterConfig = {
         authorRank: 'zbzgh',
       },
     },
-    // 本科生教学奖励
     undergraduateTeachingAward: {
       name: 't_dws_gxjx_bzksjxjljjxjsxmxxmx',
       dataSourceId: '7',
@@ -1022,13 +1000,12 @@ const defaultConfig: TeacherCenterConfig = {
         authorRank: 'brpm',
       },
     },
-    // 研究生教学奖励
     graduateTeachingAward: {
       name: 't_gxjx_yjsjsjxjljjxjsxm',
       dataSourceId: '6',
       fields: {
         teacherId: 'hjrzgh',
-        awardId: '',
+        awardId: 'jxcgbh',
         awardName: 'jxjlhjsxmmc',
         awardLevel: 'hjdj',
         awardDate: 'hjsj',
@@ -1036,7 +1013,6 @@ const defaultConfig: TeacherCenterConfig = {
         authorRank: 'grpm',
       },
     },
-    // 本科生教研论文
     undergraduateTeachingPaper: {
       name: 't_dws_gxjx_bzksjsfblwxxmx',
       dataSourceId: '7',
@@ -1050,13 +1026,12 @@ const defaultConfig: TeacherCenterConfig = {
         authorRank: 'brpm',
       },
     },
-    // 研究生教研论文
     graduateTeachingPaper: {
       name: 't_gxjx_yjsjsgkfbjylw',
       dataSourceId: '6',
       fields: {
         teacherId: 'dyzzgzh',
-        paperId: '',
+        paperId: 'lwbh',
         paperTitle: 'lwtm',
         journalName: 'qkmc',
         publishDate: 'fbrq',
@@ -1064,7 +1039,6 @@ const defaultConfig: TeacherCenterConfig = {
         authorRank: 'dyzzgzh',
       },
     },
-    // 课程团队成员
     undergraduateCourseTeam: {
       name: 't_dws_gxjx_bzkskcttcymx',
       dataSourceId: '7',
@@ -1075,168 +1049,187 @@ const defaultConfig: TeacherCenterConfig = {
         outlineDate: 'dgzdrq',
       },
     },
-    // 教材获奖
     textbookAward: {
       name: 't_dws_gxjx_bzksjchjxxmx',
       dataSourceId: '7',
       fields: {
-        teacherId: '',
+        teacherId: 'gh',
         awardId: 'hjjcbh',
         awardName: 'hjmc',
         textbookName: 'jcmc',
         awardLevel: 'jljbm',
         awardDate: 'hjrq',
         awardCategory: 'hjxm',
-        authorRank: '',
+        authorRank: 'brpm',
       },
     },
   },
 };
 
-let teacherCenterConfig: TeacherCenterConfig | null = null;
+// ============================================
+// 创建配置加载器（使用新框架）
+// ============================================
 
-/**
- * 获取教师中心配置文件名
- * 优先从主配置的 apps.teacherCenter.configFile 读取
- */
-function getConfigFileName(): string {
-  try {
-    const mainConfig = getConfig();
-    if (mainConfig.apps?.teacherCenter?.configFile) {
-      return mainConfig.apps.teacherCenter.configFile;
-    }
-  } catch (error) {
-    // 如果主配置不存在或读取失败，使用默认文件名
-    console.warn('读取主配置失败，使用默认配置文件名');
-  }
-  return 'teacher-center.yaml';
-}
+const configLoader = createConfigLoader<TeacherCenterConfig>(defaultConfig, {
+  configFileName: 'teacher-center.yaml',
+  legacyConfigPath: 'apps.teacherCenter',
+});
+
+// ============================================
+// 创建数据查询服务
+// ============================================
+
+const queryService = createDataQueryService(configLoader.getDataSourceId());
+
+// ============================================
+// 向后兼容的 API
+// ============================================
 
 /**
  * 加载教师中心配置
- * 优先从单独配置文件加载，如果不存在则使用主配置文件或默认值
+ * @deprecated 使用 configLoader.load() 替代
  */
 export function loadTeacherCenterConfig(): TeacherCenterConfig {
-  if (teacherCenterConfig) {
-    return teacherCenterConfig;
-  }
-
-  const configFileName = getConfigFileName();
-  const configPath = path.join(process.cwd(), 'config', configFileName);
-
-  // 尝试从单独配置文件加载
-  if (fs.existsSync(configPath)) {
-    try {
-      const fileContents = fs.readFileSync(configPath, 'utf8');
-      const userConfig = yaml.load(fileContents) as Partial<TeacherCenterConfig>;
-      
-      // 深度合并用户配置和默认配置
-      teacherCenterConfig = deepMerge(defaultConfig, userConfig);
-      return teacherCenterConfig;
-    } catch (error) {
-      console.warn(`加载 ${configFileName} 失败，使用默认配置:`, error);
-    }
-  }
-
-  // 尝试从主配置文件加载（向后兼容）
-  try {
-    const mainConfig = getConfig();
-    if (mainConfig.apps?.teacherCenter) {
-      const legacyConfig = mainConfig.apps.teacherCenter;
-      
-      // 构建兼容的配置
-      teacherCenterConfig = {
-        dataSourceId: (legacyConfig as any).dataSourceId || defaultConfig.dataSourceId,
-        tables: {
-          teacherBasic: {
-            ...defaultConfig.tables.teacherBasic,
-            name: (legacyConfig as any).teacherBasicTableName || defaultConfig.tables.teacherBasic.name,
-          },
-          teacherTitle: {
-            ...defaultConfig.tables.teacherTitle,
-            name: (legacyConfig as any).teacherTitleTableName || defaultConfig.tables.teacherTitle.name,
-          },
-          workerSkill: defaultConfig.tables.workerSkill,
-          contactInfo: defaultConfig.tables.contactInfo,
-          talent: defaultConfig.tables.talent,
-          graduateSupervisor: defaultConfig.tables.graduateSupervisor,
-          socialPartTime: defaultConfig.tables.socialPartTime,
-          positionAppointment: defaultConfig.tables.positionAppointment,
-          managementAppointment: defaultConfig.tables.managementAppointment,
-          workerAppointment: defaultConfig.tables.workerAppointment,
-          assessment: defaultConfig.tables.assessment,
-          award: defaultConfig.tables.award,
-          departmentTransfer: defaultConfig.tables.departmentTransfer,
-          contract: defaultConfig.tables.contract,
-          educationDegree: defaultConfig.tables.educationDegree,
-          workResume: defaultConfig.tables.workResume,
-          researchPaper: defaultConfig.tables.researchPaper,
-          researchBook: defaultConfig.tables.researchBook,
-          researchPatent: defaultConfig.tables.researchPatent,
-          researchAward: defaultConfig.tables.researchAward,
-          researchAppraisal: defaultConfig.tables.researchAppraisal,
-          researchTransfer: defaultConfig.tables.researchTransfer,
-          researchReport: defaultConfig.tables.researchReport,
-          researchArtwork: defaultConfig.tables.researchArtwork,
-          undergraduateTeaching: defaultConfig.tables.undergraduateTeaching,
-          graduateTeaching: defaultConfig.tables.graduateTeaching,
-          undergraduateWorkload: defaultConfig.tables.undergraduateWorkload,
-          graduateWorkload: defaultConfig.tables.graduateWorkload,
-          undergraduateTeachingProject: defaultConfig.tables.undergraduateTeachingProject,
-          graduateTeachingProject: defaultConfig.tables.graduateTeachingProject,
-          supervisionRecord: defaultConfig.tables.supervisionRecord,
-          classroomStats: defaultConfig.tables.classroomStats,
-          studentCompetitionAward: defaultConfig.tables.studentCompetitionAward,
-          undergraduateCourseInfo: defaultConfig.tables.undergraduateCourseInfo,
-          graduateCourseInfo: defaultConfig.tables.graduateCourseInfo,
-          undergraduateTextbook: defaultConfig.tables.undergraduateTextbook,
-          graduateTextbook: defaultConfig.tables.graduateTextbook,
-          undergraduateTeachingAward: defaultConfig.tables.undergraduateTeachingAward,
-          graduateTeachingAward: defaultConfig.tables.graduateTeachingAward,
-          undergraduateTeachingPaper: defaultConfig.tables.undergraduateTeachingPaper,
-          graduateTeachingPaper: defaultConfig.tables.graduateTeachingPaper,
-          undergraduateCourseTeam: defaultConfig.tables.undergraduateCourseTeam,
-          textbookAward: defaultConfig.tables.textbookAward,
-        },
-      };
-      return teacherCenterConfig;
-    }
-  } catch (error) {
-    console.warn('从主配置文件加载教师中心配置失败:', error);
-  }
-
-  // 使用默认配置
-  teacherCenterConfig = defaultConfig;
-  return teacherCenterConfig;
+  return configLoader.load();
 }
 
 /**
  * 获取教师中心配置
+ * @deprecated 使用 configLoader.getConfig() 替代
  */
 export function getTeacherCenterConfig(): TeacherCenterConfig {
-  if (!teacherCenterConfig) {
-    return loadTeacherCenterConfig();
-  }
-  return teacherCenterConfig;
+  return configLoader.getConfig();
+}
+
+// ============================================
+// 新的便捷 API
+// ============================================
+
+/**
+ * 获取配置加载器实例
+ */
+export function getTeacherCenterConfigLoader() {
+  return configLoader;
 }
 
 /**
- * 深度合并两个对象
+ * 获取数据查询服务实例
  */
-function deepMerge<T>(target: T, source: Partial<T>): T {
-  const result = { ...target };
-  
-  for (const key in source) {
-    if (source[key] !== undefined && source[key] !== null) {
-      if (typeof source[key] === 'object' && !Array.isArray(source[key])) {
-        result[key] = deepMerge(result[key] as unknown as Record<string, unknown>, source[key] as Record<string, unknown>) as unknown as T[Extract<keyof T, string>];
-      } else {
-        result[key] = source[key] as T[Extract<keyof T, string>];
-      }
-    }
-  }
-  
-  return result;
+export function getTeacherCenterQueryService() {
+  return queryService;
 }
 
-export default getTeacherCenterConfig;
+/**
+ * 通用查询接口
+ * 示例：
+ * ```typescript
+ * const result = await queryTeacherCenterTable('teacherBasic', {
+ *   where: { employeeId: '12345' }
+ * });
+ * ```
+ */
+export async function queryTeacherCenterTable<T = Record<string, unknown>>(
+  tableName: keyof TeacherCenterConfig['tables'],
+  options: QueryOptions = {}
+): Promise<QueryResult<T>> {
+  const tableConfig = configLoader.getTableConfig(tableName);
+  return queryService.queryByTableConfig<T>(tableConfig, options);
+}
+
+// ============================================
+// 教师中心数据服务类
+// ============================================
+
+export class TeacherCenterDataService {
+  private configLoader = configLoader;
+  private queryService = queryService;
+
+  /**
+   * 查询教师列表
+   */
+  async queryTeachers(page = 1, pageSize = 10) {
+    return queryTeacherCenterTable('teacherBasic', {
+      page,
+      perPage: pageSize,
+      orderBy: 'gh',
+    });
+  }
+
+  /**
+   * 根据职工号查询教师基本信息
+   */
+  async queryTeacherById(employeeId: string) {
+    return queryTeacherCenterTable('teacherBasic', {
+      where: { employeeId },
+    });
+  }
+
+  /**
+   * 查询教师职称信息
+   */
+  async queryTeacherTitles(employeeId: string) {
+    return queryTeacherCenterTable('teacherTitle', {
+      where: { employeeId },
+      orderBy: 'prqsrq DESC',
+    });
+  }
+
+  /**
+   * 查询授课列表
+   */
+  async queryTeaching(
+    type: 'undergraduate' | 'graduate' = 'undergraduate',
+    page = 1,
+    pageSize = 10
+  ) {
+    const tableName = type === 'undergraduate' ? 'undergraduateTeaching' : 'graduateTeaching';
+    return queryTeacherCenterTable(tableName, {
+      page,
+      perPage: pageSize,
+      orderBy: 'xnxqdm DESC, kcdm',
+    });
+  }
+
+  /**
+   * 查询科研论文
+   */
+  async queryResearchPapers(page = 1, pageSize = 10) {
+    return queryTeacherCenterTable('researchPaper', {
+      page,
+      perPage: pageSize,
+      orderBy: 'lwfbrq DESC',
+    });
+  }
+
+  /**
+   * 查询教学奖励
+   */
+  async queryTeachingAwards(
+    type: 'undergraduate' | 'graduate' = 'undergraduate',
+    page = 1,
+    pageSize = 10
+  ) {
+    const tableName = type === 'undergraduate' ? 'undergraduateTeachingAward' : 'graduateTeachingAward';
+    return queryTeacherCenterTable(tableName, {
+      page,
+      perPage: pageSize,
+      orderBy: 'hjnf DESC',
+    });
+  }
+
+  /**
+   * 重新加载配置
+   */
+  reloadConfig() {
+    this.configLoader.reload();
+    const newDataSourceId = this.configLoader.getDataSourceId();
+    if (newDataSourceId) {
+      this.queryService.setGlobalDataSourceId(newDataSourceId);
+    }
+  }
+}
+
+// 导出默认实例
+export const teacherCenterDataService = new TeacherCenterDataService();
+
+export default configLoader;

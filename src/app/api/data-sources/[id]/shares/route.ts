@@ -77,17 +77,27 @@ async function addShareHandler(
     }
 
     const body = await request.json();
-    const { user_id } = body;
+    const { user_id, user_identifier } = body;
 
-    if (!user_id) {
+    // 支持 user_id (数字) 或 user_identifier (用户名/ID)
+    const identifier = user_identifier || user_id;
+    if (!identifier) {
       return NextResponse.json(
-        { success: false, message: 'User ID is required' },
+        { success: false, message: 'User identifier is required' },
         { status: 400 }
       );
     }
 
-    // 检查用户是否存在
-    const targetUser = await userModel.findById(Number(user_id));
+    // 检查用户是否存在（先尝试作为ID查找，再尝试作为用户名查找）
+    let targetUser = null;
+    const numericId = Number(identifier);
+    if (!isNaN(numericId) && numericId > 0) {
+      targetUser = await userModel.findById(numericId);
+    }
+    if (!targetUser) {
+      targetUser = await userModel.findByUsername(String(identifier));
+    }
+
     if (!targetUser) {
       return NextResponse.json(
         { success: false, message: 'User not found' },
@@ -95,8 +105,10 @@ async function addShareHandler(
       );
     }
 
+    const targetUserId = targetUser.id;
+
     // 不能分享给自己
-    if (Number(user_id) === user.id) {
+    if (targetUserId === user.id) {
       return NextResponse.json(
         { success: false, message: 'Cannot share to yourself' },
         { status: 400 }
@@ -104,7 +116,7 @@ async function addShareHandler(
     }
 
     // 检查是否已经分享过
-    const alreadyShared = await dataSourceShareModel.checkUserHasShared(dataSourceId, Number(user_id));
+    const alreadyShared = await dataSourceShareModel.checkUserHasShared(dataSourceId, targetUserId);
     if (alreadyShared) {
       return NextResponse.json(
         { success: false, message: 'User is already shared this data source' },
@@ -113,7 +125,7 @@ async function addShareHandler(
     }
 
     // 创建分享
-    const shareId = await dataSourceShareModel.createShare(dataSourceId, user.id, Number(user_id));
+    const shareId = await dataSourceShareModel.createShare(dataSourceId, user.id, targetUserId);
 
     return NextResponse.json(
       { success: true, data: { id: shareId } },

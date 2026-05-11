@@ -1,10 +1,24 @@
-import fs from 'fs';
-import path from 'path';
-import yaml from 'js-yaml';
+/**
+ * 课程中心配置
+ * 使用通用数据访问框架重构
+ */
+
+import {
+  TableConfig,
+  AppBaseConfig,
+  createConfigLoader,
+  createDataQueryService,
+  QueryOptions,
+  QueryResult,
+  deepMerge,
+} from '@/lib/data-framework';
 import { getConfig } from './index';
 
-// 字段映射配置
-export interface FieldMapping {
+// ============================================
+// 字段映射类型定义
+// ============================================
+
+export interface CourseFieldMapping extends Record<string, string> {
   courseCode: string;
   courseName: string;
   responsiblePerson: string;
@@ -36,8 +50,7 @@ export interface FieldMapping {
   timestamp: string;
 }
 
-// 教学班字段映射
-export interface TeachingClassFieldMapping {
+export interface TeachingClassFieldMapping extends Record<string, string> {
   classCode: string;
   teacherCode: string;
   teacherName: string;
@@ -59,8 +72,7 @@ export interface TeachingClassFieldMapping {
   studentCount: string;
 }
 
-// 课堂统计字段映射
-export interface ClassroomStatsFieldMapping {
+export interface ClassroomStatsFieldMapping extends Record<string, string> {
   classCode: string;
   semesterCode: string;
   semesterName: string;
@@ -75,8 +87,7 @@ export interface ClassroomStatsFieldMapping {
   focusRate: string;
 }
 
-// 教材字段映射
-export interface TextbookFieldMapping {
+export interface TextbookFieldMapping extends Record<string, string> {
   courseCode: string;
   courseName: string;
   semesterCode: string;
@@ -89,8 +100,7 @@ export interface TextbookFieldMapping {
   isNewEdition: string;
 }
 
-// 督导记录字段映射
-export interface SupervisionFieldMapping {
+export interface SupervisionFieldMapping extends Record<string, string> {
   classCode: string;
   teacherName: string;
   semesterCode: string;
@@ -101,8 +111,7 @@ export interface SupervisionFieldMapping {
   rating: string;
 }
 
-// 成绩字段映射
-export interface GradeFieldMapping {
+export interface GradeFieldMapping extends Record<string, string> {
   classCode: string;
   semesterCode: string;
   studentId: string;
@@ -117,8 +126,7 @@ export interface GradeFieldMapping {
   credit: string;
 }
 
-// 课程思政字段映射
-export interface CourseIdeologyFieldMapping {
+export interface CourseIdeologyFieldMapping extends Record<string, string> {
   classCode: string;
   semesterCode: string;
   courseCode: string;
@@ -128,22 +136,14 @@ export interface CourseIdeologyFieldMapping {
   sequence: string;
 }
 
-// 表配置 - 支持两种方式：数据对象ID 或 表名
-export interface TableConfig<T> {
-  // 方式一：数据对象ID（优先级高）
-  dataObjectId?: number;
-  // 方式二：直接表名
-  name?: string;
-  fields: T;
-}
+// ============================================
+// 课程中心配置类型
+// ============================================
 
-// 课程中心完整配置
-export interface CourseCenterConfig {
-  // 全局数据源ID（当表配置没有指定数据对象ID时使用）
-  dataSourceId?: string;
+export interface CourseCenterConfig extends AppBaseConfig {
   tables: {
-    undergraduateCourse: TableConfig<FieldMapping>;
-    graduateCourse: TableConfig<FieldMapping>;
+    undergraduateCourse: TableConfig<CourseFieldMapping>;
+    graduateCourse: TableConfig<CourseFieldMapping>;
     undergraduateTeaching: TableConfig<TeachingClassFieldMapping>;
     graduateTeaching: TableConfig<TeachingClassFieldMapping>;
     classroomStats: TableConfig<ClassroomStatsFieldMapping>;
@@ -155,7 +155,10 @@ export interface CourseCenterConfig {
   };
 }
 
+// ============================================
 // 默认配置
+// ============================================
+
 const defaultConfig: CourseCenterConfig = {
   tables: {
     undergraduateCourse: {
@@ -368,123 +371,158 @@ const defaultConfig: CourseCenterConfig = {
   },
 };
 
-let courseCenterConfig: CourseCenterConfig | null = null;
+// ============================================
+// 创建配置加载器（使用新框架）
+// ============================================
+
+const configLoader = createConfigLoader<CourseCenterConfig>(defaultConfig, {
+  configFileName: 'course-center.yaml',
+  legacyConfigPath: 'apps.courseCenter',
+});
+
+// ============================================
+// 创建数据查询服务
+// ============================================
+
+const queryService = createDataQueryService(configLoader.getDataSourceId());
+
+// ============================================
+// 向后兼容的 API
+// ============================================
 
 /**
  * 加载课程中心配置
- * 优先从单独配置文件加载，如果不存在则使用主配置文件或默认值
+ * @deprecated 使用 configLoader.load() 替代
  */
 export function loadCourseCenterConfig(): CourseCenterConfig {
-  if (courseCenterConfig) {
-    return courseCenterConfig;
-  }
-
-  const configPath = path.join(process.cwd(), 'config', 'course-center.yaml');
-
-  // 尝试从单独配置文件加载
-  if (fs.existsSync(configPath)) {
-    try {
-      const fileContents = fs.readFileSync(configPath, 'utf8');
-      const userConfig = yaml.load(fileContents) as Partial<CourseCenterConfig>;
-      
-      // 深度合并用户配置和默认配置
-      courseCenterConfig = deepMerge(defaultConfig, userConfig);
-      return courseCenterConfig;
-    } catch (error) {
-      console.warn('加载 course-center.yaml 失败，使用默认配置:', error);
-    }
-  }
-
-  // 尝试从主配置文件加载（向后兼容）
-  try {
-    const mainConfig = getConfig();
-    if (mainConfig.apps?.courseCenter) {
-      const legacyConfig = mainConfig.apps.courseCenter;
-      
-      // 构建兼容的配置
-      courseCenterConfig = {
-        dataSourceId: legacyConfig.dataSourceId || undefined,
-        tables: {
-          undergraduateCourse: {
-            ...defaultConfig.tables.undergraduateCourse,
-            name: legacyConfig.undergraduateCourseTableName || defaultConfig.tables.undergraduateCourse.name,
-          },
-          graduateCourse: {
-            ...defaultConfig.tables.graduateCourse,
-            name: legacyConfig.graduateCourseTableName || defaultConfig.tables.graduateCourse.name,
-          },
-          undergraduateTeaching: {
-            ...defaultConfig.tables.undergraduateTeaching,
-            name: legacyConfig.undergraduateTeachingTableName || defaultConfig.tables.undergraduateTeaching.name,
-          },
-          graduateTeaching: {
-            ...defaultConfig.tables.graduateTeaching,
-            name: legacyConfig.graduateTeachingTableName || defaultConfig.tables.graduateTeaching.name,
-          },
-          classroomStats: {
-            ...defaultConfig.tables.classroomStats,
-            name: legacyConfig.classroomStatsTableName || defaultConfig.tables.classroomStats.name,
-          },
-          undergraduateTextbook: {
-            ...defaultConfig.tables.undergraduateTextbook,
-            name: legacyConfig.undergraduateTextbookTableName || defaultConfig.tables.undergraduateTextbook.name,
-          },
-          supervisionRecord: {
-            ...defaultConfig.tables.supervisionRecord,
-            name: legacyConfig.supervisionRecordTableName || defaultConfig.tables.supervisionRecord.name,
-          },
-          undergraduateGrade: {
-            ...defaultConfig.tables.undergraduateGrade,
-            name: legacyConfig.undergraduateGradeTableName || defaultConfig.tables.undergraduateGrade.name,
-          },
-          graduateGrade: {
-            ...defaultConfig.tables.graduateGrade,
-            name: legacyConfig.graduateGradeTableName || defaultConfig.tables.graduateGrade.name,
-          },
-          courseIdeology: {
-            ...defaultConfig.tables.courseIdeology,
-            name: legacyConfig.courseIdeologyTableName || defaultConfig.tables.courseIdeology.name,
-          },
-        },
-      };
-      return courseCenterConfig;
-    }
-  } catch (error) {
-    console.warn('从主配置文件加载课程中心配置失败:', error);
-  }
-
-  // 使用默认配置
-  courseCenterConfig = defaultConfig;
-  return courseCenterConfig;
+  return configLoader.load();
 }
 
 /**
  * 获取课程中心配置
+ * @deprecated 使用 configLoader.getConfig() 替代
  */
 export function getCourseCenterConfig(): CourseCenterConfig {
-  if (!courseCenterConfig) {
-    return loadCourseCenterConfig();
-  }
-  return courseCenterConfig;
+  return configLoader.getConfig();
+}
+
+// ============================================
+// 新的便捷 API
+// ============================================
+
+/**
+ * 获取配置加载器实例
+ */
+export function getCourseCenterConfigLoader() {
+  return configLoader;
 }
 
 /**
- * 深度合并两个对象
+ * 获取数据查询服务实例
  */
-function deepMerge<T>(target: T, source: Partial<T>): T {
-  const result = { ...target };
-  
-  for (const key in source) {
-    if (source[key] !== undefined && source[key] !== null) {
-      if (typeof source[key] === 'object' && !Array.isArray(source[key])) {
-        result[key] = deepMerge(result[key] as unknown as Record<string, unknown>, source[key] as Record<string, unknown>) as unknown as T[Extract<keyof T, string>];
-      } else {
-        result[key] = source[key] as T[Extract<keyof T, string>];
-      }
-    }
-  }
-  
-  return result;
+export function getCourseCenterQueryService() {
+  return queryService;
 }
 
-export default getCourseCenterConfig;
+/**
+ * 通用查询接口
+ * 示例：
+ * ```typescript
+ * const result = await queryCourseCenterTable('undergraduateCourse', {
+ *   page: 1,
+ *   perPage: 10,
+ *   orderBy: 'kch'
+ * });
+ * ```
+ */
+export async function queryCourseCenterTable<T = Record<string, unknown>>(
+  tableName: keyof CourseCenterConfig['tables'],
+  options: QueryOptions = {}
+): Promise<QueryResult<T>> {
+  const tableConfig = configLoader.getTableConfig(tableName);
+  return queryService.queryByTableConfig<T>(tableConfig, options);
+}
+
+// ============================================
+// 课程中心数据服务类
+// ============================================
+
+export class CourseCenterDataService {
+  private configLoader = configLoader;
+  private queryService = queryService;
+
+  /**
+   * 查询本科生课程列表
+   */
+  async queryUndergraduateCourses(page = 1, pageSize = 10) {
+    return queryCourseCenterTable('undergraduateCourse', {
+      page,
+      perPage: pageSize,
+      orderBy: 'kch',
+    });
+  }
+
+  /**
+   * 查询研究生课程列表
+   */
+  async queryGraduateCourses(page = 1, pageSize = 10) {
+    return queryCourseCenterTable('graduateCourse', {
+      page,
+      perPage: pageSize,
+      orderBy: 'kch',
+    });
+  }
+
+  /**
+   * 根据课程代码查询课程
+   */
+  async queryCourseByCode(courseCode: string, type: 'undergraduate' | 'graduate' = 'undergraduate') {
+    const tableName = type === 'undergraduate' ? 'undergraduateCourse' : 'graduateCourse';
+    return queryCourseCenterTable(tableName, {
+      where: { courseCode },
+    });
+  }
+
+  /**
+   * 查询教学班列表
+   */
+  async queryTeachingClasses(
+    type: 'undergraduate' | 'graduate' = 'undergraduate',
+    page = 1,
+    pageSize = 10
+  ) {
+    const tableName = type === 'undergraduate' ? 'undergraduateTeaching' : 'graduateTeaching';
+    return queryCourseCenterTable(tableName, {
+      page,
+      perPage: pageSize,
+      orderBy: 'xnxqdm DESC, jxbh',
+    });
+  }
+
+  /**
+   * 查询课堂统计
+   */
+  async queryClassroomStats(page = 1, pageSize = 10) {
+    return queryCourseCenterTable('classroomStats', {
+      page,
+      perPage: pageSize,
+      orderBy: 'sksj DESC',
+    });
+  }
+
+  /**
+   * 重新加载配置
+   */
+  reloadConfig() {
+    this.configLoader.reload();
+    const newDataSourceId = this.configLoader.getDataSourceId();
+    if (newDataSourceId) {
+      this.queryService.setGlobalDataSourceId(newDataSourceId);
+    }
+  }
+}
+
+// 导出默认实例
+export const courseCenterDataService = new CourseCenterDataService();
+
+export default configLoader;

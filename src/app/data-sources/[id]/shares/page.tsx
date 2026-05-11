@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Space, Spin, Select, Tag, Typography, App } from 'antd';
+import { Card, Table, Button, Space, Spin, Input, Tag, Typography, App } from 'antd';
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -13,12 +13,6 @@ interface ShareRecord {
   shared_to: number;
   shared_to_name: string;
   shared_to_username: string;
-}
-
-interface User {
-  id: number;
-  username: string;
-  name: string;
 }
 
 interface DataSource {
@@ -52,16 +46,14 @@ export default function SharesPage() {
 
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [shares, setShares] = useState<ShareRecord[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [targetUserId, setTargetUserId] = useState<string>('');
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (dataSourceId) {
       fetchDataSource();
       fetchShares();
-      fetchUsers();
     }
   }, [dataSourceId]);
 
@@ -92,21 +84,9 @@ export default function SharesPage() {
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch('/api/users');
-      const data = await response.json();
-      if (data.success) {
-        setUsers(data.data || []);
-      }
-    } catch (error) {
-      console.error('Failed to fetch users:', error);
-    }
-  };
-
   const handleAddShare = async () => {
-    if (!selectedUserId) {
-      message.warning('请选择用户');
+    if (!targetUserId.trim()) {
+      message.warning('请输入用户ID或用户名');
       return;
     }
 
@@ -115,12 +95,12 @@ export default function SharesPage() {
       const response = await fetch(`/api/data-sources/${dataSourceId}/shares`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: selectedUserId }),
+        body: JSON.stringify({ user_identifier: targetUserId.trim() }),
       });
       const data = await response.json();
       if (data.success) {
         message.success('添加分享成功');
-        setSelectedUserId(null);
+        setTargetUserId('');
         fetchShares();
       } else {
         message.error(data.message || '添加失败');
@@ -148,10 +128,6 @@ export default function SharesPage() {
       message.error('取消失败');
     }
   };
-
-  const availableUsers = users.filter(
-    user => user.id !== dataSource?.created_by && !shares.some(s => s.shared_to === user.id)
-  );
 
   const columns = [
     {
@@ -219,26 +195,19 @@ export default function SharesPage() {
 
         <div style={{ marginBottom: '24px' }}>
           <Space>
-            <Select
+            <Input
               style={{ width: 300 }}
-              placeholder="选择用户进行分享"
-              value={selectedUserId}
-              onChange={setSelectedUserId}
-              options={availableUsers.map(user => ({
-                label: `${user.name || user.username} (${user.username})`,
-                value: user.id,
-              }))}
-              showSearch
-              filterOption={(input, option) =>
-                String(option?.label || '').toLowerCase().includes(input.toLowerCase())
-              }
+              placeholder="输入用户ID或用户名进行分享"
+              value={targetUserId}
+              onChange={(e) => setTargetUserId(e.target.value)}
+              onPressEnter={handleAddShare}
             />
             <Button
               type="primary"
               icon={<PlusOutlined />}
               onClick={handleAddShare}
               loading={adding}
-              disabled={!selectedUserId}
+              disabled={!targetUserId}
             >
               添加
             </Button>

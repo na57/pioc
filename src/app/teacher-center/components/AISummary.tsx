@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, Button, Row, Col, Typography, App, Empty } from 'antd';
 import { RobotOutlined, PlayCircleOutlined, CheckCircleOutlined, BookOutlined, TrophyOutlined, TeamOutlined, ExperimentOutlined } from '@ant-design/icons';
 import AiSummaryRenderer from '@/components/AiSummaryRenderer';
@@ -16,17 +16,56 @@ export default function AISummary({ gh }: AISummaryProps) {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState('');
   const [started, setStarted] = useState(false);
+  const [timeout, setTimeout] = useState(60);
+  const [remainingTime, setRemainingTime] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
 
   const fetchAISummary = async () => {
     setLoading(true);
     setStarted(true);
     setSummary('');
+    
+    // 先获取配置中的timeout值来启动倒计时
+    // 默认使用60秒，等待API返回后更新
+    const defaultTimeout = 60;
+    setTimeout(defaultTimeout);
+    setRemainingTime(defaultTimeout);
+    
+    // 启动倒计时
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+    timerRef.current = setInterval(() => {
+      setRemainingTime((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
     try {
       const response = await fetch(`/api/teacher-center?action=ai-summary&gh=${gh}`);
       const result = await response.json();
       
       if (result.success) {
         setSummary(result.data.summary);
+        // 更新实际的timeout值
+        if (result.data.timeout) {
+          setTimeout(result.data.timeout);
+        }
       } else {
         message.error(result.error || '生成AI总结失败');
       }
@@ -35,6 +74,11 @@ export default function AISummary({ gh }: AISummaryProps) {
       message.error('生成AI总结失败');
     } finally {
       setLoading(false);
+      // 请求完成后清理定时器
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     }
   };
 
@@ -102,7 +146,31 @@ export default function AISummary({ gh }: AISummaryProps) {
     );
   }
 
-  // 结果展示
+  // 加载中状态
+  if (loading) {
+    return (
+      <Card>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <RobotOutlined style={{ color: '#1677ff', fontSize: 20 }} />
+            <span style={{ fontWeight: 500, fontSize: 16 }}>AI教师画像总结</span>
+          </div>
+          {remainingTime > 0 && (
+            <Text type="secondary" style={{ fontSize: 14 }}>
+              预计还需等待: <Text strong style={{ color: '#1677ff' }}>{remainingTime}</Text> 秒
+            </Text>
+          )}
+        </div>
+        <AiSummaryRenderer 
+          summary={summary} 
+          loading={loading} 
+          loadingText={`AI 正在分析教师数据，请稍候...`}
+        />
+      </Card>
+    );
+  }
+
+  // 暂无数据状态
   if (!summary) {
     return (
       <Card>
@@ -115,6 +183,7 @@ export default function AISummary({ gh }: AISummaryProps) {
     );
   }
 
+  // 结果展示
   return (
     <Card>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
