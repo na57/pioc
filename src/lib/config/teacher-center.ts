@@ -498,7 +498,7 @@ export interface TeacherCenterConfig extends AppBaseConfig {
 // ============================================
 
 const defaultConfig: TeacherCenterConfig = {
-  dataSourceId: '6',
+  dataSourceId: '9',
   ai: {
     providerId: 'openai',
     model: 'gpt-4o',
@@ -787,7 +787,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateTeaching: {
       name: 't_dws_gxjx_bzksjsskxx_v11mx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'jsgh',
         teacherName: 'jsxm',
@@ -804,7 +803,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     graduateTeaching: {
       name: 't_dws_gxjx_yjsjsskxxmx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'jsgh',
         teacherName: 'jsxm',
@@ -847,7 +845,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateTeachingProject: {
       name: 't_dws_gxjx_bzksjxyjxmxxmx',
-      dataSourceId: '7',
       fields: {
         memberId: 'xmcygh',
         memberName: 'xmcyxm',
@@ -859,7 +856,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     graduateTeachingProject: {
       name: 't_gxjx_yjsjsjxyjxm',
-      dataSourceId: '6',
       fields: {
         teacherId: 'zcrzgh',
         teacherName: 'zcr',
@@ -871,7 +867,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     supervisionRecord: {
       name: 't_dws_ydxt_ydxtddjlmx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'bpr',
         teacherName: 'bprxm',
@@ -887,7 +882,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     classroomStats: {
       name: 't_ynu_gxjx_aikttjjg',
-      dataSourceId: '7',
       fields: {
         classId: 'jxbh',
         semesterName: 'xnxqmc',
@@ -903,7 +897,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     studentCompetitionAward: {
       name: 't_ynu_gxjx_jzgzdbksjshjxx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'jsgh',
         teacherName: 'jsxm',
@@ -915,7 +908,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateCourseInfo: {
       name: 't_dws_gxjx_bzkskcjbxxmx',
-      dataSourceId: '7',
       fields: {
         courseCode: 'kch',
         courseName: 'kcmc',
@@ -938,7 +930,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     graduateCourseInfo: {
       name: 't_dws_gxjx_yjskcxxmx',
-      dataSourceId: '7',
       fields: {
         courseCode: 'kch',
         courseName: 'kcmc',
@@ -961,7 +952,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateTextbook: {
       name: 't_dws_gxjx_bzksjcbjcxxmx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'gh',
         textbookId: 'jcbh',
@@ -975,7 +965,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     graduateTextbook: {
       name: 't_gxjx_yjsjsycbyjsjc',
-      dataSourceId: '6',
       fields: {
         teacherId: 'zbzgh',
         textbookId: 'jcbh',
@@ -989,7 +978,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateTeachingAward: {
       name: 't_dws_gxjx_bzksjxjljjxjsxmxxmx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'xmcygh',
         awardId: 'jxcgbh',
@@ -1002,7 +990,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     graduateTeachingAward: {
       name: 't_gxjx_yjsjsjxjljjxjsxm',
-      dataSourceId: '6',
       fields: {
         teacherId: 'hjrzgh',
         awardId: 'jxcgbh',
@@ -1015,7 +1002,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateTeachingPaper: {
       name: 't_dws_gxjx_bzksjsfblwxxmx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'gh',
         paperId: 'lwbh',
@@ -1028,7 +1014,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     graduateTeachingPaper: {
       name: 't_gxjx_yjsjsgkfbjylw',
-      dataSourceId: '6',
       fields: {
         teacherId: 'dyzzgzh',
         paperId: 'lwbh',
@@ -1041,7 +1026,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     undergraduateCourseTeam: {
       name: 't_dws_gxjx_bzkskcttcymx',
-      dataSourceId: '7',
       fields: {
         courseId: 'jxbh',
         teamMember: 'kctdcy',
@@ -1051,7 +1035,6 @@ const defaultConfig: TeacherCenterConfig = {
     },
     textbookAward: {
       name: 't_dws_gxjx_bzksjchjxxmx',
-      dataSourceId: '7',
       fields: {
         teacherId: 'gh',
         awardId: 'hjjcbh',

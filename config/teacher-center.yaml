@@ -381,6 +381,14 @@ tables:
   # 研究生教学项目
   graduateTeachingProject:
     dataObjectId: 5
+    # name: "t_gxjx_yjsjsjxyjxm"
+    # fields:
+    #   teacherId: "zcrzgh"
+    #   teacherName: "zcr"
+    #   projectName: "xmmc"
+    #   projectType: "xmlb"
+    #   startDate: "xmkssj"
+    #   memberRank: "brpm"
 
   # 督导记录
   supervisionRecord:

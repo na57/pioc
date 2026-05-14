@@ -22,6 +22,7 @@ import ResearchDashboard from '../components/ResearchDashboard';
 import CareerTimeline from '../components/CareerTimeline';
 import TeachingDashboard from '../components/TeachingDashboard';
 import AISummary from '../components/AISummary';
+import AIChat from '../components/AIChat';
 
 const { Title, Text } = Typography;
 
@@ -198,6 +199,11 @@ export default function TeacherDetailPage() {
             key: 'ai-summary',
             label: 'AI总结',
             children: <AISummary gh={gh} />,
+          },
+          {
+            key: 'ai-chat',
+            label: 'AI问答',
+            children: <AIChat gh={gh} teacherName={teacher?.xm || ''} />,
           },
         ]}
       />
