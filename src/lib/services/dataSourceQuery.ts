@@ -33,10 +33,10 @@ class DataSourceQueryService {
 
       if (dataSource.type === 'mysql') {
         data = await this.executeMySQLQuery(dataSource, queryStatement, options);
-        total = await this.getMySQLTotalCount(dataSource, queryStatement);
+        total = await this.getMySQLTotalCount(dataSource, queryStatement, options);
       } else if (dataSource.type === 'mongodb') {
         data = await this.executeMongoDBQuery(dataSource, queryStatement, options);
-        total = await this.getMongoDBTotalCount(dataSource, queryStatement);
+        total = await this.getMongoDBTotalCount(dataSource, queryStatement, options);
       } else {
         throw new Error(`不支持的数据源类型: ${dataSource.type}`);
       }
@@ -71,14 +71,8 @@ class DataSourceQueryService {
     });
 
     try {
-      // 添加分页限制
-      let finalQuery = queryStatement;
-      let queryParams: unknown[] = [];
-      if (options?.page && options?.pageSize) {
-        const offset = (options.page - 1) * options.pageSize;
-        finalQuery = `${queryStatement} LIMIT ? OFFSET ?`;
-        queryParams = [options.pageSize, offset];
-      }
+      // 构建带筛选条件的查询
+      const { finalQuery, queryParams } = this.buildMySQLQuery(queryStatement, options);
 
       const [rows] = await connection.query(finalQuery, queryParams);
       return rows as any[];
@@ -87,9 +81,44 @@ class DataSourceQueryService {
     }
   }
 
+  private buildMySQLQuery(queryStatement: string, options?: QueryOptions): { finalQuery: string; queryParams: unknown[] } {
+    let finalQuery = queryStatement;
+    let queryParams: unknown[] = [];
+    let hasWhere = queryStatement.match(/WHERE/i);
+
+    // 添加筛选条件
+    if (options?.filters && Object.keys(options.filters).length > 0) {
+      const conditions: string[] = [];
+      Object.entries(options.filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          conditions.push(`${key} LIKE ?`);
+          queryParams.push(`%${value}%`);
+        }
+      });
+
+      if (conditions.length > 0) {
+        if (hasWhere) {
+          finalQuery = `${finalQuery} AND ${conditions.join(' AND ')}`;
+        } else {
+          finalQuery = `${finalQuery} WHERE ${conditions.join(' AND ')}`;
+        }
+      }
+    }
+
+    // 添加分页限制
+    if (options?.page && options?.pageSize) {
+      const offset = (options.page - 1) * options.pageSize;
+      finalQuery = `${finalQuery} LIMIT ? OFFSET ?`;
+      queryParams.push(options.pageSize, offset);
+    }
+
+    return { finalQuery, queryParams };
+  }
+
   private async getMySQLTotalCount(
     dataSource: DataSource,
-    queryStatement: string
+    queryStatement: string,
+    options?: QueryOptions
   ): Promise<number> {
     const connection = await mysql.createConnection({
       host: dataSource.host,
@@ -101,9 +130,32 @@ class DataSourceQueryService {
     });
 
     try {
+      // 构建带筛选条件的计数查询
+      let countQuery = queryStatement;
+      let countParams: unknown[] = [];
+      let hasWhere = queryStatement.match(/WHERE/i);
+
+      if (options?.filters && Object.keys(options.filters).length > 0) {
+        const conditions: string[] = [];
+        Object.entries(options.filters).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            conditions.push(`${key} LIKE ?`);
+            countParams.push(`%${value}%`);
+          }
+        });
+
+        if (conditions.length > 0) {
+          if (hasWhere) {
+            countQuery = `${countQuery} AND ${conditions.join(' AND ')}`;
+          } else {
+            countQuery = `${countQuery} WHERE ${conditions.join(' AND ')}`;
+          }
+        }
+      }
+
       // 将原始查询包装为子查询来计算总数
-      const countQuery = `SELECT COUNT(*) as total FROM (${queryStatement}) as t`;
-      const [rows] = await connection.query(countQuery);
+      const wrappedCountQuery = `SELECT COUNT(*) as total FROM (${countQuery}) as t`;
+      const [rows] = await connection.query(wrappedCountQuery, countParams);
       const result = rows as { total: number }[];
       return result[0]?.total || 0;
     } finally {
@@ -152,7 +204,8 @@ class DataSourceQueryService {
 
   private async getMongoDBTotalCount(
     dataSource: DataSource,
-    queryStatement: string
+    queryStatement: string,
+    options?: QueryOptions
   ): Promise<number> {
     const uri = `mongodb://${dataSource.username}:${encodeURIComponent(dataSource.password)}@${dataSource.host}:${dataSource.port}/${dataSource.db_name}`;
     const client = new MongoClient(uri, {
@@ -200,7 +253,7 @@ class DataSourceQueryService {
   private parseMongoQuery(query: string): Document[] {
     try {
       // Try to extract aggregation pipeline - use [\s\S] instead of s flag for compatibility
-      const aggregateMatch = query.match(/aggregate\s*\(([\s\S]*)\)/);
+      const aggregateMatch = query.match(/aggregate\(([\s\S]*)\)/);
       if (aggregateMatch) {
         const pipelineStr = aggregateMatch[1].trim();
         return JSON.parse(pipelineStr) as Document[];

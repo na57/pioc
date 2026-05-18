@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
@@ -14,8 +14,19 @@ import {
   App,
   Row,
   Col,
+  Input,
+  Button,
+  Space,
+  Tooltip,
+  Badge,
 } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
+import {
+  EyeOutlined,
+  SearchOutlined,
+  DownloadOutlined,
+  FilterOutlined,
+  ClearOutlined,
+} from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 
@@ -38,6 +49,12 @@ interface QueryResult {
   };
 }
 
+interface FilterConfig {
+  field: string;
+  label: string;
+  value: string;
+}
+
 export default function DataObjectQueryPage() {
   const params = useParams();
   const router = useRouter();
@@ -52,6 +69,14 @@ export default function DataObjectQueryPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<Record<string, unknown> | null>(null);
   const [fieldCommentsMap, setFieldCommentsMap] = useState<Record<string, string>>({});
+
+  // 筛选状态
+  const [filters, setFilters] = useState<FilterConfig[]>([]);
+  const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
+  const [filterVisible, setFilterVisible] = useState(false);
+
+  // 导出状态
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchDataObject();
@@ -77,13 +102,18 @@ export default function DataObjectQueryPage() {
     }
   };
 
-  const fetchQueryData = async (page: number, size: number) => {
+  const fetchQueryData = async (page: number, size: number, currentFilters?: Record<string, string>) => {
     setLoading(true);
     try {
+      const filterData = currentFilters || activeFilters;
       const response = await fetch(`/api/data-objects/${dataObjectId}/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page, pageSize: size }),
+        body: JSON.stringify({
+          page,
+          pageSize: size,
+          filters: filterData,
+        }),
       });
 
       const data = await response.json();
@@ -96,6 +126,18 @@ export default function DataObjectQueryPage() {
             commentsMap[field.name] = field.comment;
           });
           setFieldCommentsMap(commentsMap);
+
+          // 初始化筛选配置（仅在第一次获取数据时）
+          if (filters.length === 0) {
+            const initialFilters = data.data.fieldComments
+              .filter((field: { name: string }) => !field.name.startsWith('_'))
+              .map((field: { name: string; comment: string }) => ({
+                field: field.name,
+                label: field.comment || field.name,
+                value: '',
+              }));
+            setFilters(initialFilters);
+          }
         }
       } else {
         message.error(data.message || '查询失败');
@@ -119,12 +161,115 @@ export default function DataObjectQueryPage() {
 
   const renderDisplayContent = (record: Record<string, unknown>) => {
     if (!dataObject) return '';
-    
+
     let display = dataObject.display_template;
     Object.keys(record).forEach((key) => {
       display = display.replace(new RegExp(`{{${key}}}`, 'g'), String(record[key] ?? ''));
     });
     return display;
+  };
+
+  // 处理筛选变化
+  const handleFilterChange = (field: string, value: string) => {
+    setFilters((prev) =>
+      prev.map((f) => (f.field === field ? { ...f, value } : f))
+    );
+  };
+
+  // 应用筛选
+  const applyFilters = () => {
+    const newActiveFilters: Record<string, string> = {};
+    filters.forEach((f) => {
+      if (f.value.trim()) {
+        newActiveFilters[f.field] = f.value.trim();
+      }
+    });
+    setActiveFilters(newActiveFilters);
+    setCurrentPage(1);
+    fetchQueryData(1, pageSize, newActiveFilters);
+  };
+
+  // 清除筛选
+  const clearFilters = () => {
+    setFilters((prev) => prev.map((f) => ({ ...f, value: '' })));
+    setActiveFilters({});
+    setCurrentPage(1);
+    fetchQueryData(1, pageSize, {});
+  };
+
+  // 获取激活的筛选数量
+  const getActiveFilterCount = () => {
+    return Object.keys(activeFilters).length;
+  };
+
+  // 导出数据
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch(`/api/data-objects/${dataObjectId}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          export: true,
+          filters: activeFilters,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        const list = data.data.list as Record<string, unknown>[];
+        const fieldComments = data.data.fieldComments as { name: string; comment: string }[] || [];
+
+        if (list.length === 0) {
+          message.warning('没有数据可导出');
+          return;
+        }
+
+        // 构建CSV内容
+        const headers = Object.keys(list[0]).filter((key) => !key.startsWith('_'));
+        const headerLabels = headers.map((h) => {
+          const comment = fieldComments.find((f) => f.name === h);
+          return comment ? `${comment.comment}(${h})` : h;
+        });
+
+        const csvContent = [
+          // BOM for UTF-8
+          '\uFEFF' + headerLabels.join(','),
+          ...list.map((row) =>
+            headers
+              .map((header) => {
+                const value = row[header];
+                const cellValue = value === null || value === undefined ? '' : String(value);
+                // 处理包含逗号、换行符或双引号的单元格
+                if (cellValue.includes(',') || cellValue.includes('\n') || cellValue.includes('"')) {
+                  return `"${cellValue.replace(/"/g, '""')}"`;
+                }
+                return cellValue;
+              })
+              .join(',')
+          ),
+        ].join('\n');
+
+        // 创建下载链接
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = `${dataObject?.name || '数据导出'}_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        message.success(`成功导出 ${list.length} 条数据`);
+      } else {
+        message.error(data.message || '导出失败');
+      }
+    } catch {
+      message.error('导出失败');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (!dataObject) {
@@ -140,11 +285,29 @@ export default function DataObjectQueryPage() {
       <Card
         title={dataObject.name}
         extra={
-          <ActionButton
-            icon={<EyeOutlined />}
-            tooltip="返回列表"
-            onClick={() => router.push('/data-objects')}
-          />
+          <Space>
+            <Tooltip title="筛选">
+              <Badge count={getActiveFilterCount()} size="small">
+                <Button
+                  icon={<FilterOutlined />}
+                  onClick={() => setFilterVisible(!filterVisible)}
+                  type={filterVisible ? 'primary' : 'default'}
+                />
+              </Badge>
+            </Tooltip>
+            <Button
+              icon={<DownloadOutlined />}
+              loading={exporting}
+              onClick={handleExport}
+            >
+              导出
+            </Button>
+            <ActionButton
+              icon={<EyeOutlined />}
+              tooltip="返回列表"
+              onClick={() => router.push('/data-objects')}
+            />
+          </Space>
         }
       >
         <Alert
@@ -152,6 +315,58 @@ export default function DataObjectQueryPage() {
           type="info"
           style={{ marginBottom: 16 }}
         />
+
+        {/* 筛选区域 */}
+        {filterVisible && (
+          <Card
+            size="small"
+            title={
+              <Space>
+                <FilterOutlined />
+                <span>数据筛选</span>
+                {getActiveFilterCount() > 0 && (
+                  <Tag color="blue">{getActiveFilterCount()} 个条件</Tag>
+                )}
+              </Space>
+            }
+            extra={
+              <Space>
+                <Button
+                  icon={<ClearOutlined />}
+                  size="small"
+                  onClick={clearFilters}
+                  disabled={getActiveFilterCount() === 0}
+                >
+                  清除
+                </Button>
+                <Button
+                  icon={<SearchOutlined />}
+                  type="primary"
+                  size="small"
+                  onClick={applyFilters}
+                >
+                  查询
+                </Button>
+              </Space>
+            }
+            style={{ marginBottom: 16 }}
+          >
+            <Row gutter={[16, 16]}>
+              {filters.map((filter) => (
+                <Col key={filter.field} xs={24} sm={12} md={8} lg={6} xl={6}>
+                  <Input
+                    placeholder={`筛选: ${filter.label}`}
+                    value={filter.value}
+                    onChange={(e) => handleFilterChange(filter.field, e.target.value)}
+                    onPressEnter={applyFilters}
+                    allowClear
+                    prefix={<SearchOutlined />}
+                  />
+                </Col>
+              ))}
+            </Row>
+          </Card>
+        )}
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: 40 }}>

@@ -61,12 +61,14 @@ async function queryHandler(
     const body = await request.json().catch(() => ({}));
     const page = body.page || 1;
     const pageSize = body.pageSize || 20;
+    const filters = body.filters || {};
+    const exportData = body.export === true;
 
     // 执行查询
     const result = await queryService.executeQuery(
       dataSource,
       dataObject.query_statement,
-      { page, pageSize }
+      { page, pageSize, filters }
     );
 
     if (!result.success) {
@@ -74,6 +76,31 @@ async function queryHandler(
         { success: false, message: `查询失败: ${result.error}` },
         { status: 500 }
       );
+    }
+
+    // 如果是导出请求，返回所有数据（不分页）
+    if (exportData) {
+      const exportResult = await queryService.executeQuery(
+        dataSource,
+        dataObject.query_statement,
+        { filters }
+      );
+
+      if (!exportResult.success) {
+        return NextResponse.json(
+          { success: false, message: `导出失败: ${exportResult.error}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          list: exportResult.data,
+          fieldComments: result.fieldComments || [],
+          total: exportResult.total || 0,
+        },
+      });
     }
 
     // 应用显示模板渲染预览
