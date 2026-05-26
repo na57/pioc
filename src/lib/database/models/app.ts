@@ -18,6 +18,7 @@ export const BUILTIN_APPS = {
   WECOM_ACCOUNTS: 14,    // 企微账号
   WECOM_APPS: 15,        // 企微应用
   TEACHER_CENTER: 16,    // 教师中心
+  IDC_ROOM: 17,          // IDC机房管理
 } as const;
 
 // 内置应用URL映射
@@ -38,6 +39,7 @@ export const BUILTIN_APP_URLS = {
   '/wecom-accounts': BUILTIN_APPS.WECOM_ACCOUNTS,
   '/wecom-apps': BUILTIN_APPS.WECOM_APPS,
   '/teacher-center': BUILTIN_APPS.TEACHER_CENTER,
+  '/idc': BUILTIN_APPS.IDC_ROOM,
 } as const;
 
 export interface App {

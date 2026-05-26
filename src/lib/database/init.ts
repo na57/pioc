@@ -351,7 +351,9 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (12, '打标作业', '创建和管理数据打标作业，支持多人协作打标', 'FlagOutlined', '/labeling-tasks', 1),
   (13, '课程中心', '查看本科生和研究生课程信息，支持课程查询、教学班和课堂统计查看', 'BookOutlined', '/course-center', 1),
   (14, '企微账号', '管理企业微信账号信息，包括CorpId、名称等', 'WechatOutlined', '/wecom-accounts', 1),
-  (15, '企微应用', '管理企业微信应用信息，包括应用名称、Secret、AgentId等', 'AppstoreOutlined', '/wecom-apps', 1);
+  (15, '企微应用', '管理企业微信应用信息，包括应用名称、Secret、AgentId等', 'AppstoreOutlined', '/wecom-apps', 1),
+  (16, '教师中心', '查看教师详细信息，包括教职生涯、科研情况、教学情况等', 'UserOutlined', '/teacher-center', 1),
+  (17, 'IDC机房管理', '管理机房基础设施、环境设备、机柜及设备信息', 'DatabaseOutlined', '/idc', 1);
 
 -- 插入默认菜单
 INSERT IGNORE INTO pioc_menus (id, name, path, icon, parent_id, sort_order, status, app_id) VALUES
