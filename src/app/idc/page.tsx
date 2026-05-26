@@ -5,7 +5,6 @@ import { Card, Row, Col, Statistic, Table, Button, Tag, Space, Spin, Modal, Form
 import { DatabaseOutlined, HddOutlined, DesktopOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
-import FriendlyTime from '@/components/FriendlyTime';
 import dayjs from 'dayjs';
 
 interface Room {
@@ -167,10 +166,9 @@ export default function IdcHomePage() {
       ),
     },
     {
-      title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      render: (text: string) => <FriendlyTime date={text} />,
+      title: '负责人',
+      dataIndex: 'contactPerson',
+      key: 'contactPerson',
     },
     {
       title: '操作',

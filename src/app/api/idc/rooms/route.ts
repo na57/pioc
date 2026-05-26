@@ -141,9 +141,29 @@ async function getRoomsHandler(request: NextRequest) {
       );
     }
 
+    // 转换字段名为驼峰命名
+    const camelCaseData = filteredData.map((room: Record<string, unknown>) => ({
+      id: room.id,
+      name: room.name,
+      code: room.code,
+      location: room.location,
+      floor: room.floor,
+      area: room.area,
+      fireProtectionInfo: room.fire_protection_info,
+      securityInfo: room.security_info,
+      contactPerson: room.contact_person,
+      contactPhone: room.contact_phone,
+      builtDate: room.built_date,
+      remark: room.remark,
+      status: room.status,
+      sortOrder: room.sort_order,
+      createdAt: room.created_at,
+      updatedAt: room.updated_at,
+    }));
+
     return NextResponse.json({
       success: true,
-      data: filteredData,
+      data: camelCaseData,
       total: result.total || filteredData.length,
       page,
       pageSize,
