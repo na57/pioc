@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, Descriptions, Table, Button, Space, Tag, Spin, Row, Col, Statistic, Tabs, Modal, Form, Input, InputNumber, Select, message, App, Progress } from 'antd';
+import { Card, Descriptions, Table, Button, Space, Tag, Spin, Row, Col, Statistic, Tabs, Modal, Form, Input, InputNumber, Select, message, App, Progress, Grid } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 import { v4 as uuidv4 } from 'uuid';
+
+const { useBreakpoint } = Grid;
 
 interface Room {
   id: string;
@@ -111,6 +113,8 @@ export default function RoomDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const id = params.id as string;
 
   const [loading, setLoading] = useState(true);
@@ -266,12 +270,13 @@ export default function RoomDetailPage() {
 
   const getDeviceColumns = (type: DeviceType) => {
     const baseColumns = [
-      { title: '设备名称', dataIndex: 'name', key: 'name' },
-      { title: '型号', dataIndex: 'model', key: 'model' },
+      { title: '设备名称', dataIndex: 'name', key: 'name', width: 120, fixed: isMobile ? undefined : 'left' },
+      { title: '型号', dataIndex: 'model', key: 'model', width: 100, responsive: ['md'] },
       {
         title: '状态',
         dataIndex: 'status',
         key: 'status',
+        width: 80,
         render: (status: number) => {
           let info;
           if (type === 'battery') {
@@ -287,8 +292,10 @@ export default function RoomDetailPage() {
       {
         title: '操作',
         key: 'action',
+        width: 100,
+        fixed: isMobile ? undefined : 'right',
         render: (_: unknown, record: Record<string, unknown>) => (
-          <Space>
+          <Space size="small">
             <ActionButton
               icon={<EditOutlined />}
               tooltip="编辑"
@@ -309,32 +316,40 @@ export default function RoomDetailPage() {
 
     if (type === 'ac') {
       return [
-        ...baseColumns.slice(0, 2),
-        { title: '制冷量(KW)', dataIndex: 'coolingCapacity', key: 'coolingCapacity' },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo' },
-        ...baseColumns.slice(2),
+        baseColumns[0],
+        { title: '制冷量(KW)', dataIndex: 'coolingCapacity', key: 'coolingCapacity', width: 100, responsive: ['lg'] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        baseColumns[1],
+        baseColumns[2],
+        baseColumns[3],
       ];
     } else if (type === 'ups') {
       return [
-        ...baseColumns.slice(0, 2),
-        { title: '容量(KVA)', dataIndex: 'capacity', key: 'capacity' },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo' },
-        ...baseColumns.slice(2),
+        baseColumns[0],
+        { title: '容量(KVA)', dataIndex: 'capacity', key: 'capacity', width: 100, responsive: ['lg'] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        baseColumns[1],
+        baseColumns[2],
+        baseColumns[3],
       ];
     } else if (type === 'battery') {
       return [
         baseColumns[0],
-        { title: '电池数量', dataIndex: 'batteryCount', key: 'batteryCount' },
-        { title: '总容量(AH)', dataIndex: 'totalCapacity', key: 'totalCapacity' },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo' },
-        ...baseColumns.slice(2),
+        { title: '电池数量', dataIndex: 'batteryCount', key: 'batteryCount', width: 90, responsive: ['md'] },
+        { title: '总容量(AH)', dataIndex: 'totalCapacity', key: 'totalCapacity', width: 100, responsive: ['lg'] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        baseColumns[1],
+        baseColumns[2],
+        baseColumns[3],
       ];
     } else if (type === 'generator') {
       return [
-        ...baseColumns.slice(0, 2),
-        { title: '功率(KW)', dataIndex: 'power', key: 'power' },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo' },
-        ...baseColumns.slice(2),
+        baseColumns[0],
+        { title: '功率(KW)', dataIndex: 'power', key: 'power', width: 100, responsive: ['lg'] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        baseColumns[1],
+        baseColumns[2],
+        baseColumns[3],
       ];
     }
     return baseColumns;
@@ -345,6 +360,8 @@ export default function RoomDetailPage() {
       title: '机柜名称',
       dataIndex: 'name',
       key: 'name',
+      width: isMobile ? 100 : 150,
+      fixed: isMobile ? undefined : 'left',
       render: (name: string, record: Cabinet) => (
         <a onClick={() => router.push(`/idc/cabinets/${record.id}`)}>{name}</a>
       ),
@@ -352,11 +369,11 @@ export default function RoomDetailPage() {
     {
       title: 'U位使用',
       key: 'uUsage',
-      width: 200,
+      width: isMobile ? 120 : 180,
       render: (_: unknown, record: Cabinet) => {
         const percent = record.totalU > 0 ? Math.round((record.usedU / record.totalU) * 100) : 0;
         return (
-          <div style={{ width: 180 }}>
+          <div style={{ width: isMobile ? 100 : 160 }}>
             <Progress percent={percent} size="small" format={() => `${record.usedU}/${record.totalU}`} />
           </div>
         );
@@ -365,11 +382,12 @@ export default function RoomDetailPage() {
     {
       title: '功耗使用',
       key: 'powerUsage',
-      width: 200,
+      width: isMobile ? 120 : 180,
+      responsive: ['md'],
       render: (_: unknown, record: Cabinet) => {
         const percent = record.ratedPower > 0 ? Math.round((record.usedPower / record.ratedPower) * 100) : 0;
         return (
-          <div style={{ width: 180 }}>
+          <div style={{ width: isMobile ? 100 : 160 }}>
             <Progress percent={percent} size="small" format={() => `${record.usedPower}/${record.ratedPower}W`} />
           </div>
         );
@@ -379,13 +397,16 @@ export default function RoomDetailPage() {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 80,
       render: (status: number) => status === 1 ? <Tag color="green">可用</Tag> : <Tag color="red">不可用</Tag>,
     },
     {
       title: '操作',
       key: 'action',
+      width: 100,
+      fixed: isMobile ? undefined : 'right',
       render: (_: unknown, record: Cabinet) => (
-        <Space>
+        <Space size="small">
           <ActionButton
             icon={<EditOutlined />}
             tooltip="编辑"
@@ -407,17 +428,25 @@ export default function RoomDetailPage() {
   const renderDeviceTable = (type: DeviceType, data: unknown[]) => (
     <>
       <div style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAddDevice(type)}>
+        <Button 
+          type="primary" 
+          icon={<PlusOutlined />} 
+          onClick={() => handleAddDevice(type)}
+          size={isMobile ? 'small' : 'middle'}
+        >
           新增{deviceTypeConfig[type].name}
         </Button>
       </div>
-      <Table
-        dataSource={data as Record<string, unknown>[]}
-        columns={getDeviceColumns(type)}
-        rowKey="id"
-        pagination={false}
-        size="small"
-      />
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px -12px' : 0 }}>
+        <Table
+          dataSource={data as Record<string, unknown>[]}
+          columns={getDeviceColumns(type)}
+          rowKey="id"
+          pagination={false}
+          size={isMobile ? 'small' : 'middle'}
+          scroll={{ x: isMobile ? 300 : undefined }}
+        />
+      </div>
     </>
   );
 
@@ -483,7 +512,11 @@ export default function RoomDetailPage() {
       </Row>
 
       <Card>
-        <Descriptions bordered column={3}>
+        <Descriptions 
+          bordered 
+          column={{ xs: 1, sm: 2, md: 3 }}
+          size={isMobile ? 'small' : 'large'}
+        >
           <Descriptions.Item label="机房名称">{room.name}</Descriptions.Item>
           <Descriptions.Item label="编号">{room.code}</Descriptions.Item>
           <Descriptions.Item label="状态">
@@ -495,9 +528,9 @@ export default function RoomDetailPage() {
           <Descriptions.Item label="负责人">{room.contactPerson || '-'}</Descriptions.Item>
           <Descriptions.Item label="联系电话">{room.contactPhone || '-'}</Descriptions.Item>
           <Descriptions.Item label="建成时间">{room.builtDate || '-'}</Descriptions.Item>
-          <Descriptions.Item label="消防系统" span={2}>{room.fireProtectionInfo || '-'}</Descriptions.Item>
+          <Descriptions.Item label="消防系统" span={{ xs: 1, sm: 2, md: 2 }}>{room.fireProtectionInfo || '-'}</Descriptions.Item>
           <Descriptions.Item label="门禁/监控">{room.securityInfo || '-'}</Descriptions.Item>
-          <Descriptions.Item label="备注" span={3}>{room.remark || '-'}</Descriptions.Item>
+          <Descriptions.Item label="备注" span={{ xs: 1, sm: 2, md: 3 }}>{room.remark || '-'}</Descriptions.Item>
         </Descriptions>
       </Card>
     </>
@@ -507,16 +540,25 @@ export default function RoomDetailPage() {
   const cabinetsContent = (
     <>
       <div style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddCabinet}>
+        <Button 
+          type="primary" 
+          icon={<PlusOutlined />} 
+          onClick={handleAddCabinet}
+          size={isMobile ? 'small' : 'middle'}
+        >
           新增机柜
         </Button>
       </div>
-      <Table
-        dataSource={cabinets}
-        columns={cabinetColumns}
-        rowKey="id"
-        pagination={false}
-      />
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px -12px' : 0 }}>
+        <Table
+          dataSource={cabinets}
+          columns={cabinetColumns}
+          rowKey="id"
+          pagination={false}
+          size={isMobile ? 'small' : 'middle'}
+          scroll={{ x: isMobile ? 400 : undefined }}
+        />
+      </div>
     </>
   );
 
@@ -585,7 +627,8 @@ export default function RoomDetailPage() {
         open={isModalOpen}
         onOk={() => form.submit()}
         onCancel={() => setIsModalOpen(false)}
-        width={600}
+        width={isMobile ? '95%' : 600}
+        style={{ maxWidth: 600 }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmitDevice}>
           <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请输入设备名称' }]}>
@@ -655,7 +698,8 @@ export default function RoomDetailPage() {
         open={isCabinetModalOpen}
         onOk={() => cabinetForm.submit()}
         onCancel={() => setIsCabinetModalOpen(false)}
-        width={600}
+        width={isMobile ? '95%' : 600}
+        style={{ maxWidth: 600 }}
       >
         <Form form={cabinetForm} layout="vertical" onFinish={handleSubmitCabinet}>
           <Form.Item name="name" label="机柜名称" rules={[{ required: true, message: '请输入机柜名称' }]}>

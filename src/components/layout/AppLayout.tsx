@@ -281,8 +281,8 @@ function AppLayout({ children }: AppLayoutProps) {
 
   // 响应式内容内边距
   const getContentPadding = () => {
-    if (isMobile) return '16px';
-    if (!screens.lg) return '24px';
+    if (isMobile) return '8px';
+    if (!screens.lg) return '16px';
     return '24px 48px';
   };
 
@@ -396,8 +396,8 @@ function AppLayout({ children }: AppLayoutProps) {
           placement="left"
           open={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
-          width={280}
-          bodyStyle={{ padding: 0 }}
+          size="large"
+          styles={{ body: { padding: 0 } }}
         >
           {menuLoading ? (
             <div style={{ padding: 24 }}>

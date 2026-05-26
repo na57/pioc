@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, Descriptions, Table, Button, Space, Tag, Spin, Progress, Row, Col, Tabs, Modal, Form, Input, InputNumber, Select } from 'antd';
+import { Card, Descriptions, Table, Button, Space, Tag, Spin, Progress, Row, Col, Tabs, Modal, Form, Input, InputNumber, Select, Grid } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, DatabaseOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 import { App } from 'antd';
+
+const { useBreakpoint } = Grid;
 
 interface Cabinet {
   id: string;
@@ -57,6 +59,8 @@ export default function CabinetDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const id = params.id as string;
 
   const [loading, setLoading] = useState(true);
@@ -187,7 +191,7 @@ export default function CabinetDetailPage() {
     {
       title: 'U位',
       key: 'u',
-      width: 100,
+      width: isMobile ? 60 : 100,
       align: 'center' as const,
       render: (_: unknown, record: { u: number; device: Device | null; isStart: boolean }) => {
         if (!record.device || !record.isStart) {
@@ -219,19 +223,19 @@ export default function CabinetDetailPage() {
         return (
           <div style={{
             background: '#f0f5ff',
-            padding: '8px 12px',
+            padding: isMobile ? '4px 8px' : '8px 12px',
             borderRadius: 4,
             border: '1px solid #d6e4ff',
           }}>
-            <div style={{ fontWeight: 500, marginBottom: 4 }}>
+            <div style={{ fontWeight: 500, marginBottom: 4, fontSize: isMobile ? 13 : 14 }}>
               {record.device.name}
             </div>
-            <Space size="small">
+            <Space size="small" wrap>
               <Tag color={typeInfo.color}>{typeInfo.label}</Tag>
               <Tag color={statusInfo.color}>{statusInfo.label}</Tag>
               {record.device.ratedPower && <Tag>{record.device.ratedPower}W</Tag>}
             </Space>
-            <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>
+            <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: '#666' }}>
               {record.device.brandModel} | {record.device.assetNo || '无资产编号'}
             </div>
           </div>
@@ -241,12 +245,12 @@ export default function CabinetDetailPage() {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: isMobile ? 80 : 120,
       render: (_: unknown, record: { u: number; device: Device | null; isStart: boolean }) => {
         if (!record.device || !record.isStart) return null;
 
         return (
-          <Space>
+          <Space size="small">
             <ActionButton
               icon={<EditOutlined />}
               tooltip="修改"
@@ -267,28 +271,31 @@ export default function CabinetDetailPage() {
   ];
 
   const deviceColumns = [
-    { title: '设备名称', dataIndex: 'name', key: 'name' },
+    { title: '设备名称', dataIndex: 'name', key: 'name', width: 120 },
     {
       title: '类型',
       dataIndex: 'deviceType',
       key: 'deviceType',
+      width: 80,
       render: (type: number) => {
         const info = deviceTypeMap[type] || { label: '未知', color: 'default' };
         return <Tag color={info.color}>{info.label}</Tag>;
       },
     },
-    { title: '品牌型号', dataIndex: 'brandModel', key: 'brandModel' },
-    { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo' },
+    { title: '品牌型号', dataIndex: 'brandModel', key: 'brandModel', width: 120, responsive: ['md'] },
+    { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
     {
       title: 'U位',
       key: 'uPosition',
+      width: 80,
       render: (_: unknown, record: Device) => `U${record.startU}-${record.startU + record.occupyU - 1}`,
     },
-    { title: '功耗(W)', dataIndex: 'ratedPower', key: 'ratedPower' },
+    { title: '功耗(W)', dataIndex: 'ratedPower', key: 'ratedPower', width: 90, responsive: ['lg'] },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 80,
       render: (status: number) => {
         const info = statusMap[status] || { label: '未知', color: 'default' };
         return <Tag color={info.color}>{info.label}</Tag>;
@@ -297,8 +304,9 @@ export default function CabinetDetailPage() {
     {
       title: '操作',
       key: 'action',
+      width: 100,
       render: (_: unknown, record: Device) => (
-        <Space>
+        <Space size="small">
           <ActionButton
             icon={<EditOutlined />}
             tooltip="修改"
@@ -349,8 +357,12 @@ export default function CabinetDetailPage() {
     <>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} lg={16}>
-          <Card title="机柜信息">
-            <Descriptions bordered column={2}>
+          <Card title="机柜信息" styles={{ body: { padding: isMobile ? 12 : 24 } }}>
+            <Descriptions 
+              bordered 
+              column={{ xs: 1, sm: 2 }}
+              size={isMobile ? 'small' : 'large'}
+            >
               <Descriptions.Item label="机柜名称">{cabinet.name}</Descriptions.Item>
               <Descriptions.Item label="编号">{cabinet.code}</Descriptions.Item>
               <Descriptions.Item label="所属机房">
@@ -374,14 +386,14 @@ export default function CabinetDetailPage() {
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card title="容量统计">
+          <Card title="容量统计" styles={{ body: { padding: isMobile ? 12 : 24 } }}>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ marginBottom: 8 }}>U位使用: {cabinet.usedU}/{cabinet.totalU}</div>
-              <Progress percent={uUsagePercent} status={uUsagePercent > 90 ? 'exception' : 'normal'} />
+              <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>U位使用: {cabinet.usedU}/{cabinet.totalU}</div>
+              <Progress percent={uUsagePercent} status={uUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'default'} />
             </div>
             <div>
-              <div style={{ marginBottom: 8 }}>功耗使用: {cabinet.usedPower}W/{cabinet.ratedPower}W</div>
-              <Progress percent={powerUsagePercent} status={powerUsagePercent > 90 ? 'exception' : 'normal'} />
+              <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>功耗使用: {cabinet.usedPower}W/{cabinet.ratedPower}W</div>
+              <Progress percent={powerUsagePercent} status={powerUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'default'} />
             </div>
           </Card>
         </Col>
@@ -389,22 +401,25 @@ export default function CabinetDetailPage() {
 
       <Card
         title={`设备列表 (${devices.length})`}
+        styles={{ body: { padding: isMobile ? 0 : 24 } }}
         extra={
           cabinet.status === 1 && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDevice}>
-              上架设备
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDevice} size={isMobile ? 'small' : 'middle'}>
+              {isMobile ? '上架' : '上架设备'}
             </Button>
           )
         }
       >
-        <Table
-          dataSource={devices}
-          columns={deviceColumns}
-          rowKey="id"
-          pagination={false}
-          size="small"
-          scroll={{ y: 400 }}
-        />
+        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+          <Table
+            dataSource={devices}
+            columns={deviceColumns}
+            rowKey="id"
+            pagination={false}
+            size={isMobile ? 'small' : 'middle'}
+            scroll={{ x: isMobile ? 400 : undefined, y: 400 }}
+          />
+        </div>
       </Card>
     </>
   );
@@ -413,22 +428,25 @@ export default function CabinetDetailPage() {
   const uPositionContent = (
     <Card 
       title="U位视图" 
+      styles={{ body: { padding: isMobile ? 0 : 24 } }}
       extra={
         cabinet.status === 1 && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDevice}>
-            上架设备
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDevice} size={isMobile ? 'small' : 'middle'}>
+            {isMobile ? '上架' : '上架设备'}
           </Button>
         )
       }
     >
-      <Table
-        dataSource={uPositionData.filter(item => item.isStart || !item.device)}
-        columns={uPositionColumns}
-        rowKey="u"
-        pagination={false}
-        size="small"
-        scroll={{ y: 600 }}
-      />
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+        <Table
+          dataSource={uPositionData.filter(item => item.isStart || !item.device)}
+          columns={uPositionColumns}
+          rowKey="u"
+          pagination={false}
+          size={isMobile ? 'small' : 'middle'}
+          scroll={{ x: isMobile ? 300 : undefined, y: 600 }}
+        />
+      </div>
     </Card>
   );
 
@@ -463,7 +481,8 @@ export default function CabinetDetailPage() {
         open={isDeviceModalOpen}
         onOk={() => deviceForm.submit()}
         onCancel={() => setIsDeviceModalOpen(false)}
-        width={600}
+        width={isMobile ? '95%' : 600}
+        style={{ maxWidth: 600 }}
       >
         <Form form={deviceForm} layout="vertical" onFinish={handleSubmitDevice}>
           <Form.Item name="name" label="设备名称" rules={[{ required: true, message: '请输入设备名称' }]}>

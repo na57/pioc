@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Table, Button, Tag, Space, Spin, Modal, Form, Input, InputNumber, DatePicker, Select, message, App } from 'antd';
+import { Card, Row, Col, Statistic, Table, Button, Tag, Space, Spin, Modal, Form, Input, InputNumber, DatePicker, Select, message, App, Grid } from 'antd';
 import { DatabaseOutlined, HddOutlined, DesktopOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import dayjs from 'dayjs';
+
+const { useBreakpoint } = Grid;
 
 interface Room {
   id: string;
@@ -29,6 +31,8 @@ interface Stats {
 export default function IdcHomePage() {
   const router = useRouter();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -143,6 +147,8 @@ export default function IdcHomePage() {
       title: '机房名称',
       dataIndex: 'name',
       key: 'name',
+      fixed: isMobile ? undefined : 'left',
+      width: isMobile ? 120 : 150,
       render: (text: string, record: Room) => (
         <a onClick={() => router.push(`/idc/rooms/${record.id}`)}>{text}</a>
       ),
@@ -151,16 +157,21 @@ export default function IdcHomePage() {
       title: '位置',
       dataIndex: 'location',
       key: 'location',
+      width: 120,
+      responsive: ['md'],
     },
     {
       title: '面积(m²)',
       dataIndex: 'area',
       key: 'area',
+      width: 100,
+      responsive: ['lg'],
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 80,
       render: (status: number) => (
         status === 1 ? <Tag color="green">启用</Tag> : <Tag color="red">停用</Tag>
       ),
@@ -169,12 +180,16 @@ export default function IdcHomePage() {
       title: '负责人',
       dataIndex: 'contactPerson',
       key: 'contactPerson',
+      width: 100,
+      responsive: ['md'],
     },
     {
       title: '操作',
       key: 'action',
+      fixed: isMobile ? undefined : 'right',
+      width: 100,
       render: (_: unknown, record: Room) => (
-        <Space>
+        <Space size="small">
           <ActionButton
             icon={<EditOutlined />}
             tooltip="编辑"
@@ -241,19 +256,33 @@ export default function IdcHomePage() {
         </Row>
 
         <Card
-          title="机房列表"
+          title={<span style={{ fontSize: isMobile ? 16 : 18 }}>机房列表</span>}
           extra={
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-              新增机房
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />} 
+              onClick={handleAdd}
+              size={isMobile ? 'small' : 'middle'}
+            >
+              {isMobile ? '新增' : '新增机房'}
             </Button>
           }
+          styles={{ 
+            body: { 
+              padding: isMobile ? 0 : 24,
+            } 
+          }}
         >
-          <Table
-            dataSource={rooms}
-            columns={columns}
-            rowKey="id"
-            pagination={false}
-          />
+          <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+            <Table
+              dataSource={rooms}
+              columns={columns}
+              rowKey="id"
+              pagination={false}
+              scroll={{ x: isMobile ? 300 : undefined }}
+              size={isMobile ? 'small' : 'middle'}
+            />
+          </div>
         </Card>
       </Spin>
 
@@ -262,7 +291,8 @@ export default function IdcHomePage() {
         open={isModalOpen}
         onOk={() => form.submit()}
         onCancel={() => setIsModalOpen(false)}
-        width={700}
+        width={isMobile ? '95%' : 700}
+        style={{ maxWidth: 700 }}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="name" label="机房名称" rules={[{ required: true, message: '请输入机房名称' }]}>
