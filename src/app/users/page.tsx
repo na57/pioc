@@ -14,9 +14,13 @@ import {
   Switch,
   Select,
   theme,
+  Grid,
+  Card,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
+import ActionButton from '@/app/tags/components/ActionButton';
+import FriendlyTime from '@/components/FriendlyTime';
 
 interface Role {
   id: number;
@@ -43,6 +47,8 @@ interface UserFormData {
   roleIds?: number[];
 }
 
+const { useBreakpoint } = Grid;
+
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -52,6 +58,8 @@ export default function UsersPage() {
   const [form] = Form.useForm();
   const { token } = theme.useToken();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   useEffect(() => {
     fetchUsers();
@@ -194,31 +202,28 @@ export default function UsersPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (text: string) => new Date(text).toLocaleString('zh-CN'),
+      width: 120,
+      render: (text: string) => <FriendlyTime date={text} />,
     },
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 100,
       render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
+        <Space size="small">
+          <ActionButton
             icon={<EditOutlined />}
+            tooltip="编辑"
             onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确定删除此用户？"
+          />
+          <ActionButton
+            icon={<DeleteOutlined />}
+            tooltip="删除"
+            danger
+            confirmTitle="确认删除"
+            confirmDescription={`确定要删除用户 "${record.name || record.username}" 吗？`}
             onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          />
         </Space>
       ),
     },
@@ -226,19 +231,32 @@ export default function UsersPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>用户管理</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          添加用户
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={users}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
+      <Card
+        title={<span style={{ fontSize: isMobile ? 18 : 24 }}>用户管理</span>}
+        extra={
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} size={isMobile ? 'small' : 'middle'}>
+            {isMobile ? '添加' : '添加用户'}
+          </Button>
+        }
+        styles={{ body: { padding: isMobile ? 12 : 24 } }}
+      >
+        <div className="table-responsive">
+          <Table
+            columns={columns}
+            dataSource={users}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              pageSize: 10,
+              size: isMobile ? 'small' : undefined,
+              showSizeChanger: !isMobile,
+              showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
+            }}
+            scroll={{ x: isMobile ? 800 : undefined }}
+            size={isMobile ? 'small' : 'middle'}
+          />
+        </div>
+      </Card>
       <Modal
         title={editingUser ? '编辑用户' : '添加用户'}
         open={modalVisible}

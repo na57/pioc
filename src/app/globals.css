@@ -53,3 +53,270 @@ a {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
+/* ==================== 响应式工具类 ==================== */
+
+/* 隐藏/显示工具类 */
+.hidden-xs { display: inherit; }
+.hidden-sm { display: inherit; }
+.hidden-md { display: inherit; }
+.hidden-lg { display: inherit; }
+.hidden-xl { display: inherit; }
+.hidden-xxl { display: inherit; }
+
+.visible-xs { display: none; }
+.visible-sm { display: none; }
+.visible-md { display: none; }
+.visible-lg { display: none; }
+.visible-xl { display: none; }
+.visible-xxl { display: none; }
+
+/* 超小屏幕 (xs): < 480px */
+@media (max-width: 479px) {
+  .hidden-xs { display: none !important; }
+  .visible-xs { display: inherit !important; }
+}
+
+/* 小屏幕 (sm): 480px - 575px */
+@media (min-width: 480px) and (max-width: 575px) {
+  .hidden-sm { display: none !important; }
+  .visible-sm { display: inherit !important; }
+}
+
+/* 中等屏幕 (md): 576px - 767px */
+@media (min-width: 576px) and (max-width: 767px) {
+  .hidden-md { display: none !important; }
+  .visible-md { display: inherit !important; }
+}
+
+/* 大屏幕 (lg): 768px - 991px */
+@media (min-width: 768px) and (max-width: 991px) {
+  .hidden-lg { display: none !important; }
+  .visible-lg { display: inherit !important; }
+}
+
+/* 超大屏幕 (xl): 992px - 1199px */
+@media (min-width: 992px) and (max-width: 1199px) {
+  .hidden-xl { display: none !important; }
+  .visible-xl { display: inherit !important; }
+}
+
+/* 超大屏幕 (xxl): >= 1200px */
+@media (min-width: 1200px) {
+  .hidden-xxl { display: none !important; }
+  .visible-xxl { display: inherit !important; }
+}
+
+/* 移动端优先的隐藏/显示 */
+@media (max-width: 575px) {
+  .hidden-mobile { display: none !important; }
+}
+
+@media (min-width: 576px) {
+  .visible-mobile { display: none !important; }
+}
+
+/* 平板及以下隐藏 */
+@media (max-width: 991px) {
+  .hidden-tablet { display: none !important; }
+}
+
+@media (min-width: 992px) {
+  .visible-tablet { display: none !important; }
+}
+
+/* ==================== 响应式间距工具类 ==================== */
+
+/* 响应式内边距 */
+.responsive-padding {
+  padding: 12px 16px;
+}
+
+@media (min-width: 576px) {
+  .responsive-padding {
+    padding: 16px 20px;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-padding {
+    padding: 20px 24px;
+  }
+}
+
+@media (min-width: 992px) {
+  .responsive-padding {
+    padding: 24px 32px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .responsive-padding {
+    padding: 24px 48px;
+  }
+}
+
+/* 响应式外边距 */
+.responsive-margin {
+  margin: 12px 16px;
+}
+
+@media (min-width: 576px) {
+  .responsive-margin {
+    margin: 16px 20px;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-margin {
+    margin: 20px 24px;
+  }
+}
+
+@media (min-width: 992px) {
+  .responsive-margin {
+    margin: 24px 32px;
+  }
+}
+
+/* ==================== 响应式文本工具类 ==================== */
+
+/* 响应式字体大小 */
+.responsive-text {
+  font-size: 14px;
+}
+
+@media (min-width: 576px) {
+  .responsive-text {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-text {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 992px) {
+  .responsive-text {
+    font-size: 16px;
+  }
+}
+
+/* 响应式标题 */
+.responsive-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+@media (min-width: 576px) {
+  .responsive-title {
+    font-size: 24px;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-title {
+    font-size: 28px;
+  }
+}
+
+@media (min-width: 992px) {
+  .responsive-title {
+    font-size: 32px;
+  }
+}
+
+/* ==================== 响应式容器 ==================== */
+
+.responsive-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 576px) {
+  .responsive-container {
+    max-width: 540px;
+  }
+}
+
+@media (min-width: 768px) {
+  .responsive-container {
+    max-width: 720px;
+  }
+}
+
+@media (min-width: 992px) {
+  .responsive-container {
+    max-width: 960px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .responsive-container {
+    max-width: 1140px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .responsive-container {
+    max-width: 1400px;
+  }
+}
+
+/* ==================== 滚动条样式优化 ==================== */
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 移动端隐藏滚动条但保持功能 */
+@media (max-width: 768px) {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* ==================== 表格响应式 ==================== */
+
+/* 移动端表格横向滚动 */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ==================== 表单响应式 ==================== */
+
+/* 移动端表单全宽 */
+@media (max-width: 575px) {
+  .form-responsive .ant-form-item {
+    margin-bottom: 16px;
+  }
+  
+  .form-responsive .ant-form-item-label {
+    padding-bottom: 4px;
+  }
+}

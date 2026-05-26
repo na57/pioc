@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Layout, Typography, Space, Tag, App, Avatar, Dropdown, Menu, theme, Skeleton } from 'antd';
+import { Layout, Typography, Space, Tag, App, Avatar, Dropdown, Menu, theme, Skeleton, Drawer, Grid } from 'antd';
 import type { MenuProps } from 'antd';
 import {
   UserOutlined,
@@ -11,6 +11,7 @@ import {
   TeamOutlined,
   AuditOutlined,
   MonitorOutlined,
+  MenuOutlined,
 } from '@ant-design/icons';
 import { iconMapping } from '@/lib/icons';
 import { useRouter, usePathname } from 'next/navigation';
@@ -18,6 +19,7 @@ import { useSystemConfig } from '@/hooks/useSystemConfig';
 
 const { Header, Content, Footer } = Layout;
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 interface UserInfo {
   userId: number;
@@ -49,10 +51,14 @@ interface AppLayoutProps {
 function AppLayout({ children }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md; // 小于 md 断点视为移动端
+
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuLoading, setMenuLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const { config: systemConfig } = useSystemConfig();
@@ -89,7 +95,6 @@ function AppLayout({ children }: AppLayoutProps) {
         setMenus(data.data);
       }
     } catch {
-      // 如果获取失败，使用默认菜单
       setMenus([]);
     } finally {
       setMenuLoading(false);
@@ -120,21 +125,15 @@ function AppLayout({ children }: AppLayoutProps) {
   // 过滤掉没有可显示子项的菜单组
   const filterEmptyMenuGroups = (items: MenuItem[]): MenuItem[] => {
     return items.filter(item => {
-      // 如果是应用（有app_id），直接显示
       if (item.app_id) {
         return true;
       }
-      // 如果是菜单组（没有app_id），检查是否有子项
       if (item.children && item.children.length > 0) {
-        // 递归过滤子菜单
         const filteredChildren = filterEmptyMenuGroups(item.children);
-        // 如果有有效的子项，保留此菜单组
         return filteredChildren.length > 0;
       }
-      // 没有子项的菜单组不显示
       return false;
     }).map(item => {
-      // 递归处理子菜单
       if (item.children && item.children.length > 0) {
         return {
           ...item,
@@ -147,15 +146,11 @@ function AppLayout({ children }: AppLayoutProps) {
 
   // 将菜单数据转换为 Ant Design Menu 组件需要的格式
   const convertToMenuItems = (items: MenuItem[]): MenuProps['items'] => {
-    // 先过滤掉空的菜单组
     const filteredItems = filterEmptyMenuGroups(items);
 
     return filteredItems.map(item => {
-      // 如果是应用链接，优先使用应用的图标
       const iconName = item.app_id && item.app_icon ? item.app_icon : item.icon;
-      // 如果是应用菜单，使用应用的URL作为跳转路径
       const menuPath = item.app_id && item.app_url ? item.app_url : item.path;
-      // 使用菜单ID作为key，确保唯一性
       const menuItem: any = {
         key: `menu-${item.id}`,
         icon: iconName ? iconMapping[iconName] : null,
@@ -176,10 +171,8 @@ function AppLayout({ children }: AppLayoutProps) {
 
     const findPath = (items: MenuItem[], parentKeys: string[] = []): string[] => {
       for (const item of items) {
-        // 使用菜单ID作为key
         const currentKey = `menu-${item.id}`;
         const currentKeys = [...parentKeys, currentKey];
-        // 如果是应用菜单，使用应用的URL作为路径进行匹配
         const menuPath = item.app_id && item.app_url ? item.app_url : item.path;
 
         if (menuPath && pathname.startsWith(menuPath)) {
@@ -200,12 +193,10 @@ function AppLayout({ children }: AppLayoutProps) {
   };
 
   const handleNavClick = ({ key }: { key: string }) => {
-    // 从key中提取菜单ID，查找对应的跳转路径
     const menuId = key.replace('menu-', '');
     const findMenuPath = (items: MenuItem[]): string | null => {
       for (const item of items) {
         if (item.id.toString() === menuId) {
-          // 如果是应用菜单，使用应用的URL作为跳转路径
           return item.app_id && item.app_url ? item.app_url : item.path;
         }
         if (item.children) {
@@ -219,6 +210,7 @@ function AppLayout({ children }: AppLayoutProps) {
     const menuPath = findMenuPath(menus);
     if (menuPath) {
       router.push(menuPath);
+      setMobileMenuOpen(false); // 移动端关闭菜单
     }
   };
 
@@ -287,6 +279,21 @@ function AppLayout({ children }: AppLayoutProps) {
   const navMenuItems = convertToMenuItems(menus);
   const selectedKeys = getSelectedKeys();
 
+  // 响应式内容内边距
+  const getContentPadding = () => {
+    if (isMobile) return '16px';
+    if (!screens.lg) return '24px';
+    return '24px 48px';
+  };
+
+  // 响应式内容最大宽度
+  const getContentMaxWidth = () => {
+    if (isMobile) return '100%';
+    if (!screens.lg) return '960px';
+    if (!screens.xl) return '1200px';
+    return '1400px';
+  };
+
   if (loading) {
     return (
       <div style={{
@@ -303,79 +310,135 @@ function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <App>
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 24px',
-        background: token.colorBgContainer,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Title
-            level={4}
-            style={{
-              margin: '16px 0',
-              color: token.colorPrimary,
-              cursor: 'pointer',
-              marginRight: 24
-            }}
-            onClick={() => router.push('/dashboard')}
-          >
-            {systemConfig.name}
-          </Title>
+      <Layout style={{ minHeight: '100vh' }}>
+        <Header style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: isMobile ? '0 16px' : '0 24px',
+          background: token.colorBgContainer,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+            {/* 移动端汉堡菜单按钮 */}
+            {isMobile && (
+              <MenuOutlined
+                style={{
+                  fontSize: 20,
+                  marginRight: 16,
+                  cursor: 'pointer',
+                  color: token.colorText,
+                }}
+                onClick={() => setMobileMenuOpen(true)}
+              />
+            )}
+            <Title
+              level={isMobile ? 5 : 4}
+              style={{
+                margin: '16px 0',
+                color: token.colorPrimary,
+                cursor: 'pointer',
+                marginRight: isMobile ? 12 : 24,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: isMobile ? 150 : 300,
+              }}
+              onClick={() => router.push('/dashboard')}
+            >
+              {systemConfig.name}
+            </Title>
+
+            {/* 桌面端导航菜单 */}
+            {!isMobile && (
+              menuLoading ? (
+                <Skeleton.Button active style={{ width: 400, height: 40 }} />
+              ) : (
+                <Menu
+                  mode="horizontal"
+                  selectedKeys={selectedKeys}
+                  items={navMenuItems}
+                  onClick={handleNavClick}
+                  style={{ borderBottom: 'none', minWidth: 400, background: 'transparent', flex: 1 }}
+                />
+              )
+            )}
+          </div>
+
+          <Space size={isMobile ? 'small' : 'large'}>
+            <Dropdown
+              menu={{
+                items: getUserMenuItems(),
+                onClick: handleUserMenuClick
+              }}
+              placement="bottomRight"
+            >
+              <Space style={{ cursor: 'pointer' }}>
+                <Avatar icon={<UserOutlined />} style={{ backgroundColor: token.colorPrimary }} />
+                {!isMobile && (
+                  <>
+                    <Text strong>{userInfo?.name || userInfo?.username || '用户'}</Text>
+                    {userInfo?.role && <Tag color="blue">{userInfo.role}</Tag>}
+                    <DownOutlined />
+                  </>
+                )}
+              </Space>
+            </Dropdown>
+          </Space>
+        </Header>
+
+        {/* 移动端抽屉菜单 */}
+        <Drawer
+          title="菜单导航"
+          placement="left"
+          open={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          width={280}
+          bodyStyle={{ padding: 0 }}
+        >
           {menuLoading ? (
-            <Skeleton.Button active style={{ width: 400, height: 40 }} />
+            <div style={{ padding: 24 }}>
+              <Skeleton active />
+            </div>
           ) : (
             <Menu
-              mode="horizontal"
+              mode="inline"
               selectedKeys={selectedKeys}
               items={navMenuItems}
               onClick={handleNavClick}
-              style={{ borderBottom: 'none', minWidth: 400, background: 'transparent' }}
+              style={{ borderRight: 'none' }}
             />
           )}
-        </div>
+        </Drawer>
 
-        <Space size="large">
-          <Dropdown
-            menu={{
-              items: getUserMenuItems(),
-              onClick: handleUserMenuClick
-            }}
-            placement="bottomRight"
-          >
-            <Space style={{ cursor: 'pointer' }}>
-              <Avatar icon={<UserOutlined />} style={{ backgroundColor: token.colorPrimary }} />
-              <Text strong>{userInfo?.name || userInfo?.username || '用户'}</Text>
-              {userInfo?.role && <Tag color="blue">{userInfo.role}</Tag>}
-              <DownOutlined />
-            </Space>
-          </Dropdown>
-        </Space>
-      </Header>
+        <Content style={{
+          padding: getContentPadding(),
+          background: token.colorBgLayout,
+          minHeight: 'calc(100vh - 64px - 70px)',
+        }}>
+          <div style={{
+            maxWidth: getContentMaxWidth(),
+            margin: '0 auto',
+            width: '100%',
+          }}>
+            {children}
+          </div>
+        </Content>
 
-      <Content style={{ padding: '24px 50px', background: token.colorBgLayout }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          {children}
-        </div>
-      </Content>
-
-      <Footer style={{
-        textAlign: 'center',
-        background: token.colorBgContainer,
-        padding: '24px 50px',
-        marginTop: 'auto',
-      }}>
-        <Text type="secondary">
-          {systemConfig.name} {systemConfig.copyright}
-        </Text>
-      </Footer>
-    </Layout>
+        <Footer style={{
+          textAlign: 'center',
+          background: token.colorBgContainer,
+          padding: isMobile ? '16px' : '24px 50px',
+          marginTop: 'auto',
+        }}>
+          <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
+            {systemConfig.name} {systemConfig.copyright}
+          </Text>
+        </Footer>
+      </Layout>
     </App>
   );
 }
