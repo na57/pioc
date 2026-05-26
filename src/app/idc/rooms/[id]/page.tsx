@@ -434,7 +434,7 @@ export default function RoomDetailPage() {
       <div style={{ padding: 24 }}>
         <Card>
           <p>机房不存在或已被删除</p>
-          <Button onClick={() => router.push('/idc/rooms')}>返回机房列表</Button>
+          <Button onClick={() => router.push('/idc')}>返回IDC首页</Button>
         </Card>
       </div>
     );
@@ -552,8 +552,8 @@ export default function RoomDetailPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/idc/rooms')} style={{ marginBottom: 16 }}>
-        返回机房列表
+      <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/idc')} style={{ marginBottom: 16 }}>
+        返回IDC首页
       </Button>
 
       <Card>

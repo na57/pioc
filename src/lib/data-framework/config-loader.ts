@@ -34,17 +34,38 @@ export class ConfigLoader<T extends AppBaseConfig> {
 
   /**
    * 加载配置
-   * 优先从单独配置文件加载，如果不存在则尝试从主配置加载（向后兼容）
+   * 加载顺序：
+   * 1. 从主配置(config.yaml)读取 apps.{appName}.configFile 获取配置文件名
+   * 2. 从指定的配置文件加载
+   * 3. 如果配置文件不存在，尝试从主配置的 legacyConfigPath 加载
+   * 4. 最后使用默认配置
    */
   load(): T {
     if (this.config) {
       return this.config;
     }
 
+    // 首先尝试从主配置读取自定义配置文件名
+    let configFileName = this.options.configFileName;
+    if (this.options.legacyConfigPath) {
+      try {
+        const mainConfig = getConfig();
+        const appConfig = getNestedValue<Record<string, unknown>>(
+          mainConfig as unknown as Record<string, unknown>,
+          this.options.legacyConfigPath
+        );
+        if (appConfig && appConfig.configFile) {
+          configFileName = appConfig.configFile as string;
+        }
+      } catch (error) {
+        // 忽略错误，使用默认配置文件名
+      }
+    }
+
     const configPath = path.join(
       process.cwd(),
       this.options.configDir!,
-      this.options.configFileName
+      configFileName
     );
 
     // 尝试从单独配置文件加载
@@ -61,7 +82,7 @@ export class ConfigLoader<T extends AppBaseConfig> {
         return this.config;
       } catch (error) {
         console.warn(
-          `加载 ${this.options.configFileName} 失败，使用默认配置:`,
+          `加载 ${configFileName} 失败，使用默认配置:`,
           error
         );
       }

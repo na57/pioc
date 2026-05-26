@@ -1,0 +1,140 @@
+# IDC机房管理应用配置文件
+# 复制此文件为 config/idc-room.yaml 并进行修改
+
+# 应用基本信息
+appId: idc-room
+appName: IDC机房管理
+
+# 数据源配置
+# 默认使用ID为1的数据源，如果部署环境数据源ID不同，请修改此处
+dataSourceId: '1'
+
+# 数据表配置
+tables:
+  # 机房表
+  room:
+    name: pioc_idc_room
+    # dataObjectId: 1
+    fields:
+      id: id
+      name: name
+      code: code
+      location: location
+      floor: floor
+      area: area
+      fireProtectionInfo: fire_protection_info
+      securityInfo: security_info
+      contactPerson: contact_person
+      contactPhone: contact_phone
+      builtDate: built_date
+      remark: remark
+      status: status
+      sortOrder: sort_order
+      createdAt: created_at
+      updatedAt: updated_at
+
+  # 空调表
+  roomAc:
+    name: pioc_idc_room_ac
+    # dataObjectId: 2
+    fields:
+      id: id
+      roomId: room_id
+      name: name
+      model: model
+      coolingCapacity: cooling_capacity
+      assetNo: asset_no
+      status: status
+      remark: remark
+      createdAt: created_at
+      updatedAt: updated_at
+
+  # UPS表
+  roomUps:
+    name: pioc_idc_room_ups
+    # dataObjectId: 3
+    fields:
+      id: id
+      roomId: room_id
+      name: name
+      model: model
+      capacity: capacity
+      assetNo: asset_no
+      status: status
+      remark: remark
+      createdAt: created_at
+      updatedAt: updated_at
+
+  # 电池组表
+  roomBattery:
+    name: pioc_idc_room_battery
+    dataObjectId: 4
+    fields:
+      id: id
+      roomId: room_id
+      name: name
+      batteryCount: battery_count
+      totalCapacity: total_capacity
+      assetNo: asset_no
+      status: status
+      remark: remark
+      createdAt: created_at
+      updatedAt: updated_at
+
+  # 发电机表
+  roomGenerator:
+    name: pioc_idc_room_generator
+    # dataObjectId: 5
+    fields:
+      id: id
+      roomId: room_id
+      name: name
+      model: model
+      power: power
+      assetNo: asset_no
+      status: status
+      remark: remark
+      createdAt: created_at
+      updatedAt: updated_at
+
+  # 机柜表
+  cabinet:
+    name: pioc_idc_cabinet
+    # dataObjectId: 6
+    fields:
+      id: id
+      roomId: room_id
+      name: name
+      code: code
+      totalU: total_u
+      usedU: used_u
+      ratedPower: rated_power
+      usedPower: used_power
+      position: position
+      pduInfo: pdu_info
+      status: status
+      sortOrder: sort_order
+      remark: remark
+      createdAt: created_at
+      updatedAt: updated_at
+
+  # 设备表
+  device:
+    name: pioc_idc_device
+    # dataObjectId: 7
+    fields:
+      id: id
+      cabinetId: cabinet_id
+      name: name
+      deviceType: device_type
+      brandModel: brand_model
+      assetNo: asset_no
+      startU: start_u
+      occupyU: occupy_u
+      ratedPower: rated_power
+      status: status
+      sortOrder: sort_order
+      onlineDate: online_date
+      remark: remark
+      createdAt: created_at
+      updatedAt: updated_at

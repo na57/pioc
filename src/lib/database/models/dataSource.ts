@@ -53,7 +53,7 @@ export async function findByUserId(userId: number): Promise<DataSource[]> {
   return query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE created_by = ? ORDER BY created_at DESC', [userId]);
 }
 
-export async function findById(id: string): Promise<DataSource | null> {
+export async function findById(id: string | number): Promise<DataSource | null> {
   const results = await query<DataSource[]>('SELECT * FROM pioc_data_sources WHERE id = ?', [id]);
   return results[0] || null;
 }

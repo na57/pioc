@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Descriptions, Table, Button, Space, Tag, Spin, Progress, Row, Col, Tabs, Modal, Form, Input, InputNumber, Select } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, DatabaseOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 import { App } from 'antd';
@@ -64,6 +64,7 @@ export default function CabinetDetailPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [activeTab, setActiveTab] = useState('basic');
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
+  const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [deviceForm] = Form.useForm();
 
   useEffect(() => {
@@ -126,25 +127,41 @@ export default function CabinetDetailPage() {
   };
 
   const handleAddDevice = () => {
+    setEditingDevice(null);
     deviceForm.resetFields();
     deviceForm.setFieldsValue({ cabinetId: id, occupyU: 1, status: 1, sortOrder: 0 });
     setIsDeviceModalOpen(true);
   };
 
+  const handleEditDevice = (device: Device) => {
+    setEditingDevice(device);
+    deviceForm.setFieldsValue({
+      ...device,
+      cabinetId: id,
+    });
+    setIsDeviceModalOpen(true);
+  };
+
   const handleSubmitDevice = async (values: Record<string, unknown>) => {
     try {
-      const res = await fetch('/api/idc/devices', {
-        method: 'POST',
+      const url = '/api/idc/devices';
+      const method = editingDevice ? 'PUT' : 'POST';
+      const body = editingDevice
+        ? { ...values, id: editingDevice.id, cabinetId: id }
+        : { ...values, cabinetId: id };
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...values, cabinetId: id }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.success) {
-        message.success('设备上架成功');
+        message.success(editingDevice ? '设备修改成功' : '设备上架成功');
         setIsDeviceModalOpen(false);
         fetchCabinetDetail();
       } else {
-        message.error(data.message || '上架失败');
+        message.error(data.message || '操作失败');
       }
     } catch (error) {
       message.error('网络错误');
@@ -224,19 +241,26 @@ export default function CabinetDetailPage() {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 120,
       render: (_: unknown, record: { u: number; device: Device | null; isStart: boolean }) => {
         if (!record.device || !record.isStart) return null;
-        
+
         return (
-          <ActionButton
-            icon={<DeleteOutlined />}
-            tooltip="下架"
-            danger
-            confirmTitle="确认下架"
-            confirmDescription={`确定要下架设备 ${record.device.name} 吗？`}
-            onConfirm={() => handleDeleteDevice(record.device!.id)}
-          />
+          <Space>
+            <ActionButton
+              icon={<EditOutlined />}
+              tooltip="修改"
+              onClick={() => handleEditDevice(record.device!)}
+            />
+            <ActionButton
+              icon={<DeleteOutlined />}
+              tooltip="下架"
+              danger
+              confirmTitle="确认下架"
+              confirmDescription={`确定要下架设备 ${record.device.name} 吗？`}
+              onConfirm={() => handleDeleteDevice(record.device!.id)}
+            />
+          </Space>
         );
       },
     },
@@ -274,14 +298,21 @@ export default function CabinetDetailPage() {
       title: '操作',
       key: 'action',
       render: (_: unknown, record: Device) => (
-        <ActionButton
-          icon={<DeleteOutlined />}
-          tooltip="下架"
-          danger
-          confirmTitle="确认下架"
-          confirmDescription={`确定要下架设备 ${record.name} 吗？`}
-          onConfirm={() => handleDeleteDevice(record.id)}
-        />
+        <Space>
+          <ActionButton
+            icon={<EditOutlined />}
+            tooltip="修改"
+            onClick={() => handleEditDevice(record)}
+          />
+          <ActionButton
+            icon={<DeleteOutlined />}
+            tooltip="下架"
+            danger
+            confirmTitle="确认下架"
+            confirmDescription={`确定要下架设备 ${record.name} 吗？`}
+            onConfirm={() => handleDeleteDevice(record.id)}
+          />
+        </Space>
       ),
     },
   ];
@@ -297,9 +328,13 @@ export default function CabinetDetailPage() {
   if (!cabinet) {
     return (
       <div style={{ padding: 24 }}>
+        <h1 style={{ marginBottom: 24 }}>
+          <DatabaseOutlined style={{ marginRight: 8 }} />
+          IDC机房管理
+        </h1>
         <Card>
           <p>机柜不存在或已被删除</p>
-          <Button onClick={() => router.push('/idc/cabinets')}>返回机柜列表</Button>
+          <Button onClick={() => router.push('/idc')}>返回IDC首页</Button>
         </Card>
       </div>
     );
@@ -318,7 +353,13 @@ export default function CabinetDetailPage() {
             <Descriptions bordered column={2}>
               <Descriptions.Item label="机柜名称">{cabinet.name}</Descriptions.Item>
               <Descriptions.Item label="编号">{cabinet.code}</Descriptions.Item>
-              <Descriptions.Item label="所属机房">{cabinet.roomName || '-'}</Descriptions.Item>
+              <Descriptions.Item label="所属机房">
+                {cabinet.roomName ? (
+                  <a onClick={() => router.push(`/idc/rooms/${cabinet.roomId}`)} style={{ cursor: 'pointer' }}>
+                    {cabinet.roomName}
+                  </a>
+                ) : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="位置">{cabinet.position || '-'}</Descriptions.Item>
               <Descriptions.Item label="PDU配置">{cabinet.pduInfo || '-'}</Descriptions.Item>
               <Descriptions.Item label="状态">
@@ -346,7 +387,16 @@ export default function CabinetDetailPage() {
         </Col>
       </Row>
 
-      <Card title={`设备列表 (${devices.length})`}>
+      <Card
+        title={`设备列表 (${devices.length})`}
+        extra={
+          cabinet.status === 1 && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDevice}>
+              上架设备
+            </Button>
+          )
+        }
+      >
         <Table
           dataSource={devices}
           columns={deviceColumns}
@@ -384,9 +434,10 @@ export default function CabinetDetailPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => router.push(`/idc/rooms/${cabinet.roomId}`)} style={{ marginBottom: 16 }}>
-        返回机房详情
-      </Button>
+      <h1 style={{ marginBottom: 24 }}>
+        <DatabaseOutlined style={{ marginRight: 8 }} />
+        {cabinet.roomName || '未知机房'} - {cabinet.name}
+      </h1>
 
       <Card>
         <Tabs
@@ -408,7 +459,7 @@ export default function CabinetDetailPage() {
       </Card>
 
       <Modal
-        title="设备上架"
+        title={editingDevice ? '修改设备' : '设备上架'}
         open={isDeviceModalOpen}
         onOk={() => deviceForm.submit()}
         onCancel={() => setIsDeviceModalOpen(false)}
