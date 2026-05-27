@@ -147,7 +147,7 @@ export default function IdcHomePage() {
       title: '机房名称',
       dataIndex: 'name',
       key: 'name',
-      fixed: isMobile ? undefined : 'left',
+      fixed: isMobile ? undefined : 'left' as const,
       width: isMobile ? 120 : 150,
       render: (text: string, record: Room) => (
         <a onClick={() => router.push(`/idc/rooms/${record.id}`)}>{text}</a>
@@ -158,14 +158,14 @@ export default function IdcHomePage() {
       dataIndex: 'location',
       key: 'location',
       width: 120,
-      responsive: ['md'],
+      responsive: ['md' as const],
     },
     {
       title: '面积(m²)',
       dataIndex: 'area',
       key: 'area',
       width: 100,
-      responsive: ['lg'],
+      responsive: ['lg' as const],
     },
     {
       title: '状态',
@@ -181,12 +181,12 @@ export default function IdcHomePage() {
       dataIndex: 'contactPerson',
       key: 'contactPerson',
       width: 100,
-      responsive: ['md'],
+      responsive: ['md' as const],
     },
     {
       title: '操作',
       key: 'action',
-      fixed: isMobile ? undefined : 'right',
+      fixed: isMobile ? undefined : 'right' as const,
       width: 100,
       render: (_: unknown, record: Room) => (
         <Space size="small">

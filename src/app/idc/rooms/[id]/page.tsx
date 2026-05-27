@@ -270,8 +270,8 @@ export default function RoomDetailPage() {
 
   const getDeviceColumns = (type: DeviceType) => {
     const baseColumns = [
-      { title: '设备名称', dataIndex: 'name', key: 'name', width: 120, fixed: isMobile ? undefined : 'left' },
-      { title: '型号', dataIndex: 'model', key: 'model', width: 100, responsive: ['md'] },
+      { title: '设备名称', dataIndex: 'name', key: 'name', width: 120, fixed: isMobile ? undefined : 'left' as const },
+      { title: '型号', dataIndex: 'model', key: 'model', width: 100, responsive: ['md' as const] },
       {
         title: '状态',
         dataIndex: 'status',
@@ -293,7 +293,7 @@ export default function RoomDetailPage() {
         title: '操作',
         key: 'action',
         width: 100,
-        fixed: isMobile ? undefined : 'right',
+        fixed: isMobile ? undefined : 'right' as const,
         render: (_: unknown, record: Record<string, unknown>) => (
           <Space size="small">
             <ActionButton
@@ -317,8 +317,8 @@ export default function RoomDetailPage() {
     if (type === 'ac') {
       return [
         baseColumns[0],
-        { title: '制冷量(KW)', dataIndex: 'coolingCapacity', key: 'coolingCapacity', width: 100, responsive: ['lg'] },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        { title: '制冷量(KW)', dataIndex: 'coolingCapacity', key: 'coolingCapacity', width: 100, responsive: ['lg' as const] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md' as const] },
         baseColumns[1],
         baseColumns[2],
         baseColumns[3],
@@ -326,8 +326,8 @@ export default function RoomDetailPage() {
     } else if (type === 'ups') {
       return [
         baseColumns[0],
-        { title: '容量(KVA)', dataIndex: 'capacity', key: 'capacity', width: 100, responsive: ['lg'] },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        { title: '容量(KVA)', dataIndex: 'capacity', key: 'capacity', width: 100, responsive: ['lg' as const] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md' as const] },
         baseColumns[1],
         baseColumns[2],
         baseColumns[3],
@@ -335,9 +335,9 @@ export default function RoomDetailPage() {
     } else if (type === 'battery') {
       return [
         baseColumns[0],
-        { title: '电池数量', dataIndex: 'batteryCount', key: 'batteryCount', width: 90, responsive: ['md'] },
-        { title: '总容量(AH)', dataIndex: 'totalCapacity', key: 'totalCapacity', width: 100, responsive: ['lg'] },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        { title: '电池数量', dataIndex: 'batteryCount', key: 'batteryCount', width: 90, responsive: ['md' as const] },
+        { title: '总容量(AH)', dataIndex: 'totalCapacity', key: 'totalCapacity', width: 100, responsive: ['lg' as const] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md' as const] },
         baseColumns[1],
         baseColumns[2],
         baseColumns[3],
@@ -345,8 +345,8 @@ export default function RoomDetailPage() {
     } else if (type === 'generator') {
       return [
         baseColumns[0],
-        { title: '功率(KW)', dataIndex: 'power', key: 'power', width: 100, responsive: ['lg'] },
-        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+        { title: '功率(KW)', dataIndex: 'power', key: 'power', width: 100, responsive: ['lg' as const] },
+        { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md' as const] },
         baseColumns[1],
         baseColumns[2],
         baseColumns[3],
@@ -361,7 +361,7 @@ export default function RoomDetailPage() {
       dataIndex: 'name',
       key: 'name',
       width: isMobile ? 100 : 150,
-      fixed: isMobile ? undefined : 'left',
+      fixed: isMobile ? undefined : 'left' as const,
       render: (name: string, record: Cabinet) => (
         <a onClick={() => router.push(`/idc/cabinets/${record.id}`)}>{name}</a>
       ),
@@ -383,7 +383,7 @@ export default function RoomDetailPage() {
       title: '功耗使用',
       key: 'powerUsage',
       width: isMobile ? 120 : 180,
-      responsive: ['md'],
+      responsive: ['md' as const],
       render: (_: unknown, record: Cabinet) => {
         const percent = record.ratedPower > 0 ? Math.round((record.usedPower / record.ratedPower) * 100) : 0;
         return (
@@ -404,7 +404,7 @@ export default function RoomDetailPage() {
       title: '操作',
       key: 'action',
       width: 100,
-      fixed: isMobile ? undefined : 'right',
+      fixed: isMobile ? undefined : 'right' as const,
       render: (_: unknown, record: Cabinet) => (
         <Space size="small">
           <ActionButton

@@ -282,15 +282,15 @@ export default function CabinetDetailPage() {
         return <Tag color={info.color}>{info.label}</Tag>;
       },
     },
-    { title: '品牌型号', dataIndex: 'brandModel', key: 'brandModel', width: 120, responsive: ['md'] },
-    { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md'] },
+    { title: '品牌型号', dataIndex: 'brandModel', key: 'brandModel', width: 120, responsive: ['md' as const] },
+    { title: '资产编号', dataIndex: 'assetNo', key: 'assetNo', width: 120, responsive: ['md' as const] },
     {
       title: 'U位',
       key: 'uPosition',
       width: 80,
       render: (_: unknown, record: Device) => `U${record.startU}-${record.startU + record.occupyU - 1}`,
     },
-    { title: '功耗(W)', dataIndex: 'ratedPower', key: 'ratedPower', width: 90, responsive: ['lg'] },
+    { title: '功耗(W)', dataIndex: 'ratedPower', key: 'ratedPower', width: 90, responsive: ['lg' as const] },
     {
       title: '状态',
       dataIndex: 'status',
