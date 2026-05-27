@@ -51,7 +51,7 @@ const idcDatabaseSchema = `
    - id: VARCHAR(36) 设备ID，主键
    - cabinet_id: VARCHAR(36) 所属机柜ID，外键
    - name: VARCHAR(100) 设备名称
-   - device_type: TINYINT 设备类型(1服务器,2交换机,3路由器,4存储设备,5防火墙,6其他)
+   - device_type: TINYINT 设备类型(1服务器,2网络设备,3安全设备,4其他,5预留空间)
    - brand_model: VARCHAR(100) 品牌型号
    - asset_no: VARCHAR(100) 资产编号
    - start_u: INT 起始U位
@@ -312,11 +312,10 @@ ${entityInfo.join('\n') || '无特定实体'}
 
 设备类型映射:
 - 服务器: device_type = 1
-- 交换机: device_type = 2
-- 路由器: device_type = 3
-- 存储设备: device_type = 4
-- 防火墙: device_type = 5
-- 其他: device_type = 6
+- 网络设备(交换机/路由器/防火墙等): device_type = 2
+- 安全设备: device_type = 3
+- 其他: device_type = 4
+- 预留空间: device_type = 5 (用于散热/维护预留，不计入设备数量统计)
 
 要求:
 1. 只使用SELECT查询，禁止INSERT/UPDATE/DELETE/DROP等操作
