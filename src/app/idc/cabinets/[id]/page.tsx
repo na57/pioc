@@ -78,6 +78,18 @@ export default function CabinetDetailPage() {
   const [isReserveModalOpen, setIsReserveModalOpen] = useState(false);
   const [reserveForm] = Form.useForm();
   const [selectedUPosition, setSelectedUPosition] = useState<number | null>(null);
+  const [maxOccupyU, setMaxOccupyU] = useState<number>(42);
+
+  // 监听起始U位变化，计算最大占用U数
+  const startU = Form.useWatch('startU', deviceForm);
+  useEffect(() => {
+    if (cabinet && startU) {
+      const max = cabinet.totalU - startU + 1;
+      setMaxOccupyU(Math.max(1, max));
+    } else {
+      setMaxOccupyU(cabinet?.totalU || 42);
+    }
+  }, [startU, cabinet]);
 
   useEffect(() => {
     if (id) {
@@ -618,7 +630,7 @@ export default function CabinetDetailPage() {
             <InputNumber style={{ width: '100%' }} min={1} max={cabinet?.totalU || 42} />
           </Form.Item>
           <Form.Item name="occupyU" label="占用U数" initialValue={1}>
-            <InputNumber style={{ width: '100%' }} min={1} max={10} />
+            <InputNumber style={{ width: '100%' }} min={1} max={maxOccupyU} />
           </Form.Item>
           <Form.Item name="ratedPower" label="额定功耗(W)">
             <InputNumber style={{ width: '100%' }} min={0} precision={2} />
