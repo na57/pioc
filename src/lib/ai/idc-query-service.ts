@@ -353,11 +353,18 @@ SQL:
     let sql = await this.callAI(prompt, 0.1);
     sql = sql.trim();
     
-    // 清理SQL（去除markdown代码块标记）
-    sql = sql.replace(/```sql\s*/i, '').replace(/```\s*$/, '').trim();
-    
-    // 移除 <think> 标签及其内容
+    // 移除 <think> 标签及其内容（先移除，避免影响后续处理）
     sql = sql.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    
+    // 清理SQL（去除markdown代码块标记）
+    // 匹配 ```sql 或 ``` 开头，``` 结尾的代码块
+    const codeBlockMatch = sql.match(/```(?:sql)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      sql = codeBlockMatch[1].trim();
+    } else {
+      // 如果没有匹配到代码块格式，尝试直接移除标记
+      sql = sql.replace(/^```sql\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
+    }
     
     // 如果解析到了具体实体ID，替换SQL中的条件
     if (entityResult.room) {
