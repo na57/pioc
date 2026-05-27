@@ -121,10 +121,20 @@ export interface DeviceFieldMapping extends Record<string, string> {
 }
 
 // ============================================
+// AI 配置接口
+// ============================================
+
+export interface AIIdcRoomConfig {
+  providerId?: string;
+  model?: string;
+}
+
+// ============================================
 // 应用配置类型
 // ============================================
 
 export interface IdcRoomConfig extends AppBaseConfig {
+  ai?: AIIdcRoomConfig;
   tables: {
     room: TableConfig<RoomFieldMapping>;
     roomAc: TableConfig<RoomAcFieldMapping>;
@@ -142,6 +152,10 @@ export interface IdcRoomConfig extends AppBaseConfig {
 
 const defaultConfig: IdcRoomConfig = {
   dataSourceId: '1', // 默认数据源ID
+  ai: {
+    providerId: 'openai',
+    model: 'gpt-4o',
+  },
   tables: {
     room: {
       name: 'pioc_idc_room',
@@ -285,6 +299,20 @@ export function getIdcRoomConfigLoader() {
 
 export function getIdcRoomQueryService() {
   return queryService;
+}
+
+/**
+ * 加载IDC机房配置
+ */
+export function loadIdcRoomConfig(): IdcRoomConfig {
+  return configLoader.load();
+}
+
+/**
+ * 获取IDC机房配置
+ */
+export function getIdcRoomConfig(): IdcRoomConfig {
+  return configLoader.getConfig();
 }
 
 /**

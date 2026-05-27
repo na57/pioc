@@ -9,12 +9,17 @@ appName: IDC机房管理
 # 默认使用ID为1的数据源，如果部署环境数据源ID不同，请修改此处
 dataSourceId: '1'
 
+# AI配置（可选）
+# 用于AI智能问答功能，指定使用哪个AI provider
+# providerId对应config.yaml中ai.providers[].providerId
+ai:
+  providerId: local-minimax  # 可选，默认为openai
+
 # 数据表配置
 tables:
   # 机房表
   room:
     name: pioc_idc_room
-    # dataObjectId: 1
     fields:
       id: id
       name: name
@@ -36,7 +41,6 @@ tables:
   # 空调表
   roomAc:
     name: pioc_idc_room_ac
-    # dataObjectId: 2
     fields:
       id: id
       roomId: room_id
@@ -52,7 +56,6 @@ tables:
   # UPS表
   roomUps:
     name: pioc_idc_room_ups
-    # dataObjectId: 3
     fields:
       id: id
       roomId: room_id
@@ -68,7 +71,6 @@ tables:
   # 电池组表
   roomBattery:
     name: pioc_idc_room_battery
-    dataObjectId: 4
     fields:
       id: id
       roomId: room_id
@@ -84,7 +86,6 @@ tables:
   # 发电机表
   roomGenerator:
     name: pioc_idc_room_generator
-    # dataObjectId: 5
     fields:
       id: id
       roomId: room_id
@@ -100,7 +101,6 @@ tables:
   # 机柜表
   cabinet:
     name: pioc_idc_cabinet
-    # dataObjectId: 6
     fields:
       id: id
       roomId: room_id
@@ -121,7 +121,6 @@ tables:
   # 设备表
   device:
     name: pioc_idc_device
-    # dataObjectId: 7
     fields:
       id: id
       cabinetId: cabinet_id

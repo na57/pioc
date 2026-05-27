@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Table, Button, Tag, Space, Spin, Modal, Form, Input, InputNumber, DatePicker, Select, message, App, Grid } from 'antd';
-import { DatabaseOutlined, HddOutlined, DesktopOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Statistic, Table, Button, Tag, Space, Spin, Modal, Form, Input, InputNumber, DatePicker, Select, Tabs, App, Grid } from 'antd';
+import { DatabaseOutlined, HddOutlined, DesktopOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
+import AIChatPanel from '@/components/AIChatPanel';
 import dayjs from 'dayjs';
 
 const { useBreakpoint } = Grid;
@@ -28,7 +29,8 @@ interface Stats {
   totalPower: number;
 }
 
-export default function IdcHomePage() {
+// 机房管理面板组件
+function IdcManagementPanel() {
   const router = useRouter();
   const { message } = App.useApp();
   const screens = useBreakpoint();
@@ -209,82 +211,75 @@ export default function IdcHomePage() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ marginBottom: 24 }}>
-        <DatabaseOutlined style={{ marginRight: 8 }} />
-        IDC机房管理
-      </h1>
-
-      <Spin spinning={loading}>
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="机房总数"
-                value={stats.roomCount}
-                prefix={<DatabaseOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="机柜总数"
-                value={stats.cabinetCount}
-                prefix={<HddOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="设备总数"
-                value={stats.deviceCount}
-                prefix={<DesktopOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Card>
-              <Statistic
-                title="总功耗(W)"
-                value={Number(stats.totalPower).toFixed(2)}
-                prefix={<AppstoreOutlined />}
-              />
-            </Card>
-          </Col>
-        </Row>
-
-        <Card
-          title={<span style={{ fontSize: isMobile ? 16 : 18 }}>机房列表</span>}
-          extra={
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />} 
-              onClick={handleAdd}
-              size={isMobile ? 'small' : 'middle'}
-            >
-              {isMobile ? '新增' : '新增机房'}
-            </Button>
-          }
-          styles={{ 
-            body: { 
-              padding: isMobile ? 0 : 24,
-            } 
-          }}
-        >
-          <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
-            <Table
-              dataSource={rooms}
-              columns={columns}
-              rowKey="id"
-              pagination={false}
-              scroll={{ x: isMobile ? 300 : undefined }}
-              size={isMobile ? 'small' : 'middle'}
+    <Spin spinning={loading}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="机房总数"
+              value={stats.roomCount}
+              prefix={<DatabaseOutlined />}
             />
-          </div>
-        </Card>
-      </Spin>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="机柜总数"
+              value={stats.cabinetCount}
+              prefix={<HddOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="设备总数"
+              value={stats.deviceCount}
+              prefix={<DesktopOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="总功耗(W)"
+              value={Number(stats.totalPower).toFixed(2)}
+              prefix={<AppstoreOutlined />}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Card
+        title={<span style={{ fontSize: isMobile ? 16 : 18 }}>机房列表</span>}
+        extra={
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={handleAdd}
+            size={isMobile ? 'small' : 'middle'}
+          >
+            {isMobile ? '新增' : '新增机房'}
+          </Button>
+        }
+        styles={{ 
+          body: { 
+            padding: isMobile ? 0 : 24,
+          } 
+        }}
+      >
+        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+          <Table
+            dataSource={rooms}
+            columns={columns}
+            rowKey="id"
+            pagination={false}
+            scroll={{ x: isMobile ? 300 : undefined }}
+            size={isMobile ? 'small' : 'middle'}
+          />
+        </div>
+      </Card>
 
       <Modal
         title={editingRoom ? '编辑机房' : '新增机房'}
@@ -339,6 +334,65 @@ export default function IdcHomePage() {
           </Form.Item>
         </Form>
       </Modal>
+    </Spin>
+  );
+}
+
+// AI问答面板组件
+function IdcAIChatPanel() {
+  const initialSuggestions = [
+    '所有机房的机柜一共用了多少U？',
+    '哪个机房放的服务器最多？',
+    '总共有多少个机柜？',
+    '哪个机柜的设备最多？',
+    '所有设备的总功耗是多少？',
+    '图书馆机房有多少个机柜？',
+  ];
+
+  return (
+    <AIChatPanel
+      apiEndpoint="/api/idc/ai/query"
+      title="IDC机房AI智能问答"
+      description="我是IDC机房AI智能问答助手，可以帮您查询机房、机柜、设备的相关信息"
+      initialSuggestions={initialSuggestions}
+      storageKeyPrefix="idc_ai_chat"
+      enableEntityConfirm={true}
+    />
+  );
+}
+
+// 主页面组件
+export default function IdcHomePage() {
+  const [activeTab, setActiveTab] = useState('management');
+
+  return (
+    <div style={{ padding: 24 }}>
+      <h1 style={{ marginBottom: 24 }}>
+        <DatabaseOutlined style={{ marginRight: 8 }} />
+        IDC机房管理
+      </h1>
+
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={[
+          {
+            key: 'management',
+            label: '机房管理',
+            children: <IdcManagementPanel />,
+          },
+          {
+            key: 'ai-chat',
+            label: (
+              <span>
+                <RobotOutlined style={{ marginRight: 4 }} />
+                AI智能问答
+              </span>
+            ),
+            children: <IdcAIChatPanel />,
+          },
+        ]}
+      />
     </div>
   );
 }
