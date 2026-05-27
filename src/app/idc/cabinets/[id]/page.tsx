@@ -6,6 +6,7 @@ import { Card, Descriptions, Table, Button, Space, Tag, Spin, Progress, Row, Col
 import { PlusOutlined, DeleteOutlined, EditOutlined, DatabaseOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
+import FormattedNumber from '@/components/FormattedNumber';
 import { App } from 'antd';
 
 const { useBreakpoint } = Grid;
@@ -233,7 +234,7 @@ export default function CabinetDetailPage() {
             <Space size="small" wrap>
               <Tag color={typeInfo.color}>{typeInfo.label}</Tag>
               <Tag color={statusInfo.color}>{statusInfo.label}</Tag>
-              {record.device.ratedPower && <Tag>{record.device.ratedPower}W</Tag>}
+              {record.device.ratedPower && <Tag><FormattedNumber value={record.device.ratedPower} />W</Tag>}
             </Space>
             <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: '#666' }}>
               {record.device.brandModel} | {record.device.assetNo || '无资产编号'}
@@ -290,7 +291,14 @@ export default function CabinetDetailPage() {
       width: 80,
       render: (_: unknown, record: Device) => `U${record.startU}-${record.startU + record.occupyU - 1}`,
     },
-    { title: '功耗(W)', dataIndex: 'ratedPower', key: 'ratedPower', width: 90, responsive: ['lg' as const] },
+    {
+      title: '功耗(W)',
+      dataIndex: 'ratedPower',
+      key: 'ratedPower',
+      width: 90,
+      responsive: ['lg' as const],
+      render: (value: number) => <FormattedNumber value={value} />,
+    },
     {
       title: '状态',
       dataIndex: 'status',
@@ -358,8 +366,8 @@ export default function CabinetDetailPage() {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} lg={16}>
           <Card title="机柜信息" styles={{ body: { padding: isMobile ? 12 : 24 } }}>
-            <Descriptions 
-              bordered 
+            <Descriptions
+              bordered
               column={{ xs: 1, sm: 2 }}
               size={isMobile ? 'small' : 'large'}
             >
@@ -374,6 +382,9 @@ export default function CabinetDetailPage() {
               </Descriptions.Item>
               <Descriptions.Item label="位置">{cabinet.position || '-'}</Descriptions.Item>
               <Descriptions.Item label="PDU配置">{cabinet.pduInfo || '-'}</Descriptions.Item>
+              <Descriptions.Item label="额定功率">
+                <FormattedNumber value={cabinet.ratedPower} suffix="W" />
+              </Descriptions.Item>
               <Descriptions.Item label="状态">
                 {cabinet.status === 1 ? <Tag color="green">可用</Tag> : <Tag color="red">不可用</Tag>}
               </Descriptions.Item>
@@ -388,11 +399,15 @@ export default function CabinetDetailPage() {
         <Col xs={24} lg={8}>
           <Card title="容量统计" styles={{ body: { padding: isMobile ? 12 : 24 } }}>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>U位使用: {cabinet.usedU}/{cabinet.totalU}</div>
+              <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>
+                U位使用: <FormattedNumber value={cabinet.usedU} />/<FormattedNumber value={cabinet.totalU} />
+              </div>
               <Progress percent={uUsagePercent} status={uUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'default'} />
             </div>
             <div>
-              <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>功耗使用: {cabinet.usedPower}W/{cabinet.ratedPower}W</div>
+              <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>
+                功耗使用: <FormattedNumber value={cabinet.usedPower} suffix="W" />/<FormattedNumber value={cabinet.ratedPower} suffix="W" />
+              </div>
               <Progress percent={powerUsagePercent} status={powerUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'default'} />
             </div>
           </Card>

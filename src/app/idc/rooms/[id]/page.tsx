@@ -6,6 +6,7 @@ import { Card, Descriptions, Table, Button, Space, Tag, Spin, Row, Col, Statisti
 import { ArrowLeftOutlined, PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
+import FormattedNumber from '@/components/FormattedNumber';
 import { v4 as uuidv4 } from 'uuid';
 
 const { useBreakpoint } = Grid;
@@ -388,7 +389,15 @@ export default function RoomDetailPage() {
         const percent = record.ratedPower > 0 ? Math.round((record.usedPower / record.ratedPower) * 100) : 0;
         return (
           <div style={{ width: isMobile ? 100 : 160 }}>
-            <Progress percent={percent} size="small" format={() => `${record.usedPower}/${record.ratedPower}W`} />
+            <Progress
+              percent={percent}
+              size="small"
+              format={() => (
+                <>
+                  <FormattedNumber value={record.usedPower} />/<FormattedNumber value={record.ratedPower} />W
+                </>
+              )}
+            />
           </div>
         );
       },
@@ -713,9 +722,6 @@ export default function RoomDetailPage() {
           </Form.Item>
           <Form.Item name="ratedPower" label="额定功耗(W)">
             <InputNumber style={{ width: '100%' }} min={0} precision={2} />
-          </Form.Item>
-          <Form.Item name="position" label="机房内位置">
-            <Input />
           </Form.Item>
           <Form.Item name="pduInfo" label="PDU配置">
             <Input />
