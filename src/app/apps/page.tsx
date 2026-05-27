@@ -15,6 +15,8 @@ import {
   Select,
   theme,
   Tooltip,
+  Grid,
+  Card,
 } from 'antd';
 import {
   EditOutlined,
@@ -24,6 +26,10 @@ import {
 } from '@ant-design/icons';
 import { iconMapping, iconOptions, useIcons } from '@/lib/icons';
 import type { TableProps } from 'antd';
+import FriendlyTime from '@/components/FriendlyTime';
+import ActionButton from '@/app/tags/components/ActionButton';
+
+const { useBreakpoint } = Grid;
 
 interface App {
   id: number;
@@ -65,6 +71,8 @@ export default function AppsPage() {
   const [form] = Form.useForm();
   const { token } = theme.useToken();
   const { getIcon } = useIcons();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   useEffect(() => {
     fetchApps();
@@ -148,7 +156,7 @@ export default function AppsPage() {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 80,
+      width: 60,
       sorter: (a, b) => a.id - b.id,
       defaultSortOrder: 'ascend',
     },
@@ -156,14 +164,14 @@ export default function AppsPage() {
       title: '应用名称',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 150,
       render: (name: string, record: App) => (
-        <Space>
+        <Space size="small">
           {getIcon(record.icon)}
-          {name}
+          <span style={{ fontSize: isMobile ? 13 : 14 }}>{name}</span>
           {isBuiltinApp(record.id) && (
             <Tooltip title="内置应用，不允许删除，URL不可修改">
-              <Tag icon={<LockOutlined />} color="blue" />
+              <Tag icon={<LockOutlined />} color="blue" style={{ fontSize: isMobile ? 10 : 12 }} />
             </Tooltip>
           )}
         </Space>
@@ -173,19 +181,24 @@ export default function AppsPage() {
       title: '描述',
       dataIndex: 'description',
       key: 'description',
+      width: 150,
+      responsive: ['md' as const],
     },
     {
       title: '访问地址',
       dataIndex: 'url',
       key: 'url',
+      width: 150,
+      responsive: ['lg' as const],
       render: (url: string) => url || '-',
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 80,
       render: (status: number) => (
-        <Tag color={status === 1 ? 'green' : 'red'}>
+        <Tag color={status === 1 ? 'green' : 'red'} style={{ fontSize: isMobile ? 10 : 12 }}>
           {status === 1 ? '启用' : '禁用'}
         </Tag>
       ),
@@ -194,41 +207,30 @@ export default function AppsPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (text: string) => {
-        const date = new Date(text);
-        // 转换为北京时间 (UTC+8)
-        const beijingTime = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-        return beijingTime.toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-        });
-      },
+      width: 120,
+      responsive: ['md' as const],
+      render: (text: string) => <FriendlyTime date={text} />,
     },
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 100,
       render: (_, record) => (
-        <Space>
-          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            编辑
-          </Button>
+        <Space size="small">
+          <ActionButton
+            icon={<EditOutlined />}
+            tooltip="编辑"
+            onClick={() => handleEdit(record)}
+          />
           {!isBuiltinApp(record.id) && (
-            <Popconfirm
-              title="确定删除此应用？"
+            <ActionButton
+              icon={<DeleteOutlined />}
+              tooltip="删除"
+              danger
+              confirmTitle="确认删除"
+              confirmDescription="确定要删除此应用吗？"
               onConfirm={() => handleDelete(record.id)}
-              okText="确定"
-              cancelText="取消"
-            >
-              <Button type="link" danger icon={<DeleteOutlined />}>
-                删除
-              </Button>
-            </Popconfirm>
+            />
           )}
         </Space>
       ),
@@ -237,16 +239,27 @@ export default function AppsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>应用管理</h1>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={apps}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
+      <Card
+        title={<span style={{ fontSize: isMobile ? 18 : 24 }}>应用管理</span>}
+        styles={{ body: { padding: isMobile ? 0 : 24 } }}
+      >
+        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+          <Table
+            columns={columns}
+            dataSource={apps}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              pageSize: 10,
+              size: isMobile ? 'small' : undefined,
+              showSizeChanger: !isMobile,
+              showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
+            }}
+            scroll={{ x: isMobile ? 400 : undefined }}
+            size={isMobile ? 'small' : 'middle'}
+          />
+        </div>
+      </Card>
       <Modal
         title="编辑应用"
         open={modalVisible}

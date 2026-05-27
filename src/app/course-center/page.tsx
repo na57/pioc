@@ -12,6 +12,7 @@ import {
   App,
   Spin,
   Empty,
+  Grid,
 } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import Link from 'next/link';
@@ -19,6 +20,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 
 const { Title } = Typography;
 const { Option } = Select;
+const { useBreakpoint } = Grid;
 
 // 课程类型
 interface Course {
@@ -60,6 +62,8 @@ export default function CourseCenterPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   // 从 URL 读取初始状态
   const initialCourseType = (searchParams.get('type') as 'undergraduate' | 'graduate') || 'undergraduate';
@@ -205,14 +209,15 @@ export default function CourseCenterPage() {
       title: '课程号',
       dataIndex: 'kch',
       key: 'kch',
-      width: 120,
+      width: isMobile ? 100 : 120,
     },
     {
       title: '课程名称',
       dataIndex: 'kcmc',
       key: 'kcmc',
+      width: 200,
       render: (text: string, record: Course) => (
-        <Link href={`/course-center/${record.kch}`}>
+        <Link href={`/course-center/${record.kch}`} style={{ fontSize: isMobile ? 13 : 14 }}>
           {text}
         </Link>
       ),
@@ -221,13 +226,15 @@ export default function CourseCenterPage() {
       title: '负责人',
       dataIndex: 'kcfzrh',
       key: 'kcfzrh',
-      width: 120,
+      width: isMobile ? 80 : 120,
+      responsive: ['md' as const],
     },
     {
       title: '开设单位',
       dataIndex: 'gsyxmc',
       key: 'gsyxmc',
-      width: 200,
+      width: 150,
+      responsive: ['lg' as const],
       render: (text: string, record: Course) => {
         // 本科课程使用 gsyxmc，研究生课程使用 kcksdwmc
         return courseType === 'undergraduate' ? record.gsyxmc : record.kcksdwmc;
@@ -237,20 +244,21 @@ export default function CourseCenterPage() {
       title: '学分',
       dataIndex: 'xf',
       key: 'xf',
-      width: 80,
+      width: 60,
     },
   ];
 
   return (
     <div>
-      <Title level={2}>课程中心</Title>
+      <Title level={isMobile ? 4 : 2}>课程中心</Title>
 
       <Card style={{ marginBottom: 16 }}>
-        <Space.Compact style={{ width: '100%' }}>
+        <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
           <Select
             value={courseType}
             onChange={handleCourseTypeChange}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? '100%' : 120 }}
+            size={isMobile ? 'small' : 'middle'}
           >
             <Option value="undergraduate">本科课程</Option>
             <Option value="graduate">研究生课程</Option>
@@ -258,9 +266,10 @@ export default function CourseCenterPage() {
           <Select
             value={selectedDeptCode}
             onChange={setSelectedDeptCode}
-            style={{ width: 150 }}
+            style={{ width: isMobile ? '100%' : 150 }}
             placeholder="开设单位"
             allowClear
+            size={isMobile ? 'small' : 'middle'}
           >
             {departmentOptions.map(opt => (
               <Option key={opt.value} value={opt.value}>{opt.label}</Option>
@@ -269,9 +278,10 @@ export default function CourseCenterPage() {
           <Select
             value={selectedStatus}
             onChange={setSelectedStatus}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? '100%' : 120 }}
             placeholder="课程状态"
             allowClear
+            size={isMobile ? 'small' : 'middle'}
           >
             {statusOptions.map(opt => (
               <Option key={opt.value} value={opt.value}>{opt.label}</Option>
@@ -284,33 +294,40 @@ export default function CourseCenterPage() {
             onPressEnter={handleSearch}
             prefix={<SearchOutlined />}
             allowClear
+            size={isMobile ? 'small' : 'middle'}
+            style={{ width: isMobile ? '100%' : 'auto' }}
           />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch} size={isMobile ? 'small' : 'middle'}>
             查询
           </Button>
-          <Button onClick={handleReset}>
+          <Button onClick={handleReset} size={isMobile ? 'small' : 'middle'}>
             重置
           </Button>
-        </Space.Compact>
+        </Space>
       </Card>
 
-      <Card>
-        <Table
-          columns={columns}
-          dataSource={courses}
-          rowKey="kch"
-          loading={loading}
-          pagination={{
-            ...pagination,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-            onChange: (page, pageSize) => {
-              setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 10 }));
-              fetchCourses(page, pageSize);
-            },
-          }}
-        />
+      <Card styles={{ body: { padding: isMobile ? 0 : 24 } }}>
+        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+          <Table
+            columns={columns}
+            dataSource={courses}
+            rowKey="kch"
+            loading={loading}
+            size={isMobile ? 'small' : 'middle'}
+            scroll={{ x: isMobile ? 400 : undefined }}
+            pagination={{
+              ...pagination,
+              size: isMobile ? 'small' : undefined,
+              showSizeChanger: !isMobile,
+              showQuickJumper: !isMobile,
+              showTotal: isMobile ? undefined : (total) => `共 ${total} 条记录`,
+              onChange: (page, pageSize) => {
+                setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 10 }));
+                fetchCourses(page, pageSize);
+              },
+            }}
+          />
+        </div>
       </Card>
     </div>
   );

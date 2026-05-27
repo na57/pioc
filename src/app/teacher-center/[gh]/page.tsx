@@ -13,6 +13,7 @@ import {
   Tag,
   Spin,
   App,
+  Grid,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -25,6 +26,7 @@ import AISummary from '../components/AISummary';
 import AIChat from '../components/AIChat';
 
 const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
 
 interface Teacher {
   gh: string;
@@ -54,6 +56,8 @@ export default function TeacherDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
   const gh = params.gh as string;
 
   const [loading, setLoading] = useState(true);
@@ -116,34 +120,34 @@ export default function TeacherDetailPage() {
     <div>
       {/* 头部信息 */}
       <Card style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Space size="large">
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-start', gap: isMobile ? 16 : 0 }}>
+          <Space size={isMobile ? 'middle' : 'large'} direction={isMobile ? 'vertical' : 'horizontal'}>
             <Avatar
               src={teacher.zp || null}
               icon={<UserOutlined />}
-              size={80}
+              size={isMobile ? 64 : 80}
             />
             <div>
-              <Title level={3} style={{ margin: 0 }}>
+              <Title level={isMobile ? 4 : 3} style={{ margin: 0 }}>
                 {teacher.xm}
-                <Tag color="blue" style={{ marginLeft: 8 }}>{teacher.gh}</Tag>
+                <Tag color="blue" style={{ marginLeft: 8, fontSize: isMobile ? 12 : 14 }}>{teacher.gh}</Tag>
               </Title>
-              <div style={{ marginTop: 8 }}>
+              <div style={{ marginTop: 8, fontSize: isMobile ? 13 : 14 }}>
                 <Text>{teacher.dwmc}</Text>
-                <Text style={{ marginLeft: 16 }}>职称: {teacher.zyjszwdmmc}</Text>
+                <Text style={{ marginLeft: isMobile ? 8 : 16 }}>职称: {teacher.zyjszwdmmc}</Text>
                 {teacher.dzzw && (
-                  <Text style={{ marginLeft: 16 }}>职务: {teacher.dzzw}</Text>
+                  <Text style={{ marginLeft: isMobile ? 8 : 16 }}>职务: {teacher.dzzw}</Text>
                 )}
               </div>
               <div style={{ marginTop: 4 }}>
-                <Tag color={teacher.dqztmmc === '在岗' ? 'green' : 'default'}>
+                <Tag color={teacher.dqztmmc === '在岗' ? 'green' : 'default'} style={{ fontSize: isMobile ? 12 : 14 }}>
                   {teacher.dqztmmc}
                 </Tag>
               </div>
             </div>
           </Space>
           
-          <Button icon={<ArrowLeftOutlined />} onClick={handleBack}>
+          <Button icon={<ArrowLeftOutlined />} onClick={handleBack} size={isMobile ? 'small' : 'middle'}>
             返回列表
           </Button>
         </div>
@@ -158,8 +162,12 @@ export default function TeacherDetailPage() {
             key: 'basic',
             label: '基本信息',
             children: (
-              <Card>
-                <Descriptions bordered column={2}>
+              <Card styles={{ body: { padding: isMobile ? 12 : 24 } }}>
+                <Descriptions 
+                  bordered 
+                  column={{ xs: 1, sm: 2 }}
+                  size={isMobile ? 'small' : 'large'}
+                >
                   <Descriptions.Item label="工号">{teacher.gh}</Descriptions.Item>
                   <Descriptions.Item label="姓名">{teacher.xm}</Descriptions.Item>
                   <Descriptions.Item label="性别">{teacher.xbmmc}</Descriptions.Item>
@@ -170,7 +178,7 @@ export default function TeacherDetailPage() {
                   <Descriptions.Item label="政治面貌">{teacher.zzmmmmc || '-'}</Descriptions.Item>
                   <Descriptions.Item label="最高学历">{teacher.zgxlmmc || '-'}</Descriptions.Item>
                   <Descriptions.Item label="最高学位">{teacher.zgxwmmc || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="研究方向" span={2}>{teacher.yjfx || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="研究方向" span={{ xs: 1, sm: 2 }}>{teacher.yjfx || '-'}</Descriptions.Item>
                   <Descriptions.Item label="手机号码">{teacher.yddh || '-'}</Descriptions.Item>
                   <Descriptions.Item label="电子邮箱">{teacher.dzyx || '-'}</Descriptions.Item>
                   <Descriptions.Item label="参加工作年月">{teacher.cjgzny || '-'}</Descriptions.Item>

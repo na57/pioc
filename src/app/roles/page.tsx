@@ -13,9 +13,14 @@ import {
   Card,
   Transfer,
   theme,
+  Grid,
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SettingOutlined } from '@ant-design/icons';
 import type { TableProps } from 'antd';
+import ActionButton from '@/app/tags/components/ActionButton';
+import FriendlyTime from '@/components/FriendlyTime';
+
+const { useBreakpoint } = Grid;
 
 interface Role {
   id: number;
@@ -53,6 +58,8 @@ export default function RolesPage() {
   const [form] = Form.useForm();
   const { token } = theme.useToken();
   const { message } = App.useApp();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   useEffect(() => {
     fetchRoles();
@@ -256,38 +263,43 @@ export default function RolesPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (text: string) => new Date(text).toLocaleString('zh-CN'),
+      width: 120,
+      render: (text: string) => <FriendlyTime date={text} />,
     },
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 100,
       render: (_, record) => {
         const isBuiltin = record.is_builtin === 1;
         return (
-          <Space>
+          <Space size="small">
             {!isBuiltin && (
-              <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-                编辑
-              </Button>
+              <ActionButton
+                icon={<EditOutlined />}
+                tooltip="编辑"
+                onClick={() => handleEdit(record)}
+              />
             )}
-            <Button type="link" icon={<SettingOutlined />} onClick={() => handleAssign(record, 'users')}>
-              分配用户
-            </Button>
-            <Button type="link" icon={<SettingOutlined />} onClick={() => handleAssign(record, 'apps')}>
-              分配应用
-            </Button>
+            <ActionButton
+              icon={<SettingOutlined />}
+              tooltip="分配用户"
+              onClick={() => handleAssign(record, 'users')}
+            />
+            <ActionButton
+              icon={<SettingOutlined />}
+              tooltip="分配应用"
+              onClick={() => handleAssign(record, 'apps')}
+            />
             {!isBuiltin && (
-              <Popconfirm
-                title="确定删除此角色？"
+              <ActionButton
+                icon={<DeleteOutlined />}
+                tooltip="删除"
+                danger
+                confirmTitle="确认删除"
+                confirmDescription="确定要删除此角色吗？"
                 onConfirm={() => handleDelete(record.id)}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Button type="link" danger icon={<DeleteOutlined />}>
-                  删除
-                </Button>
-              </Popconfirm>
+              />
             )}
           </Space>
         );
@@ -305,19 +317,32 @@ export default function RolesPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 24, margin: 0 }}>角色管理</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-          添加角色
-        </Button>
-      </div>
-      <Table
-        columns={columns}
-        dataSource={roles}
-        rowKey="id"
-        loading={loading}
-        pagination={{ pageSize: 10 }}
-      />
+      <Card
+        title={<span style={{ fontSize: isMobile ? 18 : 24 }}>角色管理</span>}
+        extra={
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} size={isMobile ? 'small' : 'middle'}>
+            {isMobile ? '添加' : '添加角色'}
+          </Button>
+        }
+        styles={{ body: { padding: isMobile ? 12 : 24 } }}
+      >
+        <div className="table-responsive">
+          <Table
+            columns={columns}
+            dataSource={roles}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              pageSize: 10,
+              size: isMobile ? 'small' : undefined,
+              showSizeChanger: !isMobile,
+              showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
+            }}
+            scroll={{ x: isMobile ? 500 : undefined }}
+            size={isMobile ? 'small' : 'middle'}
+          />
+        </div>
+      </Card>
       <Modal
         title={editingRole ? '编辑角色' : '添加角色'}
         open={modalVisible}
