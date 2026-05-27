@@ -2,12 +2,21 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, Descriptions, Table, Button, Space, Tag, Spin, Progress, Row, Col, Tabs, Modal, Form, Input, InputNumber, Select, Grid } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { Card, Descriptions, Table, Button, Space, Tag, Spin, Progress, Row, Col, Tabs, Modal, Form, Input, InputNumber, Select, Grid, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, DatabaseOutlined, PushpinOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 import FormattedNumber from '@/components/FormattedNumber';
 import { App } from 'antd';
+import {
+  deviceTypeMap,
+  getSelectableDeviceTypes,
+  getDeviceTypeConfig,
+  isRealDevice,
+  isReservedSpace,
+  RESERVED_REASONS,
+  getReservedReasonLabel,
+} from '@/lib/config/idc-device-types';
 
 const { useBreakpoint } = Grid;
 
@@ -42,12 +51,7 @@ interface Device {
   remark: string;
 }
 
-const deviceTypeMap: Record<number, { label: string; color: string }> = {
-  1: { label: '服务器', color: 'blue' },
-  2: { label: '网络设备', color: 'green' },
-  3: { label: '安全设备', color: 'orange' },
-  4: { label: '其他', color: 'default' },
-};
+
 
 const statusMap: Record<number, { label: string; color: string }> = {
   1: { label: '运行', color: 'green' },
@@ -71,6 +75,9 @@ export default function CabinetDetailPage() {
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [deviceForm] = Form.useForm();
+  const [isReserveModalOpen, setIsReserveModalOpen] = useState(false);
+  const [reserveForm] = Form.useForm();
+  const [selectedUPosition, setSelectedUPosition] = useState<number | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -188,6 +195,49 @@ export default function CabinetDetailPage() {
     }
   };
 
+  // 打开预留空间弹窗
+  const handleReserveSpace = (uPosition: number) => {
+    setSelectedUPosition(uPosition);
+    reserveForm.resetFields();
+    reserveForm.setFieldsValue({
+      startU: uPosition,
+      occupyU: 1,
+      reservedReason: 'cooling',
+    });
+    setIsReserveModalOpen(true);
+  };
+
+  // 提交预留空间
+  const handleSubmitReserve = async (values: Record<string, unknown>) => {
+    try {
+      const body = {
+        cabinetId: id,
+        name: getReservedReasonLabel(values.reservedReason as string),
+        deviceType: 5, // 预留空间类型
+        startU: values.startU,
+        occupyU: values.occupyU,
+        status: 1,
+        remark: values.remark || `${getReservedReasonLabel(values.reservedReason as string)} - U${values.startU}`,
+      };
+
+      const res = await fetch('/api/idc/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.success) {
+        message.success('预留空间成功');
+        setIsReserveModalOpen(false);
+        fetchCabinetDetail();
+      } else {
+        message.error(data.message || '操作失败');
+      }
+    } catch (error) {
+      message.error('网络错误');
+    }
+  };
+
   const uPositionColumns = [
     {
       title: 'U位',
@@ -211,34 +261,58 @@ export default function CabinetDetailPage() {
       key: 'device',
       render: (_: unknown, record: { u: number; device: Device | null; isStart: boolean }) => {
         if (!record.device) {
-          return <span style={{ color: '#999' }}>空闲</span>;
+          return (
+            <Space>
+              <span style={{ color: '#999' }}>空闲</span>
+              <ActionButton
+                icon={<PushpinOutlined />}
+                tooltip="标记为预留空间"
+                onClick={() => handleReserveSpace(record.u)}
+              />
+            </Space>
+          );
         }
 
         if (!record.isStart) {
           return null; // 非起始U位不显示
         }
 
-        const typeInfo = deviceTypeMap[record.device.deviceType] || { label: '未知', color: 'default' };
-        const statusInfo = statusMap[record.device.status] || { label: '未知', color: 'default' };
+        const typeConfig = getDeviceTypeConfig(record.device.deviceType);
+        const isReserved = isReservedSpace(record.device.deviceType);
 
         return (
           <div style={{
-            background: '#f0f5ff',
+            background: typeConfig.bgColor,
             padding: isMobile ? '4px 8px' : '8px 12px',
             borderRadius: 4,
-            border: '1px solid #d6e4ff',
+            border: `1px solid ${typeConfig.borderColor}`,
           }}>
             <div style={{ fontWeight: 500, marginBottom: 4, fontSize: isMobile ? 13 : 14 }}>
-              {record.device.name}
+              {isReserved ? (
+                <span>{record.device.name || '预留空间'}</span>
+              ) : (
+                record.device.name
+              )}
             </div>
             <Space size="small" wrap>
-              <Tag color={typeInfo.color}>{typeInfo.label}</Tag>
-              <Tag color={statusInfo.color}>{statusInfo.label}</Tag>
-              {record.device.ratedPower && <Tag><FormattedNumber value={record.device.ratedPower} />W</Tag>}
+              <Tag color={typeConfig.color}>{typeConfig.label}</Tag>
+              {!isReserved && (
+                <Tag color={statusMap[record.device.status]?.color || 'default'}>
+                  {statusMap[record.device.status]?.label || '未知'}
+                </Tag>
+              )}
+              {record.device.ratedPower > 0 && <Tag><FormattedNumber value={record.device.ratedPower} />W</Tag>}
             </Space>
-            <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: '#666' }}>
-              {record.device.brandModel} | {record.device.assetNo || '无资产编号'}
-            </div>
+            {isReserved && record.device.remark && (
+              <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: '#666' }}>
+                {record.device.remark}
+              </div>
+            )}
+            {!isReserved && (
+              <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: '#666' }}>
+                {record.device.brandModel} | {record.device.assetNo || '无资产编号'}
+              </div>
+            )}
           </div>
         );
       },
@@ -250,6 +324,23 @@ export default function CabinetDetailPage() {
       render: (_: unknown, record: { u: number; device: Device | null; isStart: boolean }) => {
         if (!record.device || !record.isStart) return null;
 
+        const isReserved = isReservedSpace(record.device.deviceType);
+
+        // 预留空间只显示"取消预留"操作
+        if (isReserved) {
+          return (
+            <ActionButton
+              icon={<DeleteOutlined />}
+              tooltip="取消预留"
+              danger
+              confirmTitle="确认取消预留"
+              confirmDescription={`确定要取消 ${record.device.name} 吗？`}
+              onConfirm={() => handleDeleteDevice(record.device!.id)}
+            />
+          );
+        }
+
+        // 真实设备显示修改和下架操作
         return (
           <Space size="small">
             <ActionButton
@@ -357,7 +448,11 @@ export default function CabinetDetailPage() {
   }
 
   const uPositionData = generateUPositionData();
-  const uUsagePercent = cabinet.totalU > 0 ? Math.round((cabinet.usedU / cabinet.totalU) * 100) : 0;
+  // 计算真实设备数量（不包含预留空间）
+  const realDeviceCount = devices.filter(d => isRealDevice(d.deviceType)).length;
+  // 计算空间使用率（包含预留空间）
+  const totalUsedU = devices.reduce((sum, d) => sum + d.occupyU, 0);
+  const uUsagePercent = cabinet.totalU > 0 ? Math.round((totalUsedU / cabinet.totalU) * 100) : 0;
   const powerUsagePercent = cabinet.ratedPower > 0 ? Math.round((cabinet.usedPower / cabinet.ratedPower) * 100) : 0;
 
   // 基本信息Tab内容
@@ -400,22 +495,25 @@ export default function CabinetDetailPage() {
           <Card title="容量统计" styles={{ body: { padding: isMobile ? 12 : 24 } }}>
             <div style={{ marginBottom: 16 }}>
               <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>
-                U位使用: <FormattedNumber value={cabinet.usedU} />/<FormattedNumber value={cabinet.totalU} />
+                U位使用: <FormattedNumber value={totalUsedU} />/<FormattedNumber value={cabinet.totalU} />
+                <span style={{ color: '#999', marginLeft: 8 }}>
+                  (含预留空间)
+                </span>
               </div>
-              <Progress percent={uUsagePercent} status={uUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'default'} />
+              <Progress percent={uUsagePercent} status={uUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'medium'} />
             </div>
             <div>
               <div style={{ marginBottom: 8, fontSize: isMobile ? 13 : 14 }}>
                 功耗使用: <FormattedNumber value={cabinet.usedPower} suffix="W" />/<FormattedNumber value={cabinet.ratedPower} suffix="W" />
               </div>
-              <Progress percent={powerUsagePercent} status={powerUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'default'} />
+              <Progress percent={powerUsagePercent} status={powerUsagePercent > 90 ? 'exception' : 'normal'} size={isMobile ? 'small' : 'medium'} />
             </div>
           </Card>
         </Col>
       </Row>
 
       <Card
-        title={`设备列表 (${devices.length})`}
+        title={`设备列表 (${realDeviceCount})`}
         styles={{ body: { padding: isMobile ? 0 : 24 } }}
         extra={
           cabinet.status === 1 && (
@@ -427,7 +525,7 @@ export default function CabinetDetailPage() {
       >
         <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
           <Table
-            dataSource={devices}
+            dataSource={devices.filter(d => isRealDevice(d.deviceType))}
             columns={deviceColumns}
             rowKey="id"
             pagination={false}
@@ -505,10 +603,9 @@ export default function CabinetDetailPage() {
           </Form.Item>
           <Form.Item name="deviceType" label="设备类型" rules={[{ required: true, message: '请选择设备类型' }]}>
             <Select placeholder="选择类型">
-              <Select.Option value={1}>服务器</Select.Option>
-              <Select.Option value={2}>网络设备</Select.Option>
-              <Select.Option value={3}>安全设备</Select.Option>
-              <Select.Option value={4}>其他</Select.Option>
+              {getSelectableDeviceTypes().map(type => (
+                <Select.Option key={type.value} value={type.value}>{type.label}</Select.Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="brandModel" label="品牌型号">
@@ -542,6 +639,35 @@ export default function CabinetDetailPage() {
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 预留空间弹窗 */}
+      <Modal
+        title="标记预留空间"
+        open={isReserveModalOpen}
+        onOk={() => reserveForm.submit()}
+        onCancel={() => setIsReserveModalOpen(false)}
+        width={isMobile ? '95%' : 500}
+        style={{ maxWidth: 500 }}
+      >
+        <Form form={reserveForm} layout="vertical" onFinish={handleSubmitReserve}>
+          <Form.Item name="startU" label="起始U位" rules={[{ required: true, message: '请输入起始U位' }]}>
+            <InputNumber style={{ width: '100%' }} min={1} max={cabinet?.totalU || 42} disabled />
+          </Form.Item>
+          <Form.Item name="occupyU" label="预留U数" initialValue={1} rules={[{ required: true, message: '请输入预留U数' }]}>
+            <InputNumber style={{ width: '100%' }} min={1} max={10} />
+          </Form.Item>
+          <Form.Item name="reservedReason" label="预留原因" initialValue="cooling" rules={[{ required: true, message: '请选择预留原因' }]}>
+            <Select placeholder="选择预留原因">
+              {RESERVED_REASONS.map(reason => (
+                <Select.Option key={reason.value} value={reason.value}>{reason.label}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="remark" label="备注说明">
+            <Input.TextArea rows={2} placeholder="可选：补充说明预留原因" />
           </Form.Item>
         </Form>
       </Modal>

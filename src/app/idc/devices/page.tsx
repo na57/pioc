@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Space, Tag, Modal, Form, Input, InputNumber, Select, message, App } from 'antd';
+import { Card, Table, Button, Space, Tag, Modal, Form, Input, InputNumber, Select, App } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
+import { deviceTypeMap, getSelectableDeviceTypes, isRealDevice } from '@/lib/config/idc-device-types';
 
 interface Device {
   id: string;
@@ -36,13 +37,6 @@ interface Cabinet {
   usedPower: number;
   status: number;
 }
-
-const deviceTypeMap: Record<number, { label: string; color: string }> = {
-  1: { label: '服务器', color: 'blue' },
-  2: { label: '网络设备', color: 'green' },
-  3: { label: '安全设备', color: 'orange' },
-  4: { label: '其他', color: 'default' },
-};
 
 const statusMap: Record<number, { label: string; color: string }> = {
   1: { label: '运行', color: 'green' },
@@ -265,10 +259,9 @@ export default function DevicesPage() {
           </Form.Item>
           <Form.Item name="deviceType" label="设备类型" rules={[{ required: true, message: '请选择设备类型' }]}>
             <Select placeholder="选择类型">
-              <Select.Option value={1}>服务器</Select.Option>
-              <Select.Option value={2}>网络设备</Select.Option>
-              <Select.Option value={3}>安全设备</Select.Option>
-              <Select.Option value={4}>其他</Select.Option>
+              {getSelectableDeviceTypes().map(type => (
+                <Select.Option key={type.value} value={type.value}>{type.label}</Select.Option>
+              ))}
             </Select>
           </Form.Item>
           <Form.Item name="brandModel" label="品牌型号">

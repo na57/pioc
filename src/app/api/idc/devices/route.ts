@@ -275,7 +275,8 @@ async function updateDeviceHandler(request: NextRequest) {
 
     const allowedFields: Record<string, string> = {
       name: 'name', deviceType: 'device_type', brandModel: 'brand_model',
-      assetNo: 'asset_no', ratedPower: 'rated_power', status: 'status',
+      assetNo: 'asset_no', startU: 'start_u', occupyU: 'occupy_u',
+      ratedPower: 'rated_power', status: 'status',
       sortOrder: 'sort_order', onlineDate: 'online_date', remark: 'remark',
     };
 
@@ -286,7 +287,18 @@ async function updateDeviceHandler(request: NextRequest) {
       const dbField = allowedFields[key];
       if (dbField !== undefined) {
         updates.push(`${dbField} = ?`);
-        values.push(value);
+        // 处理日期格式，将 ISO 格式转换为 YYYY-MM-DD
+        if (key === 'onlineDate' && value) {
+          const date = new Date(value as string);
+          if (!isNaN(date.getTime())) {
+            const formattedDate = date.toISOString().split('T')[0];
+            values.push(formattedDate);
+          } else {
+            values.push(value);
+          }
+        } else {
+          values.push(value);
+        }
       }
     });
 
