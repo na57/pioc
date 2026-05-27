@@ -121,9 +121,20 @@ export interface AIQueryResult {
   clarificationMessage?: string;
   candidates?: EntityMatch[];
   error?: string;
+  userMessage?: string; // 给用户看的友好提示
+}
+
+// SQL生成结果类型
+interface SQLGenerationResult {
+  success: boolean;
+  sql?: string;
+  error?: string;
+  rawResponse?: string;
 }
 
 export class IdcAIQueryService {
+  private readonly MAX_RETRIES = 3;
+
   /**
    * 获取AI配置
    */
@@ -132,10 +143,10 @@ export class IdcAIQueryService {
     const idcConfig = loadIdcRoomConfig();
     // 获取全局配置
     const mainConfig = getConfig();
-    
+
     // 从IDC配置中获取providerId，如果没有则使用全局默认
     const providerId = idcConfig.ai?.providerId || mainConfig.ai?.defaultModel || 'openai';
-    
+
     // 从全局配置中查找对应的provider
     const provider = mainConfig.ai?.providers?.find((p) => p.providerId === providerId);
 
@@ -181,6 +192,206 @@ export class IdcAIQueryService {
   }
 
   /**
+   * 验证SQL安全性
+   * 只允许SELECT语句，禁止其他操作
+   */
+  private validateSQLSafety(sql: string): { valid: boolean; error?: string } {
+    const upperSQL = sql.trim().toUpperCase();
+
+    // 必须是SELECT开头
+    if (!upperSQL.startsWith('SELECT')) {
+      return { valid: false, error: '只允许执行SELECT查询' };
+    }
+
+    // 禁止危险关键字
+    const dangerousKeywords = ['DROP', 'DELETE', 'UPDATE', 'INSERT', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE'];
+    for (const keyword of dangerousKeywords) {
+      // 使用正则匹配完整的单词
+      const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+      if (regex.test(sql)) {
+        return { valid: false, error: `SQL包含禁止的操作: ${keyword}` };
+      }
+    }
+
+    // 限制SQL长度
+    if (sql.length > 5000) {
+      return { valid: false, error: 'SQL语句过长' };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * 从AI响应中提取SQL
+   */
+  private extractSQL(response: string): SQLGenerationResult {
+    // 移除think标签
+    let content = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    // 尝试提取JSON格式
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[0]);
+        if (data.sql && typeof data.sql === 'string') {
+          return { success: true, sql: data.sql.trim() };
+        }
+      }
+    } catch (e) {
+      // JSON解析失败，继续尝试其他方式
+    }
+
+    // 尝试提取代码块
+    const codeBlockMatch = content.match(/```(?:sql)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      return { success: true, sql: codeBlockMatch[1].trim() };
+    }
+
+    // 尝试查找SELECT语句
+    const sqlMatch = content.match(/\bSELECT\b[\s\S]*?;/i);
+    if (sqlMatch) {
+      return { success: true, sql: sqlMatch[0].trim() };
+    }
+
+    // 清理后返回
+    const cleaned = content
+      .replace(/```sql/gi, '')
+      .replace(/```/g, '')
+      .trim();
+
+    if (cleaned.toUpperCase().startsWith('SELECT')) {
+      return { success: true, sql: cleaned };
+    }
+
+    return {
+      success: false,
+      error: '无法从AI响应中提取有效的SQL语句',
+      rawResponse: response,
+    };
+  }
+
+  /**
+   * 生成SQL（带重试机制）
+   */
+  private async generateSQLWithRetry(
+    extraction: {
+      intent: string;
+      entities: {
+        room?: string;
+        cabinet?: string;
+        device?: string;
+        deviceType?: string;
+      };
+      queryType: string;
+      conditions: Record<string, unknown>;
+    },
+    entityResult: EntityResolutionResult
+  ): Promise<SQLGenerationResult> {
+    // 构建实体信息
+    const entityInfo: string[] = [];
+    if (entityResult.room) {
+      entityInfo.push(`机房ID: ${entityResult.room.id} (名称: ${entityResult.room.matched})`);
+    }
+    if (entityResult.cabinet) {
+      entityInfo.push(`机柜ID: ${entityResult.cabinet.id} (名称: ${entityResult.cabinet.matched})`);
+    }
+    if (entityResult.device) {
+      entityInfo.push(`设备ID: ${entityResult.device.id} (名称: ${entityResult.device.matched})`);
+    }
+
+    const basePrompt = `
+你是一个IDC机房数据查询SQL生成助手。请根据用户意图和已解析的实体生成MySQL查询语句。
+
+数据库Schema:
+${idcDatabaseSchema}
+
+用户意图: ${extraction.intent}
+查询类型: ${extraction.queryType}
+已解析实体:
+${entityInfo.join('\n') || '无特定实体'}
+
+设备类型映射:
+- 服务器: device_type = 1
+- 交换机: device_type = 2
+- 路由器: device_type = 3
+- 存储设备: device_type = 4
+- 防火墙: device_type = 5
+- 其他: device_type = 6
+
+要求:
+1. 只使用SELECT查询，禁止INSERT/UPDATE/DELETE/DROP等操作
+2. 使用标准的MySQL语法
+3. 表名使用实际的数据库表名(pioc_idc_xxx)
+4. 字段名使用下划线命名法
+5. 只查询启用的记录(status=1)，除非用户明确要求查询所有
+6. 如果需要关联查询，使用JOIN
+`;
+
+    let lastError: string | undefined;
+
+    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+      try {
+        // 构建prompt，要求JSON格式输出
+        const prompt = basePrompt + `
+
+重要：必须以JSON格式返回，格式如下：
+{
+  "sql": "生成的SQL语句（不要包含markdown代码块标记）",
+  "explanation": "SQL的简要说明（可选）"
+}
+
+只返回JSON，不要其他内容。
+`;
+
+        console.log(`[IDC AI] SQL生成尝试 ${attempt}/${this.MAX_RETRIES}`);
+        const response = await this.callAI(prompt, 0.1);
+        console.log(`[IDC AI] AI原始响应:`, response.substring(0, 500));
+
+        // 提取SQL
+        const extractResult = this.extractSQL(response);
+
+        if (!extractResult.success) {
+          lastError = extractResult.error;
+          console.warn(`[IDC AI] 第${attempt}次尝试提取SQL失败:`, extractResult.error);
+          continue;
+        }
+
+        let sql = extractResult.sql!;
+
+        // 安全检查
+        const safetyCheck = this.validateSQLSafety(sql);
+        if (!safetyCheck.valid) {
+          lastError = safetyCheck.error;
+          console.warn(`[IDC AI] 第${attempt}次尝试SQL安全检查失败:`, safetyCheck.error);
+          continue;
+        }
+
+        // 替换实体ID
+        if (entityResult.room) {
+          sql = sql.replace(/room_id\s*=\s*['"]%?[^'"%]+%?['"]/i, `room_id = '${entityResult.room.id}'`);
+        }
+        if (entityResult.cabinet) {
+          sql = sql.replace(/cabinet_id\s*=\s*['"]%?[^'"%]+%?['"]/i, `cabinet_id = '${entityResult.cabinet.id}'`);
+        }
+
+        console.log(`[IDC AI] SQL生成成功:`, sql.substring(0, 200));
+        return { success: true, sql };
+
+      } catch (error) {
+        lastError = String(error);
+        console.error(`[IDC AI] 第${attempt}次尝试异常:`, error);
+      }
+    }
+
+    // 所有重试都失败了
+    console.error(`[IDC AI] SQL生成失败，已重试${this.MAX_RETRIES}次，最后错误:`, lastError);
+    return {
+      success: false,
+      error: lastError || 'SQL生成失败',
+    };
+  }
+
+  /**
    * 处理用户查询
    */
   async processQuery(question: string): Promise<AIQueryResult> {
@@ -207,11 +418,34 @@ export class IdcAIQueryService {
         };
       }
 
-      // 步骤4: 生成SQL
-      const sql = await this.generateSQL(extraction, entityResult);
+      // 步骤4: 生成SQL（带重试机制）
+      const sqlResult = await this.generateSQLWithRetry(extraction, entityResult);
+
+      if (!sqlResult.success) {
+        return {
+          success: false,
+          question,
+          error: sqlResult.error,
+          userMessage: '抱歉，AI生成查询语句时遇到问题，请换个问题试试。',
+        };
+      }
+
+      const sql = sqlResult.sql!;
 
       // 步骤5: 执行SQL
-      const queryResult = await query(sql);
+      let queryResult: unknown;
+      try {
+        queryResult = await query(sql);
+      } catch (dbError) {
+        console.error('[IDC AI] SQL执行失败:', dbError, 'SQL:', sql);
+        return {
+          success: false,
+          question,
+          sql,
+          error: `SQL执行失败: ${String(dbError)}`,
+          userMessage: '抱歉，查询执行时遇到数据库错误，请换个问题试试。',
+        };
+      }
 
       // 步骤6: AI生成自然语言回答
       const answer = await this.generateAnswer(question, sql, queryResult);
@@ -225,11 +459,12 @@ export class IdcAIQueryService {
         entities: entityResult,
       };
     } catch (error) {
-      console.error('AI查询处理失败:', error);
+      console.error('[IDC AI] 查询处理失败:', error);
       return {
         success: false,
         question,
         error: String(error),
+        userMessage: '抱歉，处理您的问题时出现错误，请稍后重试。',
       };
     }
   }
@@ -278,103 +513,15 @@ ${idcDatabaseSchema}
 `;
 
     let content = await this.callAI(prompt, 0.1);
-    
+
     // 移除 <think> 标签及其内容
     content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    
+
     // 提取JSON部分
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     const jsonStr = jsonMatch ? jsonMatch[0] : '{}';
-    
+
     return JSON.parse(jsonStr);
-  }
-
-  /**
-   * 生成SQL查询
-   */
-  private async generateSQL(
-    extraction: {
-      intent: string;
-      entities: {
-        room?: string;
-        cabinet?: string;
-        device?: string;
-        deviceType?: string;
-      };
-      queryType: string;
-      conditions: Record<string, unknown>;
-    },
-    entityResult: EntityResolutionResult
-  ): Promise<string> {
-    // 构建实体信息
-    const entityInfo: string[] = [];
-    if (entityResult.room) {
-      entityInfo.push(`机房ID: ${entityResult.room.id} (名称: ${entityResult.room.matched})`);
-    }
-    if (entityResult.cabinet) {
-      entityInfo.push(`机柜ID: ${entityResult.cabinet.id} (名称: ${entityResult.cabinet.matched})`);
-    }
-    if (entityResult.device) {
-      entityInfo.push(`设备ID: ${entityResult.device.id} (名称: ${entityResult.device.matched})`);
-    }
-
-    const prompt = `
-你是一个IDC机房数据查询SQL生成助手。请根据用户意图和已解析的实体生成MySQL查询语句。
-
-数据库Schema:
-${idcDatabaseSchema}
-
-用户意图: ${extraction.intent}
-查询类型: ${extraction.queryType}
-已解析实体:
-${entityInfo.join('\n') || '无特定实体'}
-
-设备类型映射:
-- 服务器: device_type = 1
-- 交换机: device_type = 2
-- 路由器: device_type = 3
-- 存储设备: device_type = 4
-- 防火墙: device_type = 5
-- 其他: device_type = 6
-
-要求:
-1. 只返回SQL语句，不要其他解释
-2. 使用标准的MySQL语法
-3. 表名使用实际的数据库表名(pioc_idc_xxx)
-4. 字段名使用下划线命名法
-5. 如果涉及机房名称模糊匹配，使用LIKE '%关键词%'
-6. 对于聚合查询，使用有意义的别名
-7. 只查询启用的记录(status=1)，除非用户明确要求查询所有
-8. 如果需要关联查询，使用JOIN
-
-SQL:
-`;
-
-    let sql = await this.callAI(prompt, 0.1);
-    sql = sql.trim();
-    
-    // 移除 <think> 标签及其内容（先移除，避免影响后续处理）
-    sql = sql.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    
-    // 清理SQL（去除markdown代码块标记）
-    // 匹配 ```sql 或 ``` 开头，``` 结尾的代码块
-    const codeBlockMatch = sql.match(/```(?:sql)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      sql = codeBlockMatch[1].trim();
-    } else {
-      // 如果没有匹配到代码块格式，尝试直接移除标记
-      sql = sql.replace(/^```sql\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/g, '').trim();
-    }
-    
-    // 如果解析到了具体实体ID，替换SQL中的条件
-    if (entityResult.room) {
-      sql = sql.replace(/room_id\s*=\s*['"]%?[^'"%]+%?['"]/i, `room_id = '${entityResult.room.id}'`);
-    }
-    if (entityResult.cabinet) {
-      sql = sql.replace(/cabinet_id\s*=\s*['"]%?[^'"%]+%?['"]/i, `cabinet_id = '${entityResult.cabinet.id}'`);
-    }
-
-    return sql;
   }
 
   /**
@@ -432,11 +579,34 @@ SQL:
         entityResult.device = confirmedEntity;
       }
 
-      // 生成SQL
-      const sql = await this.generateSQL(extraction, entityResult);
+      // 生成SQL（带重试机制）
+      const sqlResult = await this.generateSQLWithRetry(extraction, entityResult);
+
+      if (!sqlResult.success) {
+        return {
+          success: false,
+          question,
+          error: sqlResult.error,
+          userMessage: '抱歉，AI生成查询语句时遇到问题，请换个问题试试。',
+        };
+      }
+
+      const sql = sqlResult.sql!;
 
       // 执行SQL
-      const queryResult = await query(sql);
+      let queryResult: unknown;
+      try {
+        queryResult = await query(sql);
+      } catch (dbError) {
+        console.error('[IDC AI] SQL执行失败:', dbError, 'SQL:', sql);
+        return {
+          success: false,
+          question,
+          sql,
+          error: `SQL执行失败: ${String(dbError)}`,
+          userMessage: '抱歉，查询执行时遇到数据库错误，请换个问题试试。',
+        };
+      }
 
       // 生成回答
       const answer = await this.generateAnswer(question, sql, queryResult);
@@ -450,11 +620,12 @@ SQL:
         entities: entityResult,
       };
     } catch (error) {
-      console.error('确认实体后查询失败:', error);
+      console.error('[IDC AI] 确认实体后查询失败:', error);
       return {
         success: false,
         question,
         error: String(error),
+        userMessage: '抱歉，处理您的问题时出现错误，请稍后重试。',
       };
     }
   }
