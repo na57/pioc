@@ -217,7 +217,7 @@ export default function CabinetDetailPage() {
         startU: values.startU,
         occupyU: values.occupyU,
         status: 1,
-        remark: values.remark || `${getReservedReasonLabel(values.reservedReason as string)} - U${values.startU}`,
+        remark: values.remark || null,
       };
 
       const res = await fetch('/api/idc/devices', {
