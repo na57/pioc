@@ -90,15 +90,39 @@ async function getRoomsHandler(request: NextRequest) {
         updatedAt: item.updated_at,
       }));
 
+      // 查询该机柜的所有设备，动态计算每个机柜的已使用U位和功耗
+      const cabinetIds = (cabinetResult as Array<Record<string, unknown>>).map(item => item.id);
+      const deviceUMap: Record<string, number> = {};
+      const devicePowerMap: Record<string, number> = {};
+      
+      if (cabinetIds.length > 0) {
+        const placeholders = cabinetIds.map(() => '?').join(',');
+        const devicesResult = await query(
+          `SELECT cabinet_id, occupy_u, rated_power FROM pioc_idc_device WHERE cabinet_id IN (${placeholders})`,
+          cabinetIds
+        );
+        
+        if (Array.isArray(devicesResult)) {
+          for (const device of devicesResult) {
+            const d = device as Record<string, unknown>;
+            const cid = d.cabinet_id as string;
+            const u = Number(d.occupy_u) || 0;
+            const power = Number(d.rated_power) || 0;
+            deviceUMap[cid] = (deviceUMap[cid] || 0) + u;
+            devicePowerMap[cid] = (devicePowerMap[cid] || 0) + power;
+          }
+        }
+      }
+      
       const cabinets = (cabinetResult as Array<Record<string, unknown>>).map(item => ({
         id: item.id,
         roomId: item.room_id,
         name: item.name,
         code: item.code,
         totalU: item.total_u,
-        usedU: item.used_u,
+        usedU: deviceUMap[item.id as string] || 0,
         ratedPower: item.rated_power,
-        usedPower: item.used_power,
+        usedPower: devicePowerMap[item.id as string] || 0,
         position: item.position,
         pduInfo: item.pdu_info,
         status: item.status,

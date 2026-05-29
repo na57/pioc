@@ -434,9 +434,14 @@ function AppLayout({ children }: AppLayoutProps) {
           padding: isMobile ? '16px' : '24px 50px',
           marginTop: 'auto',
         }}>
-          <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
-            {systemConfig.name} {systemConfig.copyright}
-          </Text>
+          <Space orientation="vertical" size="small">
+            <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>
+              {systemConfig.name} {systemConfig.copyright}
+            </Text>
+            <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>
+              v{systemConfig.version}
+            </Text>
+          </Space>
         </Footer>
       </Layout>
     </App>

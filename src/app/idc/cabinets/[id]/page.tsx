@@ -323,6 +323,7 @@ export default function CabinetDetailPage() {
             {!isReserved && (
               <div style={{ marginTop: 4, fontSize: isMobile ? 11 : 12, color: '#666' }}>
                 {record.device.brandModel} | {record.device.assetNo || '无资产编号'}
+                {record.device.onlineDate && ` | ${record.device.onlineDate} 上线`}
               </div>
             )}
           </div>

@@ -6,6 +6,19 @@ import { v4 as uuidv4 } from 'uuid';
 
 const appUrl = '/idc';
 
+// 格式化日期为 YYYY-MM-DD 字符串
+function formatDate(date: unknown): string | null {
+  if (!date) return null;
+  if (typeof date === 'string') {
+    // 如果已经是字符串，返回前10位（YYYY-MM-DD）
+    return date.slice(0, 10);
+  }
+  if (date instanceof Date) {
+    return date.toISOString().split('T')[0];
+  }
+  return null;
+}
+
 // GET 请求处理 - 查询设备列表或单个设备
 async function getDevicesHandler(request: NextRequest) {
   try {
@@ -27,7 +40,7 @@ async function getDevicesHandler(request: NextRequest) {
       return NextResponse.json({ success: true, data: deviceResult.data[0] });
     }
 
-    let where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {};
     if (cabinetId) where.cabinetId = cabinetId;
     if (deviceType) where.deviceType = parseInt(deviceType);
     if (status !== null && status !== undefined && status !== '') {
@@ -72,7 +85,7 @@ async function getDevicesHandler(request: NextRequest) {
         ratedPower: device.rated_power,
         status: device.status,
         sortOrder: device.sort_order,
-        onlineDate: device.online_date,
+        onlineDate: formatDate(device.online_date),
         remark: device.remark,
         createdAt: device.created_at,
       }));
@@ -111,7 +124,7 @@ async function getDevicesHandler(request: NextRequest) {
       ratedPower: device.rated_power,
       status: device.status,
       sortOrder: device.sort_order,
-      onlineDate: device.online_date,
+      onlineDate: formatDate(device.online_date),
       remark: device.remark,
       createdAt: device.created_at,
     }));
@@ -155,9 +168,7 @@ async function createDeviceHandler(request: NextRequest) {
       name: cabinetRaw.name as string,
       code: cabinetRaw.code as string,
       totalU: Number(cabinetRaw.total_u) || 0,
-      usedU: Number(cabinetRaw.used_u) || 0,
       ratedPower: Number(cabinetRaw.rated_power) || 0,
-      usedPower: Number(cabinetRaw.used_power) || 0,
       position: cabinetRaw.position as string,
       pduInfo: cabinetRaw.pdu_info as string,
       status: cabinetRaw.status as number,
@@ -200,16 +211,6 @@ async function createDeviceHandler(request: NextRequest) {
       }
     }
 
-    // 校验功耗
-    const devicePower = ratedPower || 0;
-    const newUsedPower = (cabinet.usedPower || 0) + devicePower;
-    if (cabinet.ratedPower && newUsedPower > cabinet.ratedPower) {
-      return NextResponse.json({ 
-        success: false, 
-        message: `功耗超出额定值，当前已分配${cabinet.usedPower || 0}W，额定${cabinet.ratedPower}W` 
-      }, { status: 400 });
-    }
-
     const id = uuidv4();
     
     // 开始事务
@@ -228,13 +229,6 @@ async function createDeviceHandler(request: NextRequest) {
         id, cabinetId, name, deviceType, brandModel || null, assetNo || null,
         startU, occupyU, ratedPower || null, status, body.sortOrder || 0, onlineDate || null, remark || null
       ]);
-
-      // 更新机柜的已用U数和功耗
-      const newUsedU = (cabinet.usedU || 0) + occupyU;
-      await query(
-        'UPDATE pioc_idc_cabinet SET used_u = ?, used_power = ?, updated_at = NOW() WHERE id = ?',
-        [newUsedU, newUsedPower, cabinetId]
-      );
 
       await query('COMMIT');
 
@@ -335,8 +329,6 @@ async function deleteDeviceHandler(request: NextRequest) {
 
     const deviceRaw = existingResult[0] as Record<string, unknown>;
     const cabinetId = deviceRaw.cabinet_id as string;
-    const occupyU = (deviceRaw.occupy_u as number) || 1;
-    const ratedPower = (deviceRaw.rated_power as number) || 0;
 
     // 开始事务
     await query('START TRANSACTION');
@@ -344,21 +336,6 @@ async function deleteDeviceHandler(request: NextRequest) {
     try {
       // 删除设备
       await query('DELETE FROM pioc_idc_device WHERE id = ?', [id]);
-
-      // 更新机柜的已用U数和功耗（直接查询数据库）
-      const cabinetResult = await query('SELECT * FROM pioc_idc_cabinet WHERE id = ?', [cabinetId]);
-      if (Array.isArray(cabinetResult) && cabinetResult.length > 0) {
-        const cabinetRaw = cabinetResult[0] as Record<string, unknown>;
-        const usedU = (cabinetRaw.used_u as number) || 0;
-        const usedPower = (cabinetRaw.used_power as number) || 0;
-        const newUsedU = Math.max(0, usedU - occupyU);
-        const newUsedPower = Math.max(0, usedPower - ratedPower);
-        
-        await query(
-          'UPDATE pioc_idc_cabinet SET used_u = ?, used_power = ?, updated_at = NOW() WHERE id = ?',
-          [newUsedU, newUsedPower, cabinetId]
-        );
-      }
 
       await query('COMMIT');
 

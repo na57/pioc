@@ -184,7 +184,7 @@ export class DataObjectAIQueryService {
    */
   private extractSQL(response: string): { success: boolean; sql?: string; error?: string } {
     // 移除think标签
-    let content = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    const content = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
     // 尝试提取JSON格式
     try {
@@ -336,7 +336,7 @@ ${intent.queryType === 'aggregate' ? `
           continue;
         }
 
-        let sql = extractResult.sql!;
+        const sql = extractResult.sql!;
 
         // 安全检查
         const safetyCheck = this.validateSQLSafety(sql);

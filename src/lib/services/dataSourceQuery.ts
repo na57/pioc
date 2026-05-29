@@ -83,8 +83,8 @@ class DataSourceQueryService {
 
   private buildMySQLQuery(queryStatement: string, options?: QueryOptions): { finalQuery: string; queryParams: unknown[] } {
     let finalQuery = queryStatement;
-    let queryParams: unknown[] = [];
-    let hasWhere = queryStatement.match(/WHERE/i);
+    const queryParams: unknown[] = [];
+    const hasWhere = queryStatement.match(/WHERE/i);
 
     // 添加筛选条件
     if (options?.filters && Object.keys(options.filters).length > 0) {
@@ -132,8 +132,8 @@ class DataSourceQueryService {
     try {
       // 构建带筛选条件的计数查询
       let countQuery = queryStatement;
-      let countParams: unknown[] = [];
-      let hasWhere = queryStatement.match(/WHERE/i);
+      const countParams: unknown[] = [];
+      const hasWhere = queryStatement.match(/WHERE/i);
 
       if (options?.filters && Object.keys(options.filters).length > 0) {
         const conditions: string[] = [];

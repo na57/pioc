@@ -226,7 +226,7 @@ export class IdcAIQueryService {
    */
   private extractSQL(response: string): SQLGenerationResult {
     // 移除think标签
-    let content = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    const content = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
     // 尝试提取JSON格式
     try {

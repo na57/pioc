@@ -6,6 +6,19 @@ import { v4 as uuidv4 } from 'uuid';
 
 const appUrl = '/idc';
 
+// 格式化日期为 YYYY-MM-DD 字符串
+function formatDate(date: unknown): string | null {
+  if (!date) return null;
+  if (typeof date === 'string') {
+    // 如果已经是字符串，返回前10位（YYYY-MM-DD）
+    return date.slice(0, 10);
+  }
+  if (date instanceof Date) {
+    return date.toISOString().split('T')[0];
+  }
+  return null;
+}
+
 // GET 请求处理 - 查询机柜列表或单个机柜
 async function getCabinetsHandler(request: NextRequest) {
   try {
@@ -34,28 +47,8 @@ async function getCabinetsHandler(request: NextRequest) {
         }
       }
       
-      // 转换机柜字段名为驼峰命名
-      const cabinet = {
-        id: cabinetRaw.id,
-        roomId: cabinetRaw.room_id,
-        name: cabinetRaw.name,
-        code: cabinetRaw.code,
-        totalU: cabinetRaw.total_u,
-        usedU: cabinetRaw.used_u,
-        ratedPower: cabinetRaw.rated_power,
-        usedPower: cabinetRaw.used_power,
-        position: cabinetRaw.position,
-        pduInfo: cabinetRaw.pdu_info,
-        status: cabinetRaw.status,
-        sortOrder: cabinetRaw.sort_order,
-        remark: cabinetRaw.remark,
-        createdAt: cabinetRaw.created_at,
-        roomName,
-      };
-      
+      // 查询该机柜的所有设备，动态计算已使用U位和功耗
       const devicesResult = await idcRoomDataService.queryDevicesByCabinetId(id);
-      
-      // 转换设备字段名为驼峰命名
       const devices = (devicesResult.success ? devicesResult.data : []).map((device: Record<string, unknown>) => ({
         id: device.id,
         name: device.name,
@@ -66,9 +59,38 @@ async function getCabinetsHandler(request: NextRequest) {
         occupyU: device.occupy_u,
         ratedPower: device.rated_power,
         status: device.status,
-        onlineDate: device.online_date,
+        onlineDate: formatDate(device.online_date),
         remark: device.remark,
       }));
+      
+      // 动态计算已使用U位（所有设备占用U位总和）
+      const usedU = devices.reduce((sum: number, device: Record<string, unknown>) => {
+        return sum + (Number(device.occupyU) || 0);
+      }, 0);
+      
+      // 动态计算已使用功耗（所有设备功率总和）
+      const usedPower = devices.reduce((sum: number, device: Record<string, unknown>) => {
+        return sum + (Number(device.ratedPower) || 0);
+      }, 0);
+      
+      // 转换机柜字段名为驼峰命名
+      const cabinet = {
+        id: cabinetRaw.id,
+        roomId: cabinetRaw.room_id,
+        name: cabinetRaw.name,
+        code: cabinetRaw.code,
+        totalU: cabinetRaw.total_u,
+        usedU,
+        ratedPower: cabinetRaw.rated_power,
+        usedPower,
+        position: cabinetRaw.position,
+        pduInfo: cabinetRaw.pdu_info,
+        status: cabinetRaw.status,
+        sortOrder: cabinetRaw.sort_order,
+        remark: cabinetRaw.remark,
+        createdAt: cabinetRaw.created_at,
+        roomName,
+      };
 
       return NextResponse.json({
         success: true,
@@ -96,16 +118,40 @@ async function getCabinetsHandler(request: NextRequest) {
       );
     }
 
-    // 转换机柜字段名为驼峰命名
+    // 获取所有机柜ID，批量查询设备U位和功耗
+    const cabinetIds = filteredData.map((c: Record<string, unknown>) => c.id);
+    const deviceUMap: Record<string, number> = {};
+    const devicePowerMap: Record<string, number> = {};
+    
+    if (cabinetIds.length > 0) {
+      const placeholders = cabinetIds.map(() => '?').join(',');
+      const devicesResult = await query(
+        `SELECT cabinet_id, occupy_u, rated_power FROM pioc_idc_device WHERE cabinet_id IN (${placeholders})`,
+        cabinetIds
+      );
+      
+      if (Array.isArray(devicesResult)) {
+        for (const device of devicesResult) {
+          const d = device as Record<string, unknown>;
+          const cid = d.cabinet_id as string;
+          const u = Number(d.occupy_u) || 0;
+          const power = Number(d.rated_power) || 0;
+          deviceUMap[cid] = (deviceUMap[cid] || 0) + u;
+          devicePowerMap[cid] = (devicePowerMap[cid] || 0) + power;
+        }
+      }
+    }
+
+    // 转换机柜字段名为驼峰命名，动态计算已使用U位和功耗
     const camelCaseData = filteredData.map((cabinet: Record<string, unknown>) => ({
       id: cabinet.id,
       roomId: cabinet.room_id,
       name: cabinet.name,
       code: cabinet.code,
       totalU: cabinet.total_u,
-      usedU: cabinet.used_u,
+      usedU: deviceUMap[cabinet.id as string] || 0,
       ratedPower: cabinet.rated_power,
-      usedPower: cabinet.used_power,
+      usedPower: devicePowerMap[cabinet.id as string] || 0,
       position: cabinet.position,
       pduInfo: cabinet.pdu_info,
       status: cabinet.status,
