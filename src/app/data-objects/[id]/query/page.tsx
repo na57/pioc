@@ -19,6 +19,7 @@ import {
   Space,
   Tooltip,
   Badge,
+  Tabs,
 } from 'antd';
 import {
   EyeOutlined,
@@ -26,15 +27,21 @@ import {
   DownloadOutlined,
   FilterOutlined,
   ClearOutlined,
+  RobotOutlined,
+  FileTextOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
+import AIChatPanel from '@/app/data-objects/components/AIChatPanel';
+import SchemaEditor from '@/app/data-objects/components/SchemaEditor';
 
 interface DataObject {
   id: number;
   name: string;
   display_template: string;
   primary_key: string;
+  created_by: number;
 }
 
 interface QueryResult {
@@ -69,6 +76,7 @@ export default function DataObjectQueryPage() {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<Record<string, unknown> | null>(null);
   const [fieldCommentsMap, setFieldCommentsMap] = useState<Record<string, string>>({});
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   // 筛选状态
   const [filters, setFilters] = useState<FilterConfig[]>([]);
@@ -78,8 +86,22 @@ export default function DataObjectQueryPage() {
   // 导出状态
   const [exporting, setExporting] = useState(false);
 
+  // 获取当前用户
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/auth/session');
+      const data = await response.json();
+      if (data.user) {
+        setCurrentUserId(data.user.id);
+      }
+    } catch (error) {
+      console.error('获取当前用户失败:', error);
+    }
+  };
+
   useEffect(() => {
     fetchDataObject();
+    fetchCurrentUser();
   }, [dataObjectId]);
 
   useEffect(() => {
@@ -280,138 +302,192 @@ export default function DataObjectQueryPage() {
     );
   }
 
+  const isCreator = currentUserId === dataObject.created_by;
+
+  const items = [
+    {
+      key: 'data',
+      label: (
+        <Space>
+          <DatabaseOutlined />
+          <span>数据查询</span>
+        </Space>
+      ),
+      children: (
+        <Card
+          title={dataObject.name}
+          extra={
+            <Space>
+              <Tooltip title="筛选">
+                <Badge count={getActiveFilterCount()} size="small">
+                  <Button
+                    icon={<FilterOutlined />}
+                    onClick={() => setFilterVisible(!filterVisible)}
+                    type={filterVisible ? 'primary' : 'default'}
+                  />
+                </Badge>
+              </Tooltip>
+              <Button
+                icon={<DownloadOutlined />}
+                loading={exporting}
+                onClick={handleExport}
+              >
+                导出
+              </Button>
+              <ActionButton
+                icon={<EyeOutlined />}
+                tooltip="返回列表"
+                onClick={() => router.push('/data-objects')}
+              />
+            </Space>
+          }
+        >
+          <Alert
+            title={`显示模板: ${dataObject.display_template} | 主键字段: ${dataObject.primary_key}`}
+            type="info"
+            style={{ marginBottom: 16 }}
+          />
+
+          {/* 筛选区域 */}
+          {filterVisible && (
+            <Card
+              size="small"
+              title={
+                <Space>
+                  <FilterOutlined />
+                  <span>数据筛选</span>
+                  {getActiveFilterCount() > 0 && (
+                    <Tag color="blue">{getActiveFilterCount()} 个条件</Tag>
+                  )}
+                </Space>
+              }
+              extra={
+                <Space>
+                  <Button
+                    icon={<ClearOutlined />}
+                    size="small"
+                    onClick={clearFilters}
+                    disabled={getActiveFilterCount() === 0}
+                  >
+                    清除
+                  </Button>
+                  <Button
+                    icon={<SearchOutlined />}
+                    type="primary"
+                    size="small"
+                    onClick={applyFilters}
+                  >
+                    查询
+                  </Button>
+                </Space>
+              }
+              style={{ marginBottom: 16 }}
+            >
+              <Row gutter={[16, 16]}>
+                {filters.map((filter) => (
+                  <Col key={filter.field} xs={24} sm={12} md={8} lg={6} xl={6}>
+                    <Input
+                      placeholder={`筛选: ${filter.label}`}
+                      value={filter.value}
+                      onChange={(e) => handleFilterChange(filter.field, e.target.value)}
+                      onPressEnter={applyFilters}
+                      allowClear
+                      prefix={<SearchOutlined />}
+                    />
+                  </Col>
+                ))}
+              </Row>
+            </Card>
+          )}
+
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <Spin size="large" />
+            </div>
+          ) : queryResult?.list && queryResult.list.length > 0 ? (
+            <>
+              <Row gutter={[16, 16]}>
+                {queryResult.list.map((item, index) => {
+                  const pkValue = item[dataObject.primary_key];
+                  return (
+                    <Col key={index} xs={24} sm={12} md={8} lg={8} xl={6} xxl={6}>
+                      <Card
+                        size="small"
+                        hoverable
+                        onClick={() => handleShowDetail(item)}
+                        title={
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Tag color="blue">ID: {String(pkValue)}</Tag>
+                          </div>
+                        }
+                      >
+                        <div style={{ fontSize: 14, color: '#333' }}>
+                          {renderDisplayContent(item)}
+                        </div>
+                      </Card>
+                    </Col>
+                  );
+                })}
+              </Row>
+              <div style={{ marginTop: 24, textAlign: 'right' }}>
+                <Pagination
+                  current={currentPage}
+                  pageSize={pageSize}
+                  total={queryResult.pagination.total}
+                  onChange={handlePageChange}
+                  showSizeChanger
+                  showTotal={(total) => `共 ${total} 条`}
+                />
+              </div>
+            </>
+          ) : (
+            <Empty description="暂无数据" />
+          )}
+        </Card>
+      ),
+    },
+    {
+      key: 'ai-chat',
+      label: (
+        <Space>
+          <RobotOutlined />
+          <span>AI 问答</span>
+        </Space>
+      ),
+      children: (
+        <div style={{ height: 'calc(100vh - 200px)' }}>
+          <AIChatPanel
+            dataObjectId={dataObject.id}
+            dataObjectName={dataObject.name}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'schema',
+      label: (
+        <Space>
+          <FileTextOutlined />
+          <span>Schema 管理</span>
+        </Space>
+      ),
+      children: (
+        <div style={{ height: 'calc(100vh - 200px)' }}>
+          <SchemaEditor
+            dataObjectId={dataObject.id}
+            dataObjectName={dataObject.name}
+            isCreator={isCreator}
+          />
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div style={{ padding: 24 }}>
-      <Card
-        title={dataObject.name}
-        extra={
-          <Space>
-            <Tooltip title="筛选">
-              <Badge count={getActiveFilterCount()} size="small">
-                <Button
-                  icon={<FilterOutlined />}
-                  onClick={() => setFilterVisible(!filterVisible)}
-                  type={filterVisible ? 'primary' : 'default'}
-                />
-              </Badge>
-            </Tooltip>
-            <Button
-              icon={<DownloadOutlined />}
-              loading={exporting}
-              onClick={handleExport}
-            >
-              导出
-            </Button>
-            <ActionButton
-              icon={<EyeOutlined />}
-              tooltip="返回列表"
-              onClick={() => router.push('/data-objects')}
-            />
-          </Space>
-        }
-      >
-        <Alert
-          title={`显示模板: ${dataObject.display_template} | 主键字段: ${dataObject.primary_key}`}
-          type="info"
-          style={{ marginBottom: 16 }}
-        />
-
-        {/* 筛选区域 */}
-        {filterVisible && (
-          <Card
-            size="small"
-            title={
-              <Space>
-                <FilterOutlined />
-                <span>数据筛选</span>
-                {getActiveFilterCount() > 0 && (
-                  <Tag color="blue">{getActiveFilterCount()} 个条件</Tag>
-                )}
-              </Space>
-            }
-            extra={
-              <Space>
-                <Button
-                  icon={<ClearOutlined />}
-                  size="small"
-                  onClick={clearFilters}
-                  disabled={getActiveFilterCount() === 0}
-                >
-                  清除
-                </Button>
-                <Button
-                  icon={<SearchOutlined />}
-                  type="primary"
-                  size="small"
-                  onClick={applyFilters}
-                >
-                  查询
-                </Button>
-              </Space>
-            }
-            style={{ marginBottom: 16 }}
-          >
-            <Row gutter={[16, 16]}>
-              {filters.map((filter) => (
-                <Col key={filter.field} xs={24} sm={12} md={8} lg={6} xl={6}>
-                  <Input
-                    placeholder={`筛选: ${filter.label}`}
-                    value={filter.value}
-                    onChange={(e) => handleFilterChange(filter.field, e.target.value)}
-                    onPressEnter={applyFilters}
-                    allowClear
-                    prefix={<SearchOutlined />}
-                  />
-                </Col>
-              ))}
-            </Row>
-          </Card>
-        )}
-
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin size="large" />
-          </div>
-        ) : queryResult?.list && queryResult.list.length > 0 ? (
-          <>
-            <Row gutter={[16, 16]}>
-              {queryResult.list.map((item, index) => {
-                const pkValue = item[dataObject.primary_key];
-                return (
-                  <Col key={index} xs={24} sm={12} md={8} lg={8} xl={6} xxl={6}>
-                    <Card
-                      size="small"
-                      hoverable
-                      onClick={() => handleShowDetail(item)}
-                      title={
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Tag color="blue">ID: {String(pkValue)}</Tag>
-                        </div>
-                      }
-                    >
-                      <div style={{ fontSize: 14, color: '#333' }}>
-                        {renderDisplayContent(item)}
-                      </div>
-                    </Card>
-                  </Col>
-                );
-              })}
-            </Row>
-            <div style={{ marginTop: 24, textAlign: 'right' }}>
-              <Pagination
-                current={currentPage}
-                pageSize={pageSize}
-                total={queryResult.pagination.total}
-                onChange={handlePageChange}
-                showSizeChanger
-                showTotal={(total) => `共 ${total} 条`}
-              />
-            </div>
-          </>
-        ) : (
-          <Empty description="暂无数据" />
-        )}
-      </Card>
+      <Tabs
+        items={items}
+      />
 
       <Drawer
         title="数据详情"

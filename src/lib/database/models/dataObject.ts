@@ -8,6 +8,9 @@ export interface DataObject {
   query_statement: string;
   primary_key: string;
   display_template: string;
+  ai_schema: string | null;
+  ai_schema_status: number;
+  ai_schema_updated_at: Date | null;
   status: number;
   created_by: number;
   created_at: Date;
@@ -44,6 +47,9 @@ export interface UpdateDataObjectData {
   query_statement?: string;
   primary_key?: string;
   display_template?: string;
+  ai_schema?: string;
+  ai_schema_status?: number;
+  ai_schema_updated_at?: Date;
   status?: number;
 }
 
@@ -260,6 +266,18 @@ export async function update(id: number, data: UpdateDataObjectData): Promise<bo
   if (data.display_template !== undefined) {
     fields.push('display_template = ?');
     values.push(data.display_template);
+  }
+  if (data.ai_schema !== undefined) {
+    fields.push('ai_schema = ?');
+    values.push(data.ai_schema);
+  }
+  if (data.ai_schema_status !== undefined) {
+    fields.push('ai_schema_status = ?');
+    values.push(data.ai_schema_status);
+  }
+  if (data.ai_schema_updated_at !== undefined) {
+    fields.push('ai_schema_updated_at = ?');
+    values.push(data.ai_schema_updated_at);
   }
   if (data.status !== undefined) {
     fields.push('status = ?');

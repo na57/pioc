@@ -139,6 +139,13 @@ export interface AppConfig {
     teacherCenter?: {
       configFile?: string;
     };
+    dataObject?: {
+      configFile?: string;
+      ai?: {
+        providerId?: string;
+        model?: string;
+      };
+    };
   };
   features: {
     allowUserRegistration: boolean;
