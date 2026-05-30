@@ -122,10 +122,31 @@ export class DataObjectAIQueryService {
   }
 
   /**
-   * 调用AI服务
+   * 调用AI服务（支持多轮对话）
    */
-  private async callAI(prompt: string, temperature: number = 0.1): Promise<string> {
+  private async callAI(
+    prompt: string,
+    temperature: number = 0.1,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<string> {
     const { aiModel, aiApiUrl, aiApiKey } = await this.getAIConfig();
+
+    // 构建消息列表，包含历史对话
+    const messages: Array<{ role: string; content: string }> = [];
+
+    // 添加系统提示，说明是多轮对话
+    messages.push({
+      role: 'system',
+      content: '你是一个数据对象查询助手。请理解对话上下文，回答用户的问题。如果用户提到"刚才"、"之前"等词语，请参考历史对话理解其意图。',
+    });
+
+    // 添加历史消息（最多保留5轮对话）
+    if (history && history.length > 0) {
+      messages.push(...history.slice(-10)); // 保留最近10条消息（5轮）
+    }
+
+    // 添加当前用户消息
+    messages.push({ role: 'user', content: prompt });
 
     const response = await fetch(aiApiUrl, {
       method: 'POST',
@@ -135,7 +156,7 @@ export class DataObjectAIQueryService {
       },
       body: JSON.stringify({
         model: aiModel,
-        messages: [{ role: 'user', content: prompt }],
+        messages,
         stream: false,
         temperature,
         max_tokens: 2000,
@@ -228,16 +249,31 @@ export class DataObjectAIQueryService {
   }
 
   /**
-   * 提取查询意图
+   * 提取查询意图（支持多轮对话上下文）
    */
-  private async extractIntent(question: string, schema: string): Promise<IntentExtraction> {
+  private async extractIntent(
+    question: string,
+    schema: string,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<IntentExtraction> {
+    // 构建上下文提示
+    let contextPrompt = '';
+    if (history && history.length > 0) {
+      contextPrompt = '\n这是多轮对话，历史对话如下（供参考）：\n';
+      history.slice(-6).forEach((msg) => {
+        const role = msg.role === 'user' ? '用户' : '助手';
+        contextPrompt += `${role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}\n`;
+      });
+      contextPrompt += '\n当前用户问题可能引用之前的内容，请结合上下文理解。\n';
+    }
+
     const prompt = `
 你是一位意图分析专家。请分析用户的问题，提取查询意图和条件。
 
 Schema描述:
 ${schema}
-
-用户问题: "${question}"
+${contextPrompt}
+当前用户问题: "${question}"
 
 请分析并返回JSON格式的结果：
 {
@@ -260,11 +296,12 @@ ${schema}
 - aggregation: 只有当用户要求统计、计算总和/平均值等时才需要
 - orderBy: 当用户要求排序时指定
 - limit: 当用户要求限制条数时指定
+- 如果是多轮对话，用户可能使用"刚才"、"之前"、"那个"等指代之前的查询，请结合上下文理解
 
 只返回JSON，不要其他解释。
 `;
 
-    let content = await this.callAI(prompt, 0.1);
+    let content = await this.callAI(prompt, 0.1, history);
     content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -274,15 +311,27 @@ ${schema}
   }
 
   /**
-   * 生成SQL（使用子查询模式）
+   * 生成SQL（使用子查询模式，支持多轮对话）
    */
   private async generateSQL(
     dataObject: DataObject,
     schema: string,
     intent: IntentExtraction,
-    question: string
+    question: string,
+    history?: Array<{ role: string; content: string }>
   ): Promise<{ success: boolean; sql?: string; error?: string }> {
     const cleanBaseQuery = dataObject.query_statement.trim().replace(/;$/, '');
+
+    // 构建上下文提示
+    let contextPrompt = '';
+    if (history && history.length > 0) {
+      contextPrompt = '\n这是多轮对话，历史对话如下（供参考）：\n';
+      history.slice(-6).forEach((msg) => {
+        const role = msg.role === 'user' ? '用户' : '助手';
+        contextPrompt += `${role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}\n`;
+      });
+      contextPrompt += '\n当前用户问题可能引用之前的内容，请结合上下文理解。\n';
+    }
 
     const prompt = `
 你是一位SQL专家。基于以下信息生成查询SQL。
@@ -296,8 +345,8 @@ ${schema}
 数据对象名称: ${dataObject.name}
 Schema描述:
 ${schema}
-
-用户问题: "${question}"
+${contextPrompt}
+当前用户问题: "${question}"
 
 意图分析:
 - 查询类型: ${intent.queryType}
@@ -326,7 +375,7 @@ ${intent.queryType === 'aggregate' ? `
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         console.log(`[DataObject AI] SQL生成尝试 ${attempt}/${this.MAX_RETRIES}`);
-        const response = await this.callAI(prompt, 0.1);
+        const response = await this.callAI(prompt, 0.1, history);
         console.log(`[DataObject AI] AI原始响应:`, response.substring(0, 500));
 
         const extractResult = this.extractSQL(response);
@@ -439,13 +488,22 @@ ${intent.queryType === 'aggregate' ? `
 
     const answer = await this.callAI(prompt, 0.3);
     // 清理思考过程标签
-    return this.cleanThinkTags(answer);
+    const cleanedAnswer = this.cleanThinkTags(answer);
+    // 如果清理后的回答为空，返回默认回答
+    if (!cleanedAnswer || cleanedAnswer.trim() === '') {
+      return `查询已完成。共找到 ${Array.isArray(result) ? result.length : 0} 条数据。`;
+    }
+    return cleanedAnswer;
   }
 
   /**
-   * 处理用户查询
+   * 处理用户查询（支持多轮对话）
    */
-  async processQuery(dataObjectId: number, question: string): Promise<AIQueryResult> {
+  async processQuery(
+    dataObjectId: number,
+    question: string,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<AIQueryResult> {
     try {
       // 1. 获取数据对象
       const dataObject = await findById(dataObjectId);
@@ -480,11 +538,11 @@ ${intent.queryType === 'aggregate' ? `
 
       const schema = schemaResult.schema!;
 
-      // 3. 提取查询意图
-      const intent = await this.extractIntent(question, schema);
+      // 3. 提取查询意图（支持多轮对话上下文）
+      const intent = await this.extractIntent(question, schema, history);
 
-      // 4. 生成SQL
-      const sqlResult = await this.generateSQL(dataObject, schema, intent, question);
+      // 4. 生成SQL（支持多轮对话）
+      const sqlResult = await this.generateSQL(dataObject, schema, intent, question, history);
       if (!sqlResult.success) {
         return {
           success: false,

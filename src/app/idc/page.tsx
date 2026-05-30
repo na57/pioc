@@ -5,7 +5,7 @@ import { Card, Row, Col, Statistic, Table, Button, Tag, Space, Spin, Modal, Form
 import { DatabaseOutlined, HddOutlined, DesktopOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
-import AIChatPanel from '@/components/AIChatPanel';
+import { AIChatPanel } from '@/components/ai-chat';
 import dayjs from 'dayjs';
 
 const { useBreakpoint } = Grid;
@@ -355,8 +355,13 @@ function IdcAIChatPanel() {
       title="IDC机房AI智能问答"
       description="我是IDC机房AI智能问答助手，可以帮您查询机房、机柜、设备的相关信息"
       initialSuggestions={initialSuggestions}
-      storageKeyPrefix="idc_ai_chat"
+      storageKey="idc_ai_chat"
+      // 功能开关
+      enableTypingEffect={true}
+      enableMarkdown={true}
+      enableThinkCollapse={true}
       enableEntityConfirm={true}
+      enableLocalStorage={true}
     />
   );
 }

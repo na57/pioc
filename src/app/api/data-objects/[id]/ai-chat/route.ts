@@ -56,7 +56,23 @@ export async function POST(
     // 处理AI查询
     const result = await dataObjectAIQueryService.processQuery(dataObjectId, question);
 
-    return NextResponse.json(result);
+    // 转换响应格式以匹配前端期望
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          answer: result.answer,
+          sql: result.sql,
+          result: result.result,
+        },
+      });
+    } else {
+      return NextResponse.json({
+        success: false,
+        error: result.error,
+        userMessage: result.userMessage,
+      });
+    }
   } catch (error) {
     console.error('[AI Chat API] 处理请求失败:', error);
     return NextResponse.json(

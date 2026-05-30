@@ -162,10 +162,31 @@ export class IdcAIQueryService {
   }
 
   /**
-   * 调用AI服务
+   * 调用AI服务（支持多轮对话）
    */
-  private async callAI(prompt: string, temperature: number = 0.1): Promise<string> {
+  private async callAI(
+    prompt: string,
+    temperature: number = 0.1,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<string> {
     const { aiModel, aiApiUrl, aiApiKey } = await this.getAIConfig();
+
+    // 构建消息列表，包含历史对话
+    const messages: Array<{ role: string; content: string }> = [];
+
+    // 添加系统提示，说明是多轮对话
+    messages.push({
+      role: 'system',
+      content: '你是一个IDC机房数据查询助手。请理解对话上下文，回答用户的问题。如果用户提到"刚才"、"之前"等词语，请参考历史对话理解其意图。',
+    });
+
+    // 添加历史消息（最多保留5轮对话）
+    if (history && history.length > 0) {
+      messages.push(...history.slice(-10)); // 保留最近10条消息（5轮）
+    }
+
+    // 添加当前用户消息
+    messages.push({ role: 'user', content: prompt });
 
     const response = await fetch(aiApiUrl, {
       method: 'POST',
@@ -175,7 +196,7 @@ export class IdcAIQueryService {
       },
       body: JSON.stringify({
         model: aiModel,
-        messages: [{ role: 'user', content: prompt }],
+        messages,
         stream: false,
         temperature,
         max_tokens: 2000,
@@ -271,7 +292,7 @@ export class IdcAIQueryService {
   }
 
   /**
-   * 生成SQL（带重试机制）
+   * 生成SQL（带重试机制，支持多轮对话）
    */
   private async generateSQLWithRetry(
     extraction: {
@@ -285,7 +306,8 @@ export class IdcAIQueryService {
       queryType: string;
       conditions: Record<string, unknown>;
     },
-    entityResult: EntityResolutionResult
+    entityResult: EntityResolutionResult,
+    history?: Array<{ role: string; content: string }>
   ): Promise<SQLGenerationResult> {
     // 构建实体信息
     const entityInfo: string[] = [];
@@ -343,7 +365,7 @@ ${entityInfo.join('\n') || '无特定实体'}
 `;
 
         console.log(`[IDC AI] SQL生成尝试 ${attempt}/${this.MAX_RETRIES}`);
-        const response = await this.callAI(prompt, 0.1);
+        const response = await this.callAI(prompt, 0.1, history);
         console.log(`[IDC AI] AI原始响应:`, response.substring(0, 500));
 
         // 提取SQL
@@ -391,12 +413,15 @@ ${entityInfo.join('\n') || '无特定实体'}
   }
 
   /**
-   * 处理用户查询
+   * 处理用户查询（支持多轮对话）
    */
-  async processQuery(question: string): Promise<AIQueryResult> {
+  async processQuery(
+    question: string,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<AIQueryResult> {
     try {
-      // 步骤1: AI提取查询意图和实体
-      const extraction = await this.extractIntentAndEntities(question);
+      // 步骤1: AI提取查询意图和实体（支持上下文）
+      const extraction = await this.extractIntentAndEntities(question, history);
 
       // 步骤2: 解析实体（模糊匹配）
       const entityResult = await entityResolver.resolveEntities(
@@ -417,8 +442,8 @@ ${entityInfo.join('\n') || '无特定实体'}
         };
       }
 
-      // 步骤4: 生成SQL（带重试机制）
-      const sqlResult = await this.generateSQLWithRetry(extraction, entityResult);
+      // 步骤4: 生成SQL（带重试机制，支持多轮对话）
+      const sqlResult = await this.generateSQLWithRetry(extraction, entityResult, history);
 
       if (!sqlResult.success) {
         return {
@@ -469,9 +494,12 @@ ${entityInfo.join('\n') || '无特定实体'}
   }
 
   /**
-   * 提取查询意图和实体
+   * 提取查询意图和实体（支持多轮对话上下文）
    */
-  private async extractIntentAndEntities(question: string): Promise<{
+  private async extractIntentAndEntities(
+    question: string,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<{
     intent: string;
     entities: {
       room?: string;
@@ -482,13 +510,24 @@ ${entityInfo.join('\n') || '无特定实体'}
     queryType: string;
     conditions: Record<string, unknown>;
   }> {
+    // 构建上下文提示
+    let contextPrompt = '';
+    if (history && history.length > 0) {
+      contextPrompt = '\n这是多轮对话，历史对话如下（供参考）：\n';
+      history.slice(-6).forEach((msg, idx) => {
+        const role = msg.role === 'user' ? '用户' : '助手';
+        contextPrompt += `${role}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}\n`;
+      });
+      contextPrompt += '\n当前用户问题可能引用之前的内容，请结合上下文理解。\n';
+    }
+
     const prompt = `
 你是一个IDC机房数据查询分析助手。请分析用户的问题，提取查询意图和涉及的实体。
 
 数据库Schema:
 ${idcDatabaseSchema}
-
-用户问题: "${question}"
+${contextPrompt}
+当前用户问题: "${question}"
 
 请分析并返回JSON格式的结果：
 {
@@ -507,11 +546,12 @@ ${idcDatabaseSchema}
 
 注意：
 1. 用户可能使用简称，如"图书馆机房"可能是"呈贡图书馆机房"的简称
-2. 只返回JSON，不要其他解释
-3. 如果无法确定某个字段，可以省略或设为null
+2. 如果是多轮对话，用户可能使用"刚才"、"之前"、"那个"等指代之前的查询，请结合上下文理解
+3. 只返回JSON，不要其他解释
+4. 如果无法确定某个字段，可以省略或设为null
 `;
 
-    let content = await this.callAI(prompt, 0.1);
+    let content = await this.callAI(prompt, 0.1, history);
 
     // 移除 <think> 标签及其内容
     content = content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
@@ -554,15 +594,16 @@ ${idcDatabaseSchema}
   }
 
   /**
-   * 使用已确认的实体重新查询
+   * 使用已确认的实体重新查询（支持多轮对话）
    */
   async queryWithConfirmedEntity(
     question: string,
-    confirmedEntity: EntityMatch
+    confirmedEntity: EntityMatch,
+    history?: Array<{ role: string; content: string }>
   ): Promise<AIQueryResult> {
     try {
-      // 重新提取意图
-      const extraction = await this.extractIntentAndEntities(question);
+      // 重新提取意图（支持上下文）
+      const extraction = await this.extractIntentAndEntities(question, history);
 
       // 构建实体结果
       const entityResult: EntityResolutionResult = {
@@ -578,8 +619,8 @@ ${idcDatabaseSchema}
         entityResult.device = confirmedEntity;
       }
 
-      // 生成SQL（带重试机制）
-      const sqlResult = await this.generateSQLWithRetry(extraction, entityResult);
+      // 生成SQL（带重试机制，支持多轮对话）
+      const sqlResult = await this.generateSQLWithRetry(extraction, entityResult, history);
 
       if (!sqlResult.success) {
         return {

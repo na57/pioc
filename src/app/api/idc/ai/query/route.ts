@@ -17,7 +17,7 @@ interface ChatRequest {
 async function handleAIQuery(request: NextRequest) {
   try {
     const body: ChatRequest = await request.json();
-    const { message, confirmedEntity } = body;
+    const { message, history, confirmedEntity } = body;
 
     if (!message || message.trim() === '') {
       return NextResponse.json(
@@ -30,10 +30,10 @@ async function handleAIQuery(request: NextRequest) {
 
     // 如果有确认的实体，使用确认后的实体重新查询
     if (confirmedEntity) {
-      result = await idcAIQueryService.queryWithConfirmedEntity(message, confirmedEntity);
+      result = await idcAIQueryService.queryWithConfirmedEntity(message, confirmedEntity, history);
     } else {
-      // 正常查询流程
-      result = await idcAIQueryService.processQuery(message);
+      // 正常查询流程，传递历史消息支持多轮对话
+      result = await idcAIQueryService.processQuery(message, history);
     }
 
     if (result.success) {
@@ -51,7 +51,7 @@ async function handleAIQuery(request: NextRequest) {
       });
     } else {
       return NextResponse.json(
-        { success: false, error: result.error || '查询失败' },
+        { success: false, error: result.error || '查询失败', userMessage: result.userMessage },
         { status: 500 }
       );
     }

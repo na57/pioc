@@ -513,6 +513,111 @@ const timelineItems: TimelineProps['items'] = items.map((item) => ({
 
 ---
 
+### 14. AI 问答功能必须使用 AIChatPanel 组件
+
+**规则**: 所有需要实现 AI 问答功能的页面，必须使用 `@/components/ai-chat` 中的 `AIChatPanel` 组件，保持统一的交互体验和功能特性。
+
+**示例**:
+
+```tsx
+import { AIChatPanel } from '@/components/ai-chat';
+
+// ✅ 正确用法 - 使用 AIChatPanel 组件
+export default function MyAIChatPage() {
+  return (
+    <AIChatPanel
+      apiEndpoint="/api/my-feature/ai-chat"
+      title="AI 智能问答"
+      description="我是AI助手，可以帮您解答问题"
+      placeholder="请输入您的问题..."
+      initialSuggestions={[
+        '常见问题1',
+        '常见问题2',
+      ]}
+      storageKey="my_feature_ai_chat"
+      messageField="message"  // 根据API要求调整
+      // 功能开关
+      enableTypingEffect={true}   // 打字机效果
+      enableMarkdown={true}       // Markdown渲染（支持表格）
+      enableThinkCollapse={true}  // 思考过程折叠
+      enableEntityConfirm={false} // 实体确认
+      enableLocalStorage={true}   // 本地存储历史记录
+    />
+  );
+}
+
+// ❌ 错误用法 - 自行实现AI问答界面
+import { Input, Button } from 'antd';
+export default function MyAIChatPage() {
+  // 自行实现消息列表、输入框、发送逻辑等
+  return <div>...</div>;
+}
+```
+
+**AIChatPanel 组件特性**:
+- `apiEndpoint`: API 端点 URL（必需）
+- `title`: 页面标题
+- `description`: 副标题/描述
+- `placeholder`: 输入框占位符
+- `initialSuggestions`: 初始建议问题列表
+- `storageKey`: localStorage 存储键
+- `messageField`: 请求字段名，默认为 `'message'`，根据 API 要求可设为 `'question'` 等
+- `extraParams`: 额外的请求参数
+- `enableTypingEffect`: 是否启用打字机效果（默认 `true`）
+- `enableMarkdown`: 是否启用 Markdown 渲染，支持表格等（默认 `true`）
+- `enableThinkCollapse`: 是否启用思考过程折叠（默认 `true`）
+- `enableEntityConfirm`: 是否启用实体确认（默认 `false`）
+- `enableLocalStorage`: 是否启用本地存储历史记录（默认 `true`）
+- `renderWelcome`: 自定义欢迎界面渲染函数
+- `renderAssistantMessage`: 自定义 AI 消息渲染函数
+
+**API 响应格式要求**:
+
+成功响应：
+```json
+{
+  "success": true,
+  "data": {
+    "answer": "AI回答内容",
+    "sql": "SELECT ...",           // 可选
+    "result": [],                   // 可选
+    "suggestions": ["建议问题1"]   // 可选
+  }
+}
+```
+
+失败响应：
+```json
+{
+  "success": false,
+  "error": "错误信息",
+  "userMessage": "用户友好错误提示"
+}
+```
+
+**不同场景的配置建议**:
+
+1. **标准 AI 问答**（如 IDC、Teacher Center）：
+   - `enableTypingEffect: true` - 打字机效果
+   - `enableMarkdown: true` - Markdown 渲染
+   - `enableThinkCollapse: true` - 思考过程折叠
+   - `enableLocalStorage: true` - 保存历史记录
+
+2. **数据查询 AI**（如 Data Objects）：
+   - `enableTypingEffect: false` - 快速显示结果
+   - `enableMarkdown: true` - 支持表格展示
+   - `enableThinkCollapse: false` - 不显示思考过程
+   - `enableLocalStorage: false` - 不保存历史
+   - `messageField: "question"` - 使用 question 字段
+
+**原因**: 
+- 统一的 AI 问答交互体验
+- 内置打字机效果、Markdown 渲染、思考过程折叠等功能
+- 自动处理本地存储、错误处理、加载状态
+- 支持自定义渲染，灵活适应不同场景
+
+---
+
 ## 检查清单
 
 在提交代码前，请检查：
@@ -532,3 +637,4 @@ const timelineItems: TimelineProps['items'] = items.map((item) => ({
 - [ ] Tabs 组件是否使用了 items 属性而非 TabPane 子组件
 - [ ] Table 组件 rowKey 是否避免使用 index 参数
 - [ ] Timeline 组件是否使用了 items 属性而非 Timeline.Item 子组件
+- [ ] AI 问答功能是否使用了 AIChatPanel 组件而非自行实现
