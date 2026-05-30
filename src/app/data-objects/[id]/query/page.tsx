@@ -91,8 +91,8 @@ export default function DataObjectQueryPage() {
     try {
       const response = await fetch('/api/auth/session');
       const data = await response.json();
-      if (data.user) {
-        setCurrentUserId(data.user.id);
+      if (data.success && data.data) {
+        setCurrentUserId(data.data.userId);
       }
     } catch (error) {
       console.error('获取当前用户失败:', error);
@@ -302,7 +302,7 @@ export default function DataObjectQueryPage() {
     );
   }
 
-  const isCreator = currentUserId === dataObject.created_by;
+  const isCreator = currentUserId !== null && Number(currentUserId) === Number(dataObject.created_by);
 
   const items = [
     {

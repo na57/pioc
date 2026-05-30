@@ -49,9 +49,9 @@ export default function AIChatPanel({ dataObjectId, dataObjectName }: AIChatPane
       storageKey={`data_object_chat_${dataObjectId}`}
       messageField="question"
       // 功能开关 - data-objects 启用 Markdown 以支持表格等格式
-      enableTypingEffect={false}
+      enableTypingEffect={true}
       enableMarkdown={true}
-      enableThinkCollapse={false}
+      enableThinkCollapse={true}
       enableEntityConfirm={false}
       enableLocalStorage={false}
       // 自定义渲染

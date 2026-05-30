@@ -18,6 +18,7 @@ import {
   RobotOutlined,
   BulbOutlined,
   ClearOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { useChatHistory } from './hooks/useChatHistory';
 import { useMultiTypingEffect } from './hooks/useTypingEffect';
@@ -283,6 +284,100 @@ export default function AIChatPanel({
     message.success('对话已清空');
   };
 
+  // 重新生成最后一条回复
+  const handleRegenerate = async () => {
+    if (loading || messages.length === 0) return;
+
+    // 找到最后一条用户消息
+    let lastUserIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+
+    if (lastUserIndex === -1) return;
+
+    const lastUserMessage = messages[lastUserIndex];
+    const textToSend = lastUserMessage.content;
+
+    // 停止打字效果
+    stopAllTyping();
+
+    // 移除最后一条AI回复（如果存在）
+    const newMessages = messages.slice(0, lastUserIndex + 1);
+    setMessages(newMessages);
+    setLoading(true);
+
+    try {
+      // 构建历史消息（只保留最近10条，不包括最后一条AI回复）
+      const history = newMessages
+        .filter((m) => m.role !== 'system')
+        .slice(-11, -1) // 排除最后一条用户消息
+        .map(({ role, content }) => ({ role, content }));
+
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          [messageField]: textToSend,
+          history,
+          ...extraParams,
+        }),
+      });
+
+      const result: ChatAPIResponse = await response.json();
+
+      if (result.success) {
+        // 添加新的AI回复
+        const assistantMessage: DisplayMessage = {
+          role: 'assistant',
+          content: result.data?.answer || '查询完成',
+          displayContent: enableTypingEffect ? '' : result.data?.answer || '查询完成',
+          isTyping: enableTypingEffect,
+          sql: result.data?.sql,
+          result: result.data?.result,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        // 启动打字效果
+        if (enableTypingEffect) {
+          const messageIndex = newMessages.length;
+          startTyping(messageIndex, result.data?.answer || '查询完成');
+        }
+
+        // 更新建议问题
+        if (result.data?.suggestions && result.data.suggestions.length > 0) {
+          setSuggestions(result.data.suggestions);
+        }
+      } else {
+        message.error(result.error || '重新生成失败');
+        const errorMessage: DisplayMessage = {
+          role: 'assistant',
+          content: '抱歉，重新生成回答时出现错误，请稍后重试。',
+          displayContent: '抱歉，重新生成回答时出现错误，请稍后重试。',
+          isTyping: false,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      console.error('重新生成失败:', error);
+      message.error('重新生成失败');
+      const errorMessage: DisplayMessage = {
+        role: 'assistant',
+        content: '抱歉，网络连接出现问题，请稍后重试。',
+        displayContent: '抱歉，网络连接出现问题，请稍后重试。',
+        isTyping: false,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 处理键盘事件
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -374,6 +469,23 @@ export default function AIChatPanel({
                       showTechnicalDetails={true}
                     />
                   )}
+                  {/* 最后一条AI消息显示重新生成按钮 */}
+                  {msg.role === 'assistant' &&
+                    index === messages.length - 1 &&
+                    !loading &&
+                    !pendingEntityConfirm && (
+                      <div style={{ marginTop: 8, textAlign: 'right' }}>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<ReloadOutlined />}
+                          onClick={handleRegenerate}
+                          style={{ padding: 0, fontSize: 12 }}
+                        >
+                          重新生成
+                        </Button>
+                      </div>
+                    )}
                 </div>
                 {msg.role === 'user' && (
                   <Avatar

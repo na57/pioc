@@ -536,7 +536,7 @@ export default function CabinetDetailPage() {
           )
         }
       >
-        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+        <div className="table-responsive" style={{ margin: isMobile ? '0 -12px' : 0 }}>
           <Table
             dataSource={devices.filter(d => isRealDevice(d.deviceType))}
             columns={deviceColumns}
@@ -552,8 +552,8 @@ export default function CabinetDetailPage() {
 
   // U位视图Tab内容
   const uPositionContent = (
-    <Card 
-      title="U位视图" 
+    <Card
+      title="U位视图"
       styles={{ body: { padding: isMobile ? 0 : 24 } }}
       extra={
         cabinet.status === 1 && (
@@ -563,7 +563,7 @@ export default function CabinetDetailPage() {
         )
       }
     >
-      <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+      <div className="table-responsive" style={{ margin: isMobile ? '0 -12px' : 0 }}>
         <Table
           dataSource={uPositionData.filter(item => item.isStart || !item.device)}
           columns={uPositionColumns}
@@ -577,8 +577,8 @@ export default function CabinetDetailPage() {
   );
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ marginBottom: 24 }}>
+    <div style={{ padding: isMobile ? 12 : 24 }}>
+      <h1 style={{ marginBottom: isMobile ? 16 : 24, fontSize: isMobile ? 18 : 24 }}>
         <DatabaseOutlined style={{ marginRight: 8 }} />
         {cabinet.roomName || '未知机房'} - {cabinet.name}
       </h1>

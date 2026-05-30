@@ -249,6 +249,44 @@ export class DataObjectAIQueryService {
   }
 
   /**
+   * 自动为SQL添加LIMIT限制
+   */
+  private addLimitToSQL(sql: string): string {
+    // 清理SQL
+    let cleanedSQL = sql.trim();
+
+    // 移除末尾的分号
+    cleanedSQL = cleanedSQL.replace(/;+$/, '');
+
+    // 检查是否已经有 LIMIT
+    const hasLimit = /\bLIMIT\s+\d+/i.test(cleanedSQL);
+
+    if (hasLimit) {
+      // 如果已有 LIMIT，检查是否超过100
+      const limitMatch = cleanedSQL.match(/\bLIMIT\s+(\d+)/i);
+      if (limitMatch) {
+        const limitValue = parseInt(limitMatch[1], 10);
+        if (limitValue > 100) {
+          // 限制最大为100
+          cleanedSQL = cleanedSQL.replace(/(\bLIMIT\s+)\d+/i, '$1100');
+        }
+      }
+      return cleanedSQL;
+    }
+
+    // 检查是否是聚合查询（COUNT, SUM, AVG等）
+    const isAggregate = /\b(COUNT|SUM|AVG|MAX|MIN)\s*\(/i.test(cleanedSQL);
+
+    if (isAggregate) {
+      // 聚合查询通常返回单行，不需要 LIMIT
+      return cleanedSQL;
+    }
+
+    // 添加默认 LIMIT 20
+    return `${cleanedSQL} LIMIT 20`;
+  }
+
+  /**
    * 提取查询意图（支持多轮对话上下文）
    */
   private async extractIntent(
@@ -366,8 +404,14 @@ ${intent.queryType === 'aggregate' ? `
 - 示例: SELECT ${intent.aggregation?.function || 'COUNT'}(*) as result FROM (${cleanBaseQuery}) AS t WHERE ...
 ` : `
 - 使用SELECT * 或指定字段
-- 示例: SELECT * FROM (${cleanBaseQuery}) AS t WHERE ...
+- **必须添加 LIMIT 限制，最多返回100条数据**
+- 如果用户没有指定数量，默认使用 LIMIT 20
+- 示例: SELECT * FROM (${cleanBaseQuery}) AS t WHERE ... LIMIT 20
 `}
+
+重要规则:
+- 严禁生成没有 LIMIT 的查询语句
+- 即使使用聚合函数，也要确保不会扫描全表（通过WHERE条件限制）
 
 请以JSON格式返回: {"sql": "生成的SQL语句", "explanation": "简要说明"}
 `;
@@ -385,7 +429,7 @@ ${intent.queryType === 'aggregate' ? `
           continue;
         }
 
-        const sql = extractResult.sql!;
+        let sql = extractResult.sql!;
 
         // 安全检查
         const safetyCheck = this.validateSQLSafety(sql);
@@ -393,6 +437,9 @@ ${intent.queryType === 'aggregate' ? `
           console.warn(`[DataObject AI] 第${attempt}次尝试SQL安全检查失败:`, safetyCheck.error);
           continue;
         }
+
+        // 自动添加 LIMIT 限制（如果AI没有添加）
+        sql = this.addLimitToSQL(sql);
 
         console.log(`[DataObject AI] SQL生成成功:`, sql.substring(0, 200));
         return { success: true, sql };
@@ -487,13 +534,11 @@ ${intent.queryType === 'aggregate' ? `
 `;
 
     const answer = await this.callAI(prompt, 0.3);
-    // 清理思考过程标签
-    const cleanedAnswer = this.cleanThinkTags(answer);
-    // 如果清理后的回答为空，返回默认回答
-    if (!cleanedAnswer || cleanedAnswer.trim() === '') {
+    // 如果回答为空，返回默认回答
+    if (!answer || answer.trim() === '') {
       return `查询已完成。共找到 ${Array.isArray(result) ? result.length : 0} 条数据。`;
     }
-    return cleanedAnswer;
+    return answer;
   }
 
   /**
