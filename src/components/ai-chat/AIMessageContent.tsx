@@ -321,7 +321,7 @@ export default function AIMessageContent({
     <Space orientation="vertical" style={{ width: '100%' }}>
       {renderThinkContent()}
       {enableMarkdown ? renderMarkdown(formalContent) : renderSimpleText(formalContent)}
-      {enableChart && result && (
+      {enableChart && result !== null && result !== undefined && (
         <AIChart data={result} config={chartConfig} />
       )}
       {renderTechnicalDetails()}
