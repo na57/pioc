@@ -455,12 +455,10 @@ export default function DataObjectQueryPage() {
         </Space>
       ),
       children: (
-        <div style={{ height: 'calc(100vh - 200px)' }}>
-          <AIChatPanel
-            dataObjectId={dataObject.id}
-            dataObjectName={dataObject.name}
-          />
-        </div>
+        <AIChatPanel
+          dataObjectId={dataObject.id}
+          dataObjectName={dataObject.name}
+        />
       ),
     },
     {
@@ -472,13 +470,11 @@ export default function DataObjectQueryPage() {
         </Space>
       ),
       children: (
-        <div style={{ height: 'calc(100vh - 200px)' }}>
-          <SchemaEditor
-            dataObjectId={dataObject.id}
-            dataObjectName={dataObject.name}
-            isCreator={isCreator}
-          />
-        </div>
+        <SchemaEditor
+          dataObjectId={dataObject.id}
+          dataObjectName={dataObject.name}
+          isCreator={isCreator}
+        />
       ),
     },
   ];

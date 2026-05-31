@@ -46,6 +46,12 @@ export interface AIChatPanelProps {
   renderWelcome?: () => React.ReactNode;
   /** 自定义AI消息渲染 */
   renderAssistantMessage?: (content: string, isTyping?: boolean, sql?: string) => React.ReactNode;
+
+  // 自定义样式
+  /** 卡片容器样式 */
+  cardStyle?: React.CSSProperties;
+  /** 消息列表容器样式 */
+  messageContainerStyle?: React.CSSProperties;
 }
 
 export interface EntityCandidate {

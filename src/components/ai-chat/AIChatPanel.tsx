@@ -72,6 +72,9 @@ export default function AIChatPanel({
   // 自定义渲染
   renderWelcome,
   renderAssistantMessage,
+  // 自定义样式
+  cardStyle,
+  messageContainerStyle,
 }: AIChatPanelProps) {
   const { message } = App.useApp();
   const [inputMessage, setInputMessage] = useState('');
@@ -401,16 +404,17 @@ export default function AIChatPanel({
 
   return (
     <Card
-      style={{ height: 'calc(100vh - 280px)', minHeight: 500 }}
-      styles={{ body: { height: '100%', padding: 0, display: 'flex', flexDirection: 'column' } }}
+      style={{ height: 'auto', minHeight: 'auto', ...cardStyle }}
+      styles={{ body: { height: 'auto', padding: 0, display: 'flex', flexDirection: 'column' } }}
     >
       {/* 消息列表 */}
       <div
         style={{
-          flex: 1,
-          overflow: 'auto',
+          flex: 'none',
+          overflow: 'visible',
           padding: '16px 24px',
           background: '#f5f5f5',
+          ...messageContainerStyle,
         }}
       >
         {messages.length === 0 ? (

@@ -338,7 +338,7 @@ function IdcManagementPanel() {
   );
 }
 
-// AI问答面板组件
+// AI问答面板组件 - 自定义样式，让消息在整个页面滚动
 function IdcAIChatPanel() {
   const initialSuggestions = [
     '所有机房的机柜一共用了多少U？',
