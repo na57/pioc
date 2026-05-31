@@ -5,6 +5,8 @@ import { Space, Typography, Tag, Collapse } from 'antd';
 import { DownOutlined, CodeOutlined, DatabaseOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import AIChart from './AIChart';
+import type { ChartConfig } from './types';
 
 const { Paragraph } = Typography;
 
@@ -27,6 +29,8 @@ interface AIMessageContentProps {
   enableMarkdown?: boolean;
   enableThinkCollapse?: boolean;
   showTechnicalDetails?: boolean;
+  enableChart?: boolean;
+  chartConfig?: ChartConfig;
 }
 
 export default function AIMessageContent({
@@ -37,6 +41,8 @@ export default function AIMessageContent({
   enableMarkdown = true,
   enableThinkCollapse = true,
   showTechnicalDetails = true,
+  enableChart = true,
+  chartConfig,
 }: AIMessageContentProps) {
   const { thinkContent, formalContent } = useMemo(() => parseAIContent(content), [content]);
 
@@ -315,6 +321,9 @@ export default function AIMessageContent({
     <Space orientation="vertical" style={{ width: '100%' }}>
       {renderThinkContent()}
       {enableMarkdown ? renderMarkdown(formalContent) : renderSimpleText(formalContent)}
+      {enableChart && result && (
+        <AIChart data={result} config={chartConfig} />
+      )}
       {renderTechnicalDetails()}
     </Space>
   );

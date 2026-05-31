@@ -28,6 +28,7 @@ import type {
   DisplayMessage,
   ChatAPIResponse,
   PendingEntityConfirm,
+  ChartConfig,
 } from './types';
 
 const { Text, Paragraph } = Typography;
@@ -69,6 +70,8 @@ export default function AIChatPanel({
   enableThinkCollapse = true,
   enableEntityConfirm = false,
   enableLocalStorage = true,
+  enableChart = true,
+  chartConfig,
   // 自定义渲染
   renderWelcome,
   renderAssistantMessage,
@@ -471,6 +474,8 @@ export default function AIChatPanel({
                       enableMarkdown={enableMarkdown}
                       enableThinkCollapse={enableThinkCollapse}
                       showTechnicalDetails={true}
+                      enableChart={enableChart}
+                      chartConfig={chartConfig}
                     />
                   )}
                   {/* 最后一条AI消息显示重新生成按钮 */}

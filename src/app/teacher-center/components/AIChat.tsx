@@ -51,6 +51,11 @@ export default function AIChat({ gh, teacherName }: AIChatProps) {
       enableThinkCollapse={true}
       enableEntityConfirm={false}
       enableLocalStorage={true}
+      enableChart={true}
+      chartConfig={{
+        height: 300,
+        showSummary: true,
+      }}
       // 自定义渲染
       renderWelcome={renderWelcome}
     />

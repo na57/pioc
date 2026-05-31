@@ -362,6 +362,11 @@ function IdcAIChatPanel() {
       enableThinkCollapse={true}
       enableEntityConfirm={true}
       enableLocalStorage={true}
+      enableChart={true}
+      chartConfig={{
+        height: 300,
+        showSummary: true,
+      }}
     />
   );
 }

@@ -12,6 +12,37 @@ export interface DisplayMessage extends ChatMessage {
   result?: unknown;
 }
 
+// 图表类型
+export type ChartType = 'bar' | 'line' | 'pie' | 'scatter' | 'area';
+
+// 图表数据格式
+export interface ChartData {
+  // 格式1: 数组格式 [{name: 'A', value: 10}, ...]
+  [key: number]: Record<string, unknown>;
+  length: number;
+  // 格式2: { categories: [], values: [] }
+  categories?: string[];
+  values?: number[] | number[][];
+  // 格式3: { xAxis: [], series: [] }
+  xAxis?: string[];
+  series?: Array<{ name?: string; data: number[] }>;
+  // 格式4: { labels: [], data: [] }（饼图）
+  labels?: string[];
+  data?: number[];
+}
+
+// 图表配置
+export interface ChartConfig {
+  /** 图表标题 */
+  title?: string;
+  /** 默认图表类型 */
+  defaultType?: ChartType;
+  /** 图表高度 */
+  height?: number;
+  /** 是否显示数据摘要 */
+  showSummary?: boolean;
+}
+
 export interface AIChatPanelProps {
   /** API端点URL */
   apiEndpoint: string;
@@ -41,6 +72,10 @@ export interface AIChatPanelProps {
   enableEntityConfirm?: boolean;
   /** 是否启用本地存储 */
   enableLocalStorage?: boolean;
+  /** 是否启用图表展示 */
+  enableChart?: boolean;
+  /** 图表配置 */
+  chartConfig?: ChartConfig;
 
   /** 自定义欢迎界面渲染 */
   renderWelcome?: () => React.ReactNode;

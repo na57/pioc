@@ -54,6 +54,11 @@ export default function AIChatPanel({ dataObjectId, dataObjectName }: AIChatPane
       enableThinkCollapse={true}
       enableEntityConfirm={false}
       enableLocalStorage={false}
+      enableChart={true}
+      chartConfig={{
+        height: 320,
+        showSummary: true,
+      }}
       // 自定义渲染
       renderWelcome={renderWelcome}
     />
