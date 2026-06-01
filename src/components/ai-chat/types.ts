@@ -1,5 +1,30 @@
 'use client';
 
+// 图表类型
+export type ChartType = 'bar' | 'line' | 'pie' | 'scatter' | 'area';
+
+// AI推荐的图表配置
+export interface AIChartRecommendation {
+  /** 是否推荐显示图表 */
+  showChart: boolean;
+  /** 推荐原因 */
+  reason?: string;
+  /** 横轴标签字段名（从result数据中选择） */
+  labelField?: string;
+  /** 数值字段名列表 */
+  valueFields?: string[];
+  /** 系列名称映射（将SQL字段名映射为友好的显示名称） */
+  seriesNames?: Record<string, string>;
+  /** 推荐图表类型 */
+  suggestedType?: ChartType;
+  /** 图表标题 */
+  title?: string;
+  /** X轴标题 */
+  xAxisTitle?: string;
+  /** Y轴标题 */
+  yAxisTitle?: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -10,10 +35,8 @@ export interface DisplayMessage extends ChatMessage {
   isTyping?: boolean;
   sql?: string;
   result?: unknown;
+  chartRecommendation?: AIChartRecommendation;
 }
-
-// 图表类型
-export type ChartType = 'bar' | 'line' | 'pie' | 'scatter' | 'area';
 
 // 图表数据格式
 export interface ChartData {
@@ -110,6 +133,8 @@ export interface ChatAPIResponse {
     needsClarification?: boolean;
     candidates?: EntityCandidate[];
     clarificationMessage?: string;
+    /** AI推荐的图表配置 */
+    chartRecommendation?: AIChartRecommendation;
   };
   error?: string;
   userMessage?: string;

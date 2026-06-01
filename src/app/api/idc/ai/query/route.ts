@@ -47,6 +47,7 @@ async function handleAIQuery(request: NextRequest) {
           needsClarification: result.needsClarification,
           clarificationMessage: result.clarificationMessage,
           candidates: result.candidates,
+          chartRecommendation: result.chartRecommendation,
         },
       });
     } else {

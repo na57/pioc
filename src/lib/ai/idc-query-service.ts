@@ -122,6 +122,16 @@ export interface AIQueryResult {
   candidates?: EntityMatch[];
   error?: string;
   userMessage?: string; // 给用户看的友好提示
+  chartRecommendation?: {
+    showChart: boolean;
+    reason?: string;
+    labelField?: string;
+    valueFields?: string[];
+    suggestedType?: 'bar' | 'line' | 'pie' | 'scatter' | 'area';
+    title?: string;
+    xAxisTitle?: string;
+    yAxisTitle?: string;
+  };
 }
 
 // SQL生成结果类型
@@ -471,8 +481,8 @@ ${entityInfo.join('\n') || '无特定实体'}
         };
       }
 
-      // 步骤6: AI生成自然语言回答
-      const answer = await this.generateAnswer(question, sql, queryResult);
+      // 步骤6: AI生成自然语言回答和图表配置
+      const { answer, chartRecommendation } = await this.generateAnswerAndChartConfig(question, sql, queryResult);
 
       return {
         success: true,
@@ -481,6 +491,7 @@ ${entityInfo.join('\n') || '无特定实体'}
         sql,
         result: queryResult,
         entities: entityResult,
+        chartRecommendation,
       };
     } catch (error) {
       console.error('[IDC AI] 查询处理失败:', error);
@@ -564,15 +575,15 @@ ${contextPrompt}
   }
 
   /**
-   * 生成自然语言回答
+   * 生成自然语言回答和图表配置
    */
-  private async generateAnswer(
+  private async generateAnswerAndChartConfig(
     question: string,
     sql: string,
     result: unknown
-  ): Promise<string> {
+  ): Promise<{ answer: string; chartRecommendation?: AIQueryResult['chartRecommendation'] }> {
     const prompt = `
-你是一个IDC机房数据查询助手。请根据查询结果回答用户的问题。
+你是一个IDC机房数据查询助手。请根据查询结果回答用户的问题，并推荐合适的图表展示方式。
 
 用户问题: "${question}"
 
@@ -587,10 +598,71 @@ ${contextPrompt}
 4. 如果结果是空数组，说明没有找到相关数据
 5. 可以适当补充一些分析或建议
 
-回答:
+图表配置推荐:
+请分析查询结果，判断是否应该显示图表，以及如何选择合适的图表配置：
+- 如果是列表类查询（如"有哪些设备"），showChart应为false
+- 如果是统计类查询（如"各机房设备数量"），showChart应为true
+- 横轴标签字段应选择有意义的名称字段（如name、code等），避免使用id字段
+- 数值字段应选择统计值或数量字段
+
+必须以JSON格式返回，格式如下：
+{
+  "answer": "自然语言回答",
+  "chartRecommendation": {
+    "showChart": true/false,
+    "reason": "推荐理由",
+    "labelField": "横轴标签字段名（如name、code等，避免id）",
+    "valueFields": ["数值字段1", "数值字段2"],
+    "seriesNames": {
+      "project_count": "项目数量",
+      "device_count": "设备数量",
+      "total_count": "总数",
+      "avg_value": "平均值"
+    },
+    "suggestedType": "bar/line/pie/area",
+    "title": "图表标题",
+    "xAxisTitle": "X轴标题",
+    "yAxisTitle": "Y轴标题"
+  }
+}
+
+注意：
+- seriesNames用于将SQL字段名映射为友好的中文显示名称
+- 常见的数值字段如count、sum、avg等应该映射为"数量"、"总和"、"平均值"等
+- 如果字段名本身就很清晰（如"temperature"），可以保持原样或映射为"温度"
+
+只返回JSON，不要其他内容。
 `;
 
-    return await this.callAI(prompt, 0.3);
+    let response = await this.callAI(prompt, 0.3);
+
+    try {
+      // 先提取思考过程（如果有的话）
+      const thinkMatch = response.match(/<think>([\s\S]*?)<\/think>/i);
+      const thinkContent = thinkMatch ? thinkMatch[1].trim() : '';
+
+      // 移除思考过程标签，保留其他内容
+      response = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+      // 提取JSON
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[0]);
+        // 如果有思考过程，将其添加到回答中
+        const finalAnswer = thinkContent
+          ? `<think>\n${thinkContent}\n</think>\n\n${data.answer || ''}`
+          : (data.answer || response);
+        return {
+          answer: finalAnswer,
+          chartRecommendation: data.chartRecommendation,
+        };
+      }
+    } catch (e) {
+      console.warn('[IDC AI] 解析图表配置失败:', e);
+    }
+
+    // 如果解析失败，返回原始回答
+    return { answer: response };
   }
 
   /**
@@ -648,8 +720,8 @@ ${contextPrompt}
         };
       }
 
-      // 生成回答
-      const answer = await this.generateAnswer(question, sql, queryResult);
+      // 生成回答和图表配置
+      const { answer, chartRecommendation } = await this.generateAnswerAndChartConfig(question, sql, queryResult);
 
       return {
         success: true,
@@ -658,6 +730,7 @@ ${contextPrompt}
         sql,
         result: queryResult,
         entities: entityResult,
+        chartRecommendation,
       };
     } catch (error) {
       console.error('[IDC AI] 确认实体后查询失败:', error);

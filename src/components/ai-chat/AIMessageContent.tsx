@@ -6,7 +6,7 @@ import { DownOutlined, CodeOutlined, DatabaseOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import AIChart from './AIChart';
-import type { ChartConfig } from './types';
+import type { ChartConfig, AIChartRecommendation } from './types';
 
 const { Paragraph } = Typography;
 
@@ -31,6 +31,8 @@ interface AIMessageContentProps {
   showTechnicalDetails?: boolean;
   enableChart?: boolean;
   chartConfig?: ChartConfig;
+  /** AI推荐的图表配置 */
+  chartRecommendation?: AIChartRecommendation;
 }
 
 export default function AIMessageContent({
@@ -43,6 +45,7 @@ export default function AIMessageContent({
   showTechnicalDetails = true,
   enableChart = true,
   chartConfig,
+  chartRecommendation,
 }: AIMessageContentProps) {
   const { thinkContent, formalContent } = useMemo(() => parseAIContent(content), [content]);
 
@@ -322,7 +325,7 @@ export default function AIMessageContent({
       {renderThinkContent()}
       {enableMarkdown ? renderMarkdown(formalContent) : renderSimpleText(formalContent)}
       {enableChart && result !== null && result !== undefined && (
-        <AIChart data={result} config={chartConfig} />
+        <AIChart data={result} config={chartConfig} recommendation={chartRecommendation} />
       )}
       {renderTechnicalDetails()}
     </Space>

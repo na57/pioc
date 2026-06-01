@@ -10,7 +10,7 @@ import {
   AreaChartOutlined,
 } from '@ant-design/icons';
 import * as echarts from 'echarts';
-import type { ChartConfig, ChartType, ChartData } from './types';
+import type { ChartConfig, ChartType, ChartData, AIChartRecommendation } from './types';
 
 const { Text } = Typography;
 
@@ -18,6 +18,8 @@ interface AIChartProps {
   data: unknown;
   config?: ChartConfig;
   height?: number;
+  /** AI推荐的图表配置 */
+  recommendation?: AIChartRecommendation;
 }
 
 // 检测数据是否适合图表展示
@@ -77,17 +79,61 @@ function inferChartType(data: ChartData): ChartType[] {
   return types.length > 0 ? types : ['bar'];
 }
 
+// 优先级排序的字段名（越靠前越优先作为标签）
+const PRIORITY_LABEL_FIELDS = ['name', 'title', 'code', 'mc', 'xm', 'xm_mc', 'kcmc', 'xmmc', 'jgmc', 'bm', 'bm_mc', 'cabinet_name', 'room_name', 'device_name', 'brand_model', 'asset_no'];
+
 // 提取数据用于图表
-function extractChartData(data: ChartData): {
+function extractChartData(
+  data: ChartData,
+  recommendation?: AIChartRecommendation
+): {
   categories: string[];
-  series: Array<{ name: string; data: number[] }>;
+  series: Array<{ name: string; data: number[]; key: string }>;
   pieData: Array<{ name: string; value: number }>;
 } {
   // 数组格式: [{name: 'A', value: 10}, ...]
   if (Array.isArray(data)) {
     const keys = Object.keys(data[0] || {});
-    const nameKey = keys.find(k => typeof (data[0] as Record<string, unknown>)[k] === 'string') || keys[0];
-    const valueKeys = keys.filter(k => typeof (data[0] as Record<string, unknown>)[k] === 'number');
+
+    // 确定标签字段的优先级：
+    // 1. AI推荐的labelField
+    // 2. 包含优先级字段名的字符串字段
+    // 3. 第一个非ID的字符串字段
+    // 4. 第一个字段
+    let nameKey: string;
+
+    if (recommendation?.labelField && keys.includes(recommendation.labelField)) {
+      // 使用AI推荐的字段
+      nameKey = recommendation.labelField;
+    } else {
+      // 查找优先级字段
+      nameKey = keys.find(k => {
+        const lowerK = k.toLowerCase();
+        return PRIORITY_LABEL_FIELDS.some(pf => lowerK.includes(pf.toLowerCase()));
+      }) || '';
+
+      // 如果没有找到优先级字段，使用第一个非ID的字符串字段
+      if (!nameKey) {
+        nameKey = keys.find(k => {
+          const lowerK = k.toLowerCase();
+          return typeof (data[0] as Record<string, unknown>)[k] === 'string' &&
+                 !lowerK.endsWith('_id') &&
+                 !lowerK.endsWith('id') &&
+                 lowerK !== 'id';
+        }) || keys[0] || '';
+      }
+    }
+
+    // 确定数值字段
+    let valueKeys: string[] = [];
+    if (recommendation?.valueFields && recommendation.valueFields.length > 0) {
+      // 使用AI推荐的数值字段
+      valueKeys = recommendation.valueFields.filter((k: string) => keys.includes(k) && typeof (data[0] as Record<string, unknown>)[k] === 'number');
+    }
+    // 如果没有推荐的数值字段或推荐的不存在，使用所有数值字段
+    if (valueKeys.length === 0) {
+      valueKeys = keys.filter(k => typeof (data[0] as Record<string, unknown>)[k] === 'number');
+    }
 
     if (valueKeys.length === 1) {
       // 单系列数据 - 也生成饼图数据
@@ -96,10 +142,14 @@ function extractChartData(data: ChartData): {
         value: Number(item[valueKeys[0]]),
       }));
 
+      // 获取友好的系列名称
+      const seriesName = recommendation?.seriesNames?.[valueKeys[0]] || valueKeys[0];
+
       return {
         categories: data.map((item: Record<string, unknown>) => String(item[nameKey])),
         series: [{
-          name: valueKeys[0],
+          name: seriesName,
+          key: valueKeys[0],
           data: data.map((item: Record<string, unknown>) => Number(item[valueKeys[0]])),
         }],
         pieData,
@@ -110,7 +160,8 @@ function extractChartData(data: ChartData): {
     return {
       categories: data.map((item: Record<string, unknown>) => String(item[nameKey])),
       series: valueKeys.map(key => ({
-        name: key,
+        name: recommendation?.seriesNames?.[key] || key,
+        key,
         data: data.map((item: Record<string, unknown>) => Number(item[key])),
       })),
       pieData: [],
@@ -125,8 +176,8 @@ function extractChartData(data: ChartData): {
     return {
       categories: data.categories as string[],
       series: isMultiSeries
-        ? (values as number[][]).map((v, i) => ({ name: `系列${i + 1}`, data: v }))
-        : [{ name: '数值', data: values as number[] }],
+        ? (values as number[][]).map((v, i) => ({ name: `系列${i + 1}`, key: `series${i + 1}`, data: v }))
+        : [{ name: '数值', key: 'value', data: values as number[] }],
       pieData: (data.categories as string[]).map((cat, i) => ({
         name: cat,
         value: isMultiSeries ? (values as number[][])[0][i] : (values as number[])[i],
@@ -141,6 +192,7 @@ function extractChartData(data: ChartData): {
       categories: data.xAxis as string[],
       series: seriesData.map((s, i) => ({
         name: s.name || `系列${i + 1}`,
+        key: s.name || `series${i + 1}`,
         data: s.data,
       })),
       pieData: [],
@@ -153,7 +205,7 @@ function extractChartData(data: ChartData): {
     const values = data.data as number[];
     return {
       categories: labels,
-      series: [{ name: '数值', data: values }],
+      series: [{ name: '数值', key: 'value', data: values }],
       pieData: labels.map((label, i) => ({ name: label, value: values[i] })),
     };
   }
@@ -292,28 +344,41 @@ const chartTypeLabels: Record<ChartType, string> = {
   area: '面积图',
 };
 
-export default function AIChart({ data, config, height = 300 }: AIChartProps) {
+export default function AIChart({ data, config, height = 300, recommendation }: AIChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const [currentType, setCurrentType] = useState<ChartType>('bar');
 
   // 检查数据是否可图表化
-  const canRenderChart = useMemo(() => isChartableData(data), [data]);
+  const canRenderChart = useMemo(() => {
+    // 如果AI明确建议不显示图表，则直接返回false
+    if (recommendation?.showChart === false) {
+      return false;
+    }
+    return isChartableData(data);
+  }, [data, recommendation?.showChart]);
 
   // 推断支持的图表类型
   const supportedTypes = useMemo(() => {
     if (!canRenderChart) return [];
+    // 如果AI推荐了图表类型，只使用AI推荐的类型，不让用户选择
+    if (recommendation?.suggestedType) {
+      return [recommendation.suggestedType];
+    }
     return inferChartType(data as ChartData);
-  }, [data, canRenderChart]);
+  }, [data, canRenderChart, recommendation?.suggestedType]);
 
   // 设置默认图表类型
   useEffect(() => {
-    if (config?.defaultType && supportedTypes.includes(config.defaultType)) {
+    // 优先使用AI推荐的图表类型
+    if (recommendation?.suggestedType && supportedTypes.includes(recommendation.suggestedType)) {
+      setCurrentType(recommendation.suggestedType);
+    } else if (config?.defaultType && supportedTypes.includes(config.defaultType)) {
       setCurrentType(config.defaultType);
     } else if (supportedTypes.length > 0 && !supportedTypes.includes(currentType)) {
       setCurrentType(supportedTypes[0]);
     }
-  }, [supportedTypes, config?.defaultType, currentType]);
+  }, [supportedTypes, config?.defaultType, recommendation?.suggestedType, currentType]);
 
   // 初始化图表
   useEffect(() => {
@@ -327,40 +392,61 @@ export default function AIChart({ data, config, height = 300 }: AIChartProps) {
     // 创建新实例
     chartInstanceRef.current = echarts.init(chartRef.current);
 
-    // 提取数据并生成配置
-    const chartData = extractChartData(data as ChartData);
-    const option = generateChartOption(currentType, chartData, config?.title);
+    // 提取数据并生成配置（传入AI推荐）
+    const chartData = extractChartData(data as ChartData, recommendation);
+    const option = generateChartOption(currentType, chartData, recommendation?.title || config?.title);
 
     chartInstanceRef.current.setOption(option);
 
-    // 响应式
-    const handleResize = () => {
+    // 使用 ResizeObserver 监听容器大小变化
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          chartInstanceRef.current?.resize();
+        }
+      }
+    });
+
+    if (chartRef.current) {
+      resizeObserver.observe(chartRef.current);
+    }
+
+    // 立即调整大小
+    chartInstanceRef.current.resize();
+
+    // 延迟再次调整大小，确保容器已完全渲染
+    const resizeTimeout = setTimeout(() => {
       chartInstanceRef.current?.resize();
-    };
-    window.addEventListener('resize', handleResize);
+    }, 100);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      clearTimeout(resizeTimeout);
+      resizeObserver.disconnect();
       chartInstanceRef.current?.dispose();
       chartInstanceRef.current = null;
     };
-  }, [data, currentType, config?.title, canRenderChart]);
+  }, [data, currentType, config?.title, recommendation, canRenderChart]);
 
   // 更新图表配置
   useEffect(() => {
     if (!chartInstanceRef.current || !canRenderChart) return;
 
-    const chartData = extractChartData(data as ChartData);
-    const option = generateChartOption(currentType, chartData, config?.title);
+    const chartData = extractChartData(data as ChartData, recommendation);
+    const option = generateChartOption(currentType, chartData, recommendation?.title || config?.title);
     chartInstanceRef.current.setOption(option, true);
-  }, [currentType, data, config?.title, canRenderChart]);
+  }, [currentType, data, config?.title, recommendation, canRenderChart]);
+
+  // 如果AI明确建议不显示图表，返回null
+  if (recommendation?.showChart === false) {
+    return null;
+  }
 
   if (!canRenderChart) {
     return null;
   }
 
   // 构建 Segmented 选项
-  const segmentedOptions = supportedTypes.map(type => ({
+  const segmentedOptions = supportedTypes.map((type: ChartType) => ({
     value: type,
     icon: chartTypeIcons[type],
     label: chartTypeLabels[type],

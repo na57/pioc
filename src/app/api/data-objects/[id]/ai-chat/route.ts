@@ -64,6 +64,7 @@ export async function POST(
           answer: result.answer,
           sql: result.sql,
           result: result.result,
+          chartRecommendation: result.chartRecommendation,
         },
       });
     } else {

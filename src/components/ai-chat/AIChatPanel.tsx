@@ -177,6 +177,7 @@ export default function AIChatPanel({
             isTyping: enableTypingEffect,
             sql: result.data?.sql,
             result: result.data?.result,
+            chartRecommendation: result.data?.chartRecommendation,
           };
           setMessages((prev) => [...prev, assistantMessage]);
 
@@ -256,6 +257,7 @@ export default function AIChatPanel({
           isTyping: enableTypingEffect,
           sql: result.data?.sql,
           result: result.data?.result,
+          chartRecommendation: result.data?.chartRecommendation,
         };
 
         setMessages((prev) => [...prev, confirmMessage, assistantMessage]);
@@ -346,6 +348,7 @@ export default function AIChatPanel({
           isTyping: enableTypingEffect,
           sql: result.data?.sql,
           result: result.data?.result,
+          chartRecommendation: result.data?.chartRecommendation,
         };
         setMessages((prev) => [...prev, assistantMessage]);
 
@@ -476,6 +479,7 @@ export default function AIChatPanel({
                       showTechnicalDetails={true}
                       enableChart={enableChart}
                       chartConfig={chartConfig}
+                      chartRecommendation={msg.chartRecommendation}
                     />
                   )}
                   {/* 最后一条AI消息显示重新生成按钮 */}
