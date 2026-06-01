@@ -431,14 +431,21 @@ ${contextPrompt}
   }
 
   /**
-   * 生成自然语言回答和图表配置
+   * 获取日志前缀
    */
-  protected async generateAnswerAndChartConfig(
+  protected getLogPrefix(): string {
+    return 'IDC AI';
+  }
+
+  /**
+   * 构建生成回答和图表配置的 prompt 模板
+   */
+  protected buildAnswerChartPrompt(
     question: string,
     sql: string,
     result: unknown
-  ): Promise<{ answer: string; chartRecommendation?: AIQueryResult['chartRecommendation'] }> {
-    const prompt = `
+  ): string {
+    return `
 你是一个IDC机房数据查询助手。请根据查询结果回答用户的问题，并推荐合适的图表展示方式。
 
 用户问题: "${question}"
@@ -489,36 +496,6 @@ ${contextPrompt}
 
 只返回JSON，不要其他内容。
 `;
-
-    let response = await this.callAI(prompt, 0.3);
-
-    try {
-      // 先提取思考过程（如果有的话）
-      const thinkMatch = response.match(/<think>([\s\S]*?)<\/think>/i);
-      const thinkContent = thinkMatch ? thinkMatch[1].trim() : '';
-
-      // 移除思考过程标签，保留其他内容
-      response = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-      // 提取JSON
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const data = JSON.parse(jsonMatch[0]);
-        // 如果有思考过程，将其添加到回答中
-        const finalAnswer = thinkContent
-          ? `<think>\n${thinkContent}\n</think>\n\n${data.answer || ''}`
-          : (data.answer || response);
-        return {
-          answer: finalAnswer,
-          chartRecommendation: data.chartRecommendation,
-        };
-      }
-    } catch (e) {
-      console.warn('[IDC AI] 解析图表配置失败:', e);
-    }
-
-    // 如果解析失败，返回原始回答
-    return { answer: response };
   }
 
   /**

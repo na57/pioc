@@ -231,17 +231,21 @@ SQL生成要求:
 ${intent.queryType === 'aggregate' ? `
 - 使用聚合函数: ${intent.aggregation?.function}(${intent.aggregation?.field})
 - 如果需要分组，使用GROUP BY
-- 示例: SELECT ${intent.aggregation?.function || 'COUNT'}(*) as result FROM (${cleanBaseQuery}) AS t WHERE ...
+- 聚合查询示例: SELECT ${intent.aggregation?.function || 'COUNT'}(*) as result FROM (${cleanBaseQuery}) AS t
+- 带条件的聚合查询示例: SELECT ${intent.aggregation?.function || 'COUNT'}(*) as result FROM (${cleanBaseQuery}) AS t WHERE age > 18
+- 带分组的聚合查询示例: SELECT category, ${intent.aggregation?.function || 'COUNT'}(*) as count FROM (${cleanBaseQuery}) AS t GROUP BY category
 ` : `
 - 使用SELECT * 或指定字段
-- **必须添加 LIMIT 限制，最多返回100条数据**
-- 如果用户没有指定数量，默认使用 LIMIT 20
-- 示例: SELECT * FROM (${cleanBaseQuery}) AS t WHERE ... LIMIT 20
+- **必须添加 LIMIT 限制，默认返回1000条，最多10000条**
+- 如果用户没有指定数量，默认使用 LIMIT 1000
+- 无条件查询示例: SELECT * FROM (${cleanBaseQuery}) AS t LIMIT 1000
+- 带条件查询示例: SELECT * FROM (${cleanBaseQuery}) AS t WHERE status = 1 LIMIT 1000
 `}
 
 重要规则:
-- 严禁生成没有 LIMIT 的查询语句
-- 即使使用聚合函数，也要确保不会扫描全表（通过WHERE条件限制）
+- 严禁生成没有 LIMIT 的查询语句（聚合查询除外）
+- 如果没有WHERE条件，不要添加WHERE关键字
+- 示例中的"..."只是占位符，实际生成时必须替换为具体条件
 
 请以JSON格式返回: {"sql": "生成的SQL语句", "explanation": "简要说明"}
 `;
@@ -328,14 +332,21 @@ ${intent.queryType === 'aggregate' ? `
   }
 
   /**
-   * 生成自然语言回答和图表配置
+   * 获取日志前缀
    */
-  protected async generateAnswerAndChartConfig(
+  protected getLogPrefix(): string {
+    return 'DataObject AI';
+  }
+
+  /**
+   * 构建生成回答和图表配置的 prompt 模板
+   */
+  protected buildAnswerChartPrompt(
     question: string,
     sql: string,
     result: unknown
-  ): Promise<{ answer: string; chartRecommendation?: AIQueryResult['chartRecommendation'] }> {
-    const prompt = `
+  ): string {
+    return `
 你是一位数据查询助手。请根据查询结果回答用户的问题，并推荐合适的图表展示方式。
 
 用户问题: "${question}"
@@ -386,43 +397,6 @@ ${intent.queryType === 'aggregate' ? `
 
 只返回JSON，不要其他内容。
 `;
-
-    let response = await this.callAI(prompt, 0.3);
-
-    try {
-      // 先提取思考过程（如果有的话）
-      const thinkMatch = response.match(/<think>([\s\S]*?)<\/think>/i);
-      const thinkContent = thinkMatch ? thinkMatch[1].trim() : '';
-
-      // 移除思考过程标签，保留其他内容
-      response = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-      // 提取JSON
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const data = JSON.parse(jsonMatch[0]);
-        // 如果有思考过程，将其添加到回答中
-        const finalAnswer = thinkContent
-          ? `<think>\n${thinkContent}\n</think>\n\n${data.answer || ''}`
-          : (data.answer || response);
-        // 如果回答为空，返回默认回答
-        if (!finalAnswer || finalAnswer.trim() === '' || finalAnswer.trim() === '<think>\n\n</think>\n\n') {
-          return {
-            answer: `查询已完成。共找到 ${Array.isArray(result) ? result.length : 0} 条数据。`,
-            chartRecommendation: data.chartRecommendation,
-          };
-        }
-        return {
-          answer: finalAnswer,
-          chartRecommendation: data.chartRecommendation,
-        };
-      }
-    } catch (e) {
-      console.warn('[DataObject AI] 解析图表配置失败:', e);
-    }
-
-    // 如果解析失败，返回原始回答
-    return { answer: response };
   }
 
   /**
