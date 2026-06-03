@@ -50,16 +50,24 @@ export interface QueryResult<T = unknown> {
 }
 
 /**
+ * AI 配置接口
+ * 统一的 AI 配置类型，用于各应用配置模块
+ */
+export interface AIConfig {
+  /** AI Provider ID */
+  providerId?: string;
+  /** AI 模型名称 */
+  model?: string;
+}
+
+/**
  * 应用基础配置接口
  */
 export interface AppBaseConfig {
   /** 全局数据源ID */
   dataSourceId?: string;
   /** AI配置（可选） */
-  ai?: {
-    providerId?: string;
-    model?: string;
-  };
+  ai?: AIConfig;
   /** 表配置 - 使用更宽松的类型 */
   tables: Record<string, TableConfig>;
 }

@@ -41,6 +41,7 @@ export type {
   QueryOptions,
   QueryResult,
   AppBaseConfig,
+  AIConfig,
   DataSourceInfo,
   DataObjectInfo,
   ConfigLoadOptions,
@@ -66,3 +67,15 @@ export {
   createDataQueryService,
   connectionManager,
 } from './query-service';
+
+// 导出应用配置工厂
+export {
+  createAppConfigBundle,
+  createQueryFunction,
+  createConfigGetter,
+  BaseDataService,
+} from './app-config-factory';
+export type {
+  AppConfigFactoryOptions,
+  AppConfigBundle,
+} from './app-config-factory';

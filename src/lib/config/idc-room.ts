@@ -1,13 +1,15 @@
 /**
  * IDC机房管理应用配置
- * 使用通用数据访问框架
+ * 使用通用数据访问框架 - 工厂模式
  */
 
 import {
   TableConfig,
   AppBaseConfig,
-  createConfigLoader,
-  createDataQueryService,
+  AIConfig,
+  createAppConfigBundle,
+  createQueryFunction,
+  BaseDataService,
   QueryOptions,
   QueryResult,
 } from '@/lib/data-framework';
@@ -121,20 +123,11 @@ export interface DeviceFieldMapping extends Record<string, string> {
 }
 
 // ============================================
-// AI 配置接口
-// ============================================
-
-export interface AIIdcRoomConfig {
-  providerId?: string;
-  model?: string;
-}
-
-// ============================================
 // 应用配置类型
 // ============================================
 
 export interface IdcRoomConfig extends AppBaseConfig {
-  ai?: AIIdcRoomConfig;
+  ai?: AIConfig;
   tables: {
     room: TableConfig<RoomFieldMapping>;
     roomAc: TableConfig<RoomAcFieldMapping>;
@@ -151,7 +144,7 @@ export interface IdcRoomConfig extends AppBaseConfig {
 // ============================================
 
 const defaultConfig: IdcRoomConfig = {
-  dataSourceId: '1', // 默认数据源ID
+  dataSourceId: '1',
   ai: {
     providerId: 'openai',
     model: 'gpt-4o',
@@ -279,15 +272,22 @@ const defaultConfig: IdcRoomConfig = {
 };
 
 // ============================================
-// 创建配置加载器和查询服务
+// 使用工厂创建应用配置包
 // ============================================
 
-const configLoader = createConfigLoader<IdcRoomConfig>(defaultConfig, {
+const appBundle = createAppConfigBundle<IdcRoomConfig>({
+  defaultConfig,
   configFileName: 'idc-room.yaml',
   legacyConfigPath: 'apps.idcRoom',
 });
 
-const queryService = createDataQueryService(configLoader.getDataSourceId());
+const { configLoader, queryService } = appBundle;
+
+// ============================================
+// 创建通用查询函数
+// ============================================
+
+const queryTable = createQueryFunction<IdcRoomConfig>(configLoader, queryService);
 
 // ============================================
 // 便捷 API
@@ -305,14 +305,14 @@ export function getIdcRoomQueryService() {
  * 加载IDC机房配置
  */
 export function loadIdcRoomConfig(): IdcRoomConfig {
-  return configLoader.load();
+  return appBundle.loadConfig();
 }
 
 /**
  * 获取IDC机房配置
  */
 export function getIdcRoomConfig(): IdcRoomConfig {
-  return configLoader.getConfig();
+  return appBundle.getConfig();
 }
 
 /**
@@ -322,18 +322,14 @@ export async function queryIdcRoomTable<T = Record<string, unknown>>(
   tableName: keyof IdcRoomConfig['tables'],
   options: QueryOptions = {}
 ): Promise<QueryResult<T>> {
-  const tableConfig = configLoader.getTableConfig(tableName);
-  return queryService.queryByTableConfig<T>(tableConfig, options);
+  return queryTable<T>(tableName, options);
 }
 
 // ============================================
 // 数据服务类
 // ============================================
 
-export class IdcRoomDataService {
-  private configLoader = configLoader;
-  private queryService = queryService;
-
+export class IdcRoomDataService extends BaseDataService<IdcRoomConfig> {
   /**
    * 查询机房列表
    */
@@ -456,20 +452,9 @@ export class IdcRoomDataService {
       where: { id },
     });
   }
-
-  /**
-   * 重新加载配置
-   */
-  reloadConfig() {
-    this.configLoader.reload();
-    const newDataSourceId = this.configLoader.getDataSourceId();
-    if (newDataSourceId) {
-      this.queryService.setGlobalDataSourceId(newDataSourceId);
-    }
-  }
 }
 
 // 导出默认实例
-export const idcRoomDataService = new IdcRoomDataService();
+export const idcRoomDataService = new IdcRoomDataService(configLoader, queryService);
 
 export default configLoader;

@@ -1,13 +1,16 @@
 /**
  * 教师中心配置
- * 使用通用数据访问框架重构
+ * 使用通用数据访问框架重构 - 工厂模式
  */
 
 import {
   TableConfig,
   AppBaseConfig,
-  createConfigLoader,
-  createDataQueryService,
+  AIConfig,
+  createAppConfigBundle,
+  createQueryFunction,
+  createConfigGetter,
+  BaseDataService,
   QueryOptions,
   QueryResult,
 } from '@/lib/data-framework';
@@ -432,20 +435,11 @@ export interface CompetitionAwardFieldMapping extends Record<string, string> {
 }
 
 // ============================================
-// AI 配置接口
-// ============================================
-
-export interface AITeacherCenterConfig {
-  providerId?: string;
-  model?: string;
-}
-
-// ============================================
 // 教师中心配置类型
 // ============================================
 
 export interface TeacherCenterConfig extends AppBaseConfig {
-  ai?: AITeacherCenterConfig;
+  ai?: AIConfig;
   tables: {
     teacherBasic: TableConfig<TeacherBasicFieldMapping>;
     teacherTitle: TableConfig<TeacherTitleFieldMapping>;
@@ -1050,19 +1044,22 @@ const defaultConfig: TeacherCenterConfig = {
 };
 
 // ============================================
-// 创建配置加载器（使用新框架）
+// 使用工厂创建应用配置包
 // ============================================
 
-const configLoader = createConfigLoader<TeacherCenterConfig>(defaultConfig, {
+const appBundle = createAppConfigBundle<TeacherCenterConfig>({
+  defaultConfig,
   configFileName: 'teacher-center.yaml',
   legacyConfigPath: 'apps.teacherCenter',
 });
 
+const { configLoader, queryService } = appBundle;
+
 // ============================================
-// 创建数据查询服务
+// 创建通用查询函数
 // ============================================
 
-const queryService = createDataQueryService(configLoader.getDataSourceId());
+const queryTable = createQueryFunction<TeacherCenterConfig>(configLoader, queryService);
 
 // ============================================
 // 向后兼容的 API
@@ -1073,7 +1070,7 @@ const queryService = createDataQueryService(configLoader.getDataSourceId());
  * @deprecated 使用 configLoader.load() 替代
  */
 export function loadTeacherCenterConfig(): TeacherCenterConfig {
-  return configLoader.load();
+  return appBundle.loadConfig();
 }
 
 /**
@@ -1081,7 +1078,7 @@ export function loadTeacherCenterConfig(): TeacherCenterConfig {
  * @deprecated 使用 configLoader.getConfig() 替代
  */
 export function getTeacherCenterConfig(): TeacherCenterConfig {
-  return configLoader.getConfig();
+  return appBundle.getConfig();
 }
 
 // ============================================
@@ -1115,18 +1112,14 @@ export async function queryTeacherCenterTable<T = Record<string, unknown>>(
   tableName: keyof TeacherCenterConfig['tables'],
   options: QueryOptions = {}
 ): Promise<QueryResult<T>> {
-  const tableConfig = configLoader.getTableConfig(tableName);
-  return queryService.queryByTableConfig<T>(tableConfig, options);
+  return queryTable<T>(tableName, options);
 }
 
 // ============================================
 // 教师中心数据服务类
 // ============================================
 
-export class TeacherCenterDataService {
-  private configLoader = configLoader;
-  private queryService = queryService;
-
+export class TeacherCenterDataService extends BaseDataService<TeacherCenterConfig> {
   /**
    * 查询教师列表
    */
@@ -1199,20 +1192,9 @@ export class TeacherCenterDataService {
       orderBy: 'hjnf DESC',
     });
   }
-
-  /**
-   * 重新加载配置
-   */
-  reloadConfig() {
-    this.configLoader.reload();
-    const newDataSourceId = this.configLoader.getDataSourceId();
-    if (newDataSourceId) {
-      this.queryService.setGlobalDataSourceId(newDataSourceId);
-    }
-  }
 }
 
 // 导出默认实例
-export const teacherCenterDataService = new TeacherCenterDataService();
+export const teacherCenterDataService = new TeacherCenterDataService(configLoader, queryService);
 
 export default configLoader;
