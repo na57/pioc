@@ -296,14 +296,15 @@ export const GET = wrapHandler(getItemHandler);
 ```typescript
 /**
  * {应用名称}配置
- * 使用通用数据访问框架
+ * 使用通用数据访问框架 - 工厂模式
  */
 
 import {
   TableConfig,
   AppBaseConfig,
-  createConfigLoader,
-  createDataQueryService,
+  createAppConfigBundle,
+  createQueryFunction,
+  BaseDataService,
   QueryOptions,
   QueryResult,
 } from '@/lib/data-framework';
@@ -350,30 +351,25 @@ const defaultConfig: {AppName}Config = {
 };
 
 // ============================================
-// 创建配置加载器和查询服务
+// 使用工厂创建应用配置包
 // ============================================
 
-const configLoader = createConfigLoader<{AppName}Config>(defaultConfig, {
+const appBundle = createAppConfigBundle<{AppName}Config>({
+  defaultConfig,
   configFileName: '{your-app}.yaml',
   legacyConfigPath: 'apps.{yourAppName}',
 });
 
-const queryService = createDataQueryService(configLoader.getDataSourceId());
+const { configLoader, queryService } = appBundle;
 
 // ============================================
-// 向后兼容的 API
+// 创建通用查询函数
 // ============================================
 
-export function load{AppName}Config(): {AppName}Config {
-  return configLoader.load();
-}
-
-export function get{AppName}Config(): {AppName}Config {
-  return configLoader.getConfig();
-}
+const queryTable = createQueryFunction<{AppName}Config>(configLoader, queryService);
 
 // ============================================
-// 新的便捷 API
+// 便捷 API
 // ============================================
 
 export function get{AppName}ConfigLoader() {
@@ -385,24 +381,34 @@ export function get{AppName}QueryService() {
 }
 
 /**
+ * 加载{应用名称}配置
+ */
+export function load{AppName}Config(): {AppName}Config {
+  return appBundle.loadConfig();
+}
+
+/**
+ * 获取{应用名称}配置
+ */
+export function get{AppName}Config(): {AppName}Config {
+  return appBundle.getConfig();
+}
+
+/**
  * 通用查询接口
  */
 export async function query{AppName}Table<T = Record<string, unknown>>(
   tableName: keyof {AppName}Config['tables'],
   options: QueryOptions = {}
 ): Promise<QueryResult<T>> {
-  const tableConfig = configLoader.getTableConfig(tableName);
-  return queryService.queryByTableConfig<T>(tableConfig, options);
+  return queryTable<T>(tableName, options);
 }
 
 // ============================================
 // 数据服务类
 // ============================================
 
-export class {AppName}DataService {
-  private configLoader = configLoader;
-  private queryService = queryService;
-
+export class {AppName}DataService extends BaseDataService<{AppName}Config> {
   /**
    * 查询示例表数据
    */
@@ -422,21 +428,12 @@ export class {AppName}DataService {
       where: { id },
     });
   }
-
-  /**
-   * 重新加载配置
-   */
-  reloadConfig() {
-    this.configLoader.reload();
-    const newDataSourceId = this.configLoader.getDataSourceId();
-    if (newDataSourceId) {
-      this.queryService.setGlobalDataSourceId(newDataSourceId);
-    }
-  }
 }
 
 // 导出默认实例
-export const {appName}DataService = new {AppName}DataService();
+export const {appName}DataService = new {AppName}DataService(configLoader, queryService);
+
+export default configLoader;
 
 export default configLoader;
 ```
@@ -510,14 +507,15 @@ export function getPreinstalledAppIdByUrl(url: string): number | null {
 ```typescript
 /**
  * 图书管理应用配置
- * 使用通用数据访问框架
+ * 使用通用数据访问框架 - 工厂模式
  */
 
 import {
   TableConfig,
   AppBaseConfig,
-  createConfigLoader,
-  createDataQueryService,
+  createAppConfigBundle,
+  createQueryFunction,
+  BaseDataService,
   QueryOptions,
   QueryResult,
 } from '@/lib/data-framework';
@@ -573,15 +571,22 @@ const defaultConfig: BooksConfig = {
 };
 
 // ============================================
-// 创建配置加载器和查询服务
+// 使用工厂创建应用配置包
 // ============================================
 
-const configLoader = createConfigLoader<BooksConfig>(defaultConfig, {
+const appBundle = createAppConfigBundle<BooksConfig>({
+  defaultConfig,
   configFileName: 'books.yaml',
   legacyConfigPath: 'apps.books',
 });
 
-const queryService = createDataQueryService(configLoader.getDataSourceId());
+const { configLoader, queryService } = appBundle;
+
+// ============================================
+// 创建通用查询函数
+// ============================================
+
+const queryTable = createQueryFunction<BooksConfig>(configLoader, queryService);
 
 // ============================================
 // 便捷 API
@@ -596,24 +601,34 @@ export function getBooksQueryService() {
 }
 
 /**
+ * 加载图书管理配置
+ */
+export function loadBooksConfig(): BooksConfig {
+  return appBundle.loadConfig();
+}
+
+/**
+ * 获取图书管理配置
+ */
+export function getBooksConfig(): BooksConfig {
+  return appBundle.getConfig();
+}
+
+/**
  * 通用查询接口
  */
 export async function queryBooksTable<T = Record<string, unknown>>(
   tableName: keyof BooksConfig['tables'],
   options: QueryOptions = {}
 ): Promise<QueryResult<T>> {
-  const tableConfig = configLoader.getTableConfig(tableName);
-  return queryService.queryByTableConfig<T>(tableConfig, options);
+  return queryTable<T>(tableName, options);
 }
 
 // ============================================
 // 数据服务类
 // ============================================
 
-export class BooksDataService {
-  private configLoader = configLoader;
-  private queryService = queryService;
-
+export class BooksDataService extends BaseDataService<BooksConfig> {
   /**
    * 查询图书列表
    */
@@ -649,7 +664,7 @@ export class BooksDataService {
 }
 
 // 导出默认实例
-export const booksDataService = new BooksDataService();
+export const booksDataService = new BooksDataService(configLoader, queryService);
 
 export default configLoader;
 ```

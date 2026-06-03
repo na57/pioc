@@ -779,6 +779,94 @@ export const medicalAIQueryService = new MedicalAIQueryService();
 
 ---
 
+### 16. 应用配置必须使用工厂模式
+
+**规则**: 所有新的应用配置模块必须使用 `createAppConfigBundle` 工厂函数创建，数据服务类必须继承 `BaseDataService` 基类，保持统一的配置管理代码结构。
+
+**示例**:
+
+```typescript
+// ✅ 正确用法 - 使用工厂模式
+import {
+  TableConfig,
+  AppBaseConfig,
+  createAppConfigBundle,
+  createQueryFunction,
+  BaseDataService,
+  QueryOptions,
+  QueryResult,
+} from '@/lib/data-framework';
+
+export interface MyAppConfig extends AppBaseConfig {
+  tables: {
+    exampleTable: TableConfig<ExampleFieldMapping>;
+  };
+}
+
+const defaultConfig: MyAppConfig = {
+  dataSourceId: '1',
+  tables: {
+    exampleTable: {
+      name: 't_example_table',
+      fields: { id: 'id', name: 'name' },
+    },
+  },
+};
+
+// 使用工厂创建应用配置包
+const appBundle = createAppConfigBundle<MyAppConfig>({
+  defaultConfig,
+  configFileName: 'my-app.yaml',
+  legacyConfigPath: 'apps.myApp',
+});
+
+const { configLoader, queryService } = appBundle;
+const queryTable = createQueryFunction<MyAppConfig>(configLoader, queryService);
+
+// 数据服务类继承 BaseDataService
+export class MyAppDataService extends BaseDataService<MyAppConfig> {
+  async queryData(page = 1, pageSize = 10) {
+    return queryTable('exampleTable', { page, perPage: pageSize });
+  }
+}
+
+export const myAppDataService = new MyAppDataService(configLoader, queryService);
+
+// ❌ 错误用法 - 直接创建配置加载器
+import { createConfigLoader, createDataQueryService } from '@/lib/data-framework';
+
+const configLoader = createConfigLoader<MyAppConfig>(defaultConfig, {
+  configFileName: 'my-app.yaml',
+});
+const queryService = createDataQueryService(configLoader.getDataSourceId());
+
+export class MyAppDataService {
+  private configLoader = configLoader;
+  private queryService = queryService;
+  
+  reloadConfig() {
+    this.configLoader.reload();
+    const newDataSourceId = this.configLoader.getDataSourceId();
+    if (newDataSourceId) {
+      this.queryService.setGlobalDataSourceId(newDataSourceId);
+    }
+  }
+}
+```
+
+**工厂模式的优势**:
+- 消除重复的配置创建代码
+- 统一的数据服务基类提供通用的 `reloadConfig()` 方法
+- 更简洁的代码结构
+- 易于维护和扩展
+
+**参考实现**:
+- `src/lib/config/teacher-center.ts` - 教师中心配置
+- `src/lib/config/course-center.ts` - 课程中心配置
+- `src/lib/config/idc-room.ts` - IDC机房配置
+
+---
+
 ## 检查清单
 
 在提交代码前，请检查：
@@ -801,3 +889,5 @@ export const medicalAIQueryService = new MedicalAIQueryService();
 - [ ] AI 问答功能是否使用了 AIChatPanel 组件而非自行实现
 - [ ] AI 查询服务是否继承了 BaseAIQueryService 基类
 - [ ] AI 查询服务是否正确实现了 getLogPrefix() 和 buildAnswerChartPrompt() 方法
+- [ ] 应用配置是否使用了工厂模式（createAppConfigBundle）而非直接创建配置加载器
+- [ ] 数据服务类是否继承了 BaseDataService 基类

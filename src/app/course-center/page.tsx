@@ -253,7 +253,7 @@ export default function CourseCenterPage() {
       <Title level={isMobile ? 4 : 2}>课程中心</Title>
 
       <Card style={{ marginBottom: 16 }}>
-        <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+        <Space orientation={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
           <Select
             value={courseType}
             onChange={handleCourseTypeChange}
