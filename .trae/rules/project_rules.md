@@ -618,6 +618,167 @@ export default function MyAIChatPage() {
 
 ---
 
+### 15. AI 查询服务必须继承 BaseAIQueryService 基类
+
+**规则**: 所有需要实现 AI 查询服务（Text-to-SQL）的后端功能，必须继承 `src/lib/ai/base-ai-query-service.ts` 中的 `BaseAIQueryService` 基类，保持统一的查询处理逻辑和安全性控制。
+
+**示例**:
+
+```typescript
+// ✅ 正确用法 - 继承 BaseAIQueryService 基类
+import {
+  BaseAIQueryService,
+  BaseAIQueryResult,
+  AIConfig,
+} from '@/lib/ai/base-ai-query-service';
+
+// 定义结果接口，继承 BaseAIQueryResult
+export interface MedicalAIQueryResult extends BaseAIQueryResult {
+  // 可以添加领域特有的字段
+  patientInfo?: {
+    id: string;
+    name: string;
+  };
+}
+
+export class MedicalAIQueryService extends BaseAIQueryService {
+  /**
+   * 获取日志前缀（必需实现）
+   */
+  protected getLogPrefix(): string {
+    return 'Medical AI';
+  }
+
+  /**
+   * 构建生成回答和图表配置的 prompt 模板（必需实现）
+   */
+  protected buildAnswerChartPrompt(
+    question: string,
+    sql: string,
+    result: unknown
+  ): string {
+    return `
+你是一位医疗数据查询助手。请根据查询结果回答用户的问题。
+
+用户问题: "${question}"
+执行的SQL: ${sql}
+查询结果: ${JSON.stringify(result, null, 2)}
+
+要求:
+1. 用自然语言回答用户的问题
+2. 注意保护患者隐私，敏感信息需要脱敏
+3. 回答要简洁明了
+
+图表配置推荐:
+- 如果是列表类查询，showChart应为false
+- 如果是统计类查询，showChart应为true
+
+必须以JSON格式返回: {"answer": "...", "chartRecommendation": {...}}
+只返回JSON，不要其他内容。
+`;
+  }
+
+  /**
+   * 处理用户查询（主流程）
+   */
+  async processQuery(
+    question: string,
+    history?: Array<{ role: string; content: string }>
+  ): Promise<MedicalAIQueryResult> {
+    try {
+      // 1. 提取查询意图（领域特有逻辑）
+      const intent = await this.extractMedicalIntent(question, history);
+      
+      // 2. 生成SQL（领域特有逻辑）
+      const sqlResult = await this.generateMedicalSQL(intent, history);
+      
+      if (!sqlResult.success) {
+        return {
+          success: false,
+          question,
+          error: sqlResult.error,
+          userMessage: '生成查询语句失败，请换个问题试试',
+        };
+      }
+
+      // 3. 执行查询（领域特有逻辑）
+      const queryResult = await this.executeMedicalQuery(sqlResult.sql!);
+      
+      // 4. 生成回答（调用基类的通用方法）
+      const { answer, chartRecommendation } = await this.generateAnswerAndChartConfig(
+        question,
+        sqlResult.sql!,
+        queryResult
+      );
+
+      return {
+        success: true,
+        question,
+        answer,
+        sql: sqlResult.sql,
+        result: queryResult,
+        chartRecommendation,
+      };
+    } catch (error) {
+      console.error(`[${this.getLogPrefix()}] 查询处理失败:`, error);
+      return {
+        success: false,
+        question,
+        error: String(error),
+        userMessage: '处理查询时出现错误，请稍后重试',
+      };
+    }
+  }
+
+  // 领域特有的私有方法...
+  private async extractMedicalIntent(...) { ... }
+  private async generateMedicalSQL(...) { ... }
+  private async executeMedicalQuery(...) { ... }
+}
+
+// 导出单例
+export const medicalAIQueryService = new MedicalAIQueryService();
+```
+
+**基类提供的通用能力**:
+
+| 方法 | 说明 |
+|------|------|
+| `callAI()` | 调用AI服务（支持多轮对话） |
+| `validateSQLSafety()` | SQL安全检查（只允许SELECT） |
+| `extractSQL()` | 从AI响应中提取SQL |
+| `addLimitToSQL()` | 自动添加LIMIT限制（默认1000，最大10000） |
+| `cleanThinkTags()` | 清理think标签 |
+| `generateAnswerAndChartConfig()` | 生成自然语言回答和图表配置 |
+
+**子类必须实现的方法**:
+
+| 方法 | 说明 |
+|------|------|
+| `getLogPrefix()` | 返回日志前缀，用于区分不同服务 |
+| `buildAnswerChartPrompt()` | 构建生成回答的prompt模板 |
+| `processQuery()` | 主查询流程（业务逻辑） |
+
+**可选覆盖的方法**:
+
+| 方法 | 说明 |
+|------|------|
+| `getAIConfig()` | AI配置（默认使用全局配置） |
+
+**参考实现**:
+
+- `src/lib/ai/data-object-query-service.ts` - 数据对象查询服务
+- `src/lib/ai/idc-query-service.ts` - IDC机房查询服务
+
+**原因**: 
+- 统一的 SQL 安全检查（只允许 SELECT）
+- 统一的 LIMIT 限制（防止全表扫描）
+- 统一的 think 标签处理
+- 统一的图表配置生成
+- 减少重复代码，易于维护
+
+---
+
 ## 检查清单
 
 在提交代码前，请检查：
@@ -638,3 +799,5 @@ export default function MyAIChatPage() {
 - [ ] Table 组件 rowKey 是否避免使用 index 参数
 - [ ] Timeline 组件是否使用了 items 属性而非 Timeline.Item 子组件
 - [ ] AI 问答功能是否使用了 AIChatPanel 组件而非自行实现
+- [ ] AI 查询服务是否继承了 BaseAIQueryService 基类
+- [ ] AI 查询服务是否正确实现了 getLogPrefix() 和 buildAnswerChartPrompt() 方法
