@@ -1,22 +1,29 @@
 /**
  * 配置管理应用配置
  * ConfigSys - 配置管理系统
+ * 使用通用数据访问框架 - 工厂模式
  */
 
-import { getConfig } from '@/lib/config';
+import {
+  AppBaseConfig,
+  AIConfig,
+  TableConfig,
+  createAppConfigBundle,
+  createConfigGetter,
+} from '@/lib/data-framework';
 
 // ============================================
 // 配置类型定义
 // ============================================
 
-export interface ConfigSysConfig {
-  roles?: {
-    admin?: string;
-    user?: string;
-  };
-  ai?: {
-    providerId?: string;
-  };
+export interface ConfigSysRoles {
+  admin?: string;
+  user?: string;
+}
+
+export interface ConfigSysConfig extends AppBaseConfig {
+  roles?: ConfigSysRoles;
+  ai?: AIConfig;
 }
 
 // ============================================
@@ -28,34 +35,38 @@ const defaultConfig: ConfigSysConfig = {
     admin: '系统管理员',
     user: '普通用户',
   },
+  tables: {},
 };
 
 // ============================================
-// 配置加载函数
+// 使用工厂创建应用配置包
 // ============================================
 
-export function getConfigSysConfig(): ConfigSysConfig {
-  try {
-    const globalConfig = getConfig();
-    const appConfig = globalConfig.apps?.configsys;
-    
-    if (!appConfig) {
-      console.warn('ConfigSys: 未找到应用配置，使用默认配置');
-      return defaultConfig;
-    }
+const appBundle = createAppConfigBundle<ConfigSysConfig>({
+  defaultConfig,
+  configFileName: 'configsys.yaml',
+  legacyConfigPath: 'apps.configsys',
+});
 
-    return {
-      ...defaultConfig,
-      ...appConfig,
-      roles: {
-        ...defaultConfig.roles,
-        ...appConfig.roles,
-      },
-    };
-  } catch (error) {
-    console.warn('ConfigSys: 加载配置失败，使用默认配置', error);
-    return defaultConfig;
-  }
+const { configLoader } = appBundle;
+
+// ============================================
+// 向后兼容的 API
+// ============================================
+
+/**
+ * 获取配置管理应用配置
+ * 优先从独立配置文件加载，如果不存在则从主配置读取
+ */
+export function getConfigSysConfig(): ConfigSysConfig {
+  return configLoader.getConfig();
+}
+
+/**
+ * 重新加载配置
+ */
+export function reloadConfigSysConfig(): ConfigSysConfig {
+  return configLoader.reload();
 }
 
 // ============================================
@@ -79,4 +90,9 @@ export function getAIProviderId(): string | undefined {
   return getConfigSysConfig().ai?.providerId;
 }
 
+// ============================================
+// 导出工厂创建的实例
+// ============================================
+
+export { appBundle, configLoader };
 export default getConfigSysConfig;

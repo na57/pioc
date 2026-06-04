@@ -11,4 +11,4 @@ roles:
 # 用于AI智能解读、版本对比、合规检查功能
 # providerId对应config.yaml中ai.providers[].providerId
 ai:
-  providerId: minimax  # 可选，默认为openai
+  providerId: local-minimax  # 可选，默认为openai

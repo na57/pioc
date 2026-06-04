@@ -3,7 +3,9 @@
  * 提供配置文件的智能分析、类型识别、风险评估等功能
  */
 
-import { BaseAIQueryService, BaseAIQueryResult } from './base-ai-query-service';
+import { BaseAIQueryService, BaseAIQueryResult, AIConfig } from './base-ai-query-service';
+import { getConfigSysConfig } from '@/lib/config/configsys';
+import { getConfig } from '@/lib/config';
 
 export interface ConfigInterpretResult extends BaseAIQueryResult {
   detectedType?: string;
@@ -25,6 +27,46 @@ export class ConfigInterpretService extends BaseAIQueryService {
    */
   protected getLogPrefix(): string {
     return 'ConfigInterpret';
+  }
+
+  /**
+   * 获取AI配置
+   * 优先级：
+   * 1. configsys.yaml 中的 ai.providerId
+   * 2. config.yaml 中 ai.providers 的第一个配置
+   */
+  protected async getAIConfig(): Promise<AIConfig> {
+    const mainConfig = getConfig();
+
+    // 1. 首先尝试获取配置管理应用的专用AI配置
+    const configsysConfig = getConfigSysConfig();
+    let providerId = configsysConfig?.ai?.providerId;
+
+    // 2. 如果没有专用配置，使用全局默认配置
+    if (!providerId) {
+      // 使用 ai.providers 的第一个 provider 的 providerId
+      const firstProvider = mainConfig.ai?.providers?.[0];
+      if (firstProvider) {
+        providerId = firstProvider.providerId;
+      }
+    }
+
+    if (!providerId) {
+      throw new Error('未配置AI provider，请在 config.yaml 中配置 ai.providers');
+    }
+
+    // 3. 在全局 providers 中查找对应的 provider
+    const provider = mainConfig.ai?.providers?.find((p) => p.providerId === providerId);
+
+    if (!provider) {
+      throw new Error(`未找到AI provider: ${providerId}`);
+    }
+
+    const aiModel = provider.models?.[0]?.modelId || 'gpt-4o';
+    const aiApiUrl = `${provider.baseUrl}/chat/completions`;
+    const aiApiKey = provider.apiKey;
+
+    return { aiModel, aiApiUrl, aiApiKey };
   }
 
   /**
