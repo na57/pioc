@@ -10,6 +10,9 @@ async function getVersionsHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const configId = searchParams.get('configId');
+    const userId = request.headers.get('x-user-id') || '';
+    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
+    const isAdmin = userRoles.includes('系统管理员');
     
     if (!configId) {
       return NextResponse.json(
@@ -40,6 +43,7 @@ async function getVersionsHandler(request: NextRequest) {
       data: versions.map((v) => ({
         ...v,
         hasComplianceReport: !!v.compliance_report,
+        isOwner: isAdmin || v.created_by === userId,
       })),
     });
   } catch (error) {

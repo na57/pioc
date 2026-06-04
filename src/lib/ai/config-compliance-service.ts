@@ -187,6 +187,7 @@ ${complianceRule}
       // 尝试提取JSON
       const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
+        console.log(`[${this.getLogPrefix()}] 提取的JSON内容:`, jsonMatch[0]);
         const data = JSON.parse(jsonMatch[0]);
         return {
           overallStatus: data.overallStatus || 'warning',

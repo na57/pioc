@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Tag, Space, Descriptions, Table, App, Modal, Form, Input } from 'antd';
-import { PlusOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useRouter, useParams } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
@@ -30,6 +30,7 @@ interface Version {
   hasComplianceReport: boolean;
   created_by: string;
   created_at: string;
+  isOwner: boolean;
 }
 
 
@@ -102,6 +103,23 @@ export default function ConfigDetailPage() {
     }
   };
 
+  const handleDeleteVersion = async (versionId: string) => {
+    try {
+      const response = await fetch(`/api/configsys/versions/${versionId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.success) {
+        message.success('删除成功');
+        fetchVersions();
+      } else {
+        message.error(data.message || '删除失败');
+      }
+    } catch (error) {
+      message.error('删除失败');
+    }
+  };
+
   const versionColumns = [
     {
       title: '版本号',
@@ -128,6 +146,7 @@ export default function ConfigDetailPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
+      width: 120,
       render: (text: string) => <FriendlyTime date={text} />,
     },
     {
@@ -140,6 +159,16 @@ export default function ConfigDetailPage() {
             tooltip="查看版本详情"
             onClick={() => router.push(`/configsys/versions/${record.id}`)}
           />
+          {record.isOwner && (
+            <ActionButton
+              icon={<DeleteOutlined />}
+              tooltip="删除版本"
+              danger
+              confirmTitle="确认删除"
+              confirmDescription="确定要删除此版本吗？删除后不可恢复。"
+              onConfirm={() => handleDeleteVersion(record.id)}
+            />
+          )}
         </Space>
       ),
     },

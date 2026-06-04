@@ -370,9 +370,9 @@ export default function RulesPage() {
         onCancel={() => setModalVisible(false)}
         onOk={handleSubmit}
         width={700}
-        destroyOnHidden
+        destroyOnHidden={false}
       >
-        <Form form={form} layout="vertical" preserve={false}>
+        <Form form={form} layout="vertical" preserve>
           <Form.Item
             name="name"
             label="规则名称"
