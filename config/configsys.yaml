@@ -1,0 +1,14 @@
+# ConfigSys 配置管理系统配置文件
+# 此文件用于配置ConfigSys应用的各项参数
+
+# 角色配置
+# 角色名称需要与系统角色管理中的角色名称保持一致
+roles:
+  admin: "admin"    # 管理员角色名称，拥有所有权限
+  user: "user"       # 普通用户角色名称，只能管理自己的配置
+
+# AI配置（可选）
+# 用于AI智能解读、版本对比、合规检查功能
+# providerId对应config.yaml中ai.providers[].providerId
+ai:
+  providerId: minimax  # 可选，默认为openai

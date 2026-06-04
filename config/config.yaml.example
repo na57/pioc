@@ -184,6 +184,18 @@ apps:
     graduateGradeTableName: "t_dws_gxxs_yjscjxx"
     # 课程思政表名
     courseIdeologyTableName: "t_dws_gxjx_bzkskcszmx"
+  
+  # 配置管理系统
+  # 完整配置请见 config/configsys.yaml
+  configsys:
+    # 角色配置
+    roles:
+      admin: "系统管理员"
+      user: "普通用户"
+    # AI配置（可选）
+    ai:
+      providerId: openai  # 对应ai.providers[].providerId
+      modelId: gpt-4o-mini  # 对应ai.providers[].models[].modelId
 
 #------------------------------------------
 # AI 模型配置 (OpenAI 兼容)

@@ -146,6 +146,15 @@ export interface AppConfig {
         model?: string;
       };
     };
+    configsys?: {
+      roles?: {
+        admin?: string;
+        user?: string;
+      };
+      ai?: {
+        providerId?: string;
+      };
+    };
   };
   features: {
     allowUserRegistration: boolean;
