@@ -57,8 +57,9 @@ export abstract class BaseAIQueryService {
     const aiModel = firstProvider.models?.[0]?.modelId || 'gpt-4o';
     const aiApiUrl = `${firstProvider.baseUrl}/chat/completions`;
     const aiApiKey = firstProvider.apiKey;
+    const maxTokens = firstProvider.maxTokens;
 
-    return { aiModel, aiApiUrl, aiApiKey };
+    return { aiModel, aiApiUrl, aiApiKey, maxTokens };
   }
 
   /**
@@ -70,7 +71,7 @@ export abstract class BaseAIQueryService {
     history?: Array<{ role: string; content: string }>,
     systemPrompt?: string
   ): Promise<string> {
-    const { aiModel, aiApiUrl, aiApiKey } = await this.getAIConfig();
+    const { aiModel, aiApiUrl, aiApiKey, maxTokens } = await this.getAIConfig();
 
     // 构建消息列表，包含历史对话
     const messages: Array<{ role: string; content: string }> = [];
@@ -100,7 +101,7 @@ export abstract class BaseAIQueryService {
         messages,
         stream: false,
         temperature,
-        max_tokens: 8000,
+        max_tokens: maxTokens || 8000,
       }),
     });
 

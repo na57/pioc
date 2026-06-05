@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Tag, Space, Descriptions, Table, App, Modal, Form, Input } from 'antd';
+import { Card, Button, Tag, Space, Descriptions, Table, App, Modal, Form, Input, Drawer } from 'antd';
 import { PlusOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useRouter, useParams } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -21,6 +21,18 @@ interface Config {
   created_at: string;
   updated_at: string;
   isOwner: boolean;
+}
+
+interface RuleDetail {
+  id: number;
+  name: string;
+  description: string | null;
+  content: string;
+  status: number;
+  created_by?: number;
+  creator_name?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface Version {
@@ -46,6 +58,9 @@ export default function ConfigDetailPage() {
   const [loading, setLoading] = useState(false);
   const [isVersionModalVisible, setIsVersionModalVisible] = useState(false);
   const [versionForm] = Form.useForm();
+  const [ruleDrawerVisible, setRuleDrawerVisible] = useState(false);
+  const [ruleDetail, setRuleDetail] = useState<RuleDetail | null>(null);
+  const [ruleLoading, setRuleLoading] = useState(false);
 
   useEffect(() => {
     fetchConfigDetail();
@@ -120,11 +135,34 @@ export default function ConfigDetailPage() {
     }
   };
 
+  const handleShowRuleDetail = async (ruleId: number) => {
+    setRuleLoading(true);
+    setRuleDrawerVisible(true);
+    try {
+      const response = await fetch(`/api/rules/${ruleId}`);
+      const data = await response.json();
+      if (data.success) {
+        setRuleDetail(data.data);
+      } else {
+        message.error(data.message || '获取规则详情失败');
+      }
+    } catch (error) {
+      message.error('获取规则详情失败');
+    } finally {
+      setRuleLoading(false);
+    }
+  };
+
   const versionColumns = [
     {
       title: '版本号',
       dataIndex: 'version_number',
       key: 'version_number',
+      render: (text: string, record: Version) => (
+        <Button type="link" style={{ padding: 0 }} onClick={() => router.push(`/configsys/versions/${record.id}`)}>
+          {text}
+        </Button>
+      ),
     },
     {
       title: 'AI摘要',
@@ -154,11 +192,6 @@ export default function ConfigDetailPage() {
       key: 'action',
       render: (_: any, record: Version) => (
         <Space size="small">
-          <ActionButton
-            icon={<EyeOutlined />}
-            tooltip="查看版本详情"
-            onClick={() => router.push(`/configsys/versions/${record.id}`)}
-          />
           {record.isOwner && (
             <ActionButton
               icon={<DeleteOutlined />}
@@ -190,14 +223,13 @@ export default function ConfigDetailPage() {
           <Descriptions.Item label="描述" span={2}>{config.description}</Descriptions.Item>
           <Descriptions.Item label="合规规则" span={2}>
             {config.compliance_rule_id ? (
-              <div>
-                <div style={{ marginBottom: 8 }}>
-                  <Tag color="blue">{config.compliance_rule_name}</Tag>
-                </div>
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: 12, borderRadius: 4 }}>
-                  {config.compliance_rule_content}
-                </pre>
-              </div>
+              <Button
+                type="link"
+                style={{ padding: 0 }}
+                onClick={() => handleShowRuleDetail(config.compliance_rule_id!)}
+              >
+                {config.compliance_rule_name}
+              </Button>
             ) : (
               <span style={{ color: '#999' }}>未设置</span>
             )}
@@ -252,6 +284,42 @@ export default function ConfigDetailPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 合规规则详情抽屉 */}
+      <Drawer
+        title="合规规则详情"
+        size="large"
+        open={ruleDrawerVisible}
+        onClose={() => setRuleDrawerVisible(false)}
+      >
+        {ruleLoading ? (
+          <Card loading />
+        ) : ruleDetail ? (
+          <Descriptions bordered column={1}>
+            <Descriptions.Item label="规则名称">{ruleDetail.name}</Descriptions.Item>
+            <Descriptions.Item label="创建者">{ruleDetail.creator_name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="状态">
+              <Tag color={ruleDetail.status === 1 ? 'green' : 'red'}>
+                {ruleDetail.status === 1 ? '启用' : '禁用'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              <FriendlyTime date={ruleDetail.created_at} />
+            </Descriptions.Item>
+            <Descriptions.Item label="更新时间">
+              <FriendlyTime date={ruleDetail.updated_at} />
+            </Descriptions.Item>
+            <Descriptions.Item label="描述">
+              {ruleDetail.description || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="规则内容">
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto' }}>
+                {ruleDetail.content}
+              </pre>
+            </Descriptions.Item>
+          </Descriptions>
+        ) : null}
+      </Drawer>
     </>
   );
 }

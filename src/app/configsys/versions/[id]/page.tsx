@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Tag, Space, Descriptions, App, Select, Modal, Alert, Tabs } from 'antd';
-import { RobotOutlined, FileTextOutlined, SafetyOutlined, InfoCircleOutlined, MessageOutlined } from '@ant-design/icons';
+import { RobotOutlined, FileTextOutlined, SafetyOutlined, InfoCircleOutlined, MessageOutlined, DiffOutlined } from '@ant-design/icons';
 import { useRouter, useParams } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
@@ -40,6 +40,9 @@ export default function VersionDetailPage() {
   const [compareResult, setCompareResult] = useState<any>(null);
   const [compareLoading, setCompareLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
+  const [aiCompareLoading, setAiCompareLoading] = useState(false);
+  const [aiCompareResult, setAiCompareResult] = useState<any>(null);
+  const [aiCompareVersionId, setAiCompareVersionId] = useState<string>('');
 
   useEffect(() => {
     fetchVersionDetail();
@@ -129,6 +132,32 @@ export default function VersionDetailPage() {
       message.error('检查失败');
     } finally {
       setComplianceLoading(false);
+    }
+  };
+
+  const handleAICompare = async () => {
+    if (!aiCompareVersionId) {
+      message.error('请选择要对比的版本');
+      return;
+    }
+    setAiCompareLoading(true);
+    try {
+      const response = await fetch(`/api/configsys/versions/${versionId}/ai-compare`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetVersionId: aiCompareVersionId }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAiCompareResult(data.data);
+        message.success('AI比对完成');
+      } else {
+        message.error(data.message || '比对失败');
+      }
+    } catch (error) {
+      message.error('比对失败');
+    } finally {
+      setAiCompareLoading(false);
     }
   };
 
@@ -361,6 +390,99 @@ export default function VersionDetailPage() {
     />
   );
 
+  // AI比对Tab内容
+  const AICompareTab = () => (
+    <>
+      <Card style={{ marginBottom: 16 }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
+          <div>
+            <span style={{ marginRight: 8 }}>选择对比版本:</span>
+            <Select
+              style={{ width: 300 }}
+              placeholder="选择要对比的目标版本"
+              onChange={(value) => setAiCompareVersionId(value)}
+              value={aiCompareVersionId || undefined}
+            >
+              {version.otherVersions.map((v) => (
+                <Option key={v.id} value={v.id}>
+                  {v.version_number} (<FriendlyTime date={v.created_at} />)
+                </Option>
+              ))}
+            </Select>
+          </div>
+          <Button
+            type="primary"
+            icon={<DiffOutlined />}
+            onClick={handleAICompare}
+            loading={aiCompareLoading}
+            disabled={!aiCompareVersionId}
+          >
+            开始AI比对
+          </Button>
+        </Space>
+      </Card>
+
+      {aiCompareResult && (
+        <Card title="AI比对结果">
+          <Space orientation="vertical" style={{ width: '100%' }}>
+            <Alert
+              type="info"
+              title={`版本差异概述`}
+              description={aiCompareResult.summary}
+            />
+
+            {aiCompareResult.changes && aiCompareResult.changes.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h4>详细变更:</h4>
+                {aiCompareResult.changes.map((change: any, index: number) => (
+                  <Alert
+                    key={index}
+                    type={change.type === 'add' ? 'success' : change.type === 'remove' ? 'error' : 'warning'}
+                    title={
+                      <Space>
+                        <span>{change.category}</span>
+                        <Tag color={change.type === 'add' ? 'green' : change.type === 'remove' ? 'red' : 'orange'}>
+                          {change.type === 'add' ? '新增' : change.type === 'remove' ? '删除' : '修改'}
+                        </Tag>
+                        <Tag color={change.risk === 'high' ? 'red' : change.risk === 'medium' ? 'orange' : 'green'}>
+                          {change.risk === 'high' ? '高风险' : change.risk === 'medium' ? '中风险' : '低风险'}
+                        </Tag>
+                      </Space>
+                    }
+                    description={
+                      <div>
+                        <p><strong>变更内容:</strong> {change.description}</p>
+                        <p><strong>建议:</strong> {change.suggestion}</p>
+                      </div>
+                    }
+                    style={{ marginBottom: 8 }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {aiCompareResult.impact && (
+              <Alert
+                type="info"
+                title="整体影响评估"
+                description={aiCompareResult.impact}
+                style={{ marginTop: 16 }}
+              />
+            )}
+          </Space>
+        </Card>
+      )}
+
+      {!aiCompareResult && !aiCompareLoading && (
+        <Alert
+          type="info"
+          title="尚未进行AI比对"
+          description='选择上方的目标版本，点击"开始AI比对"按钮，AI将分析两个版本之间的差异。'
+        />
+      )}
+    </>
+  );
+
   const tabItems = [
     {
       key: 'basic',
@@ -397,6 +519,17 @@ export default function VersionDetailPage() {
         </Space>
       ),
       children: <ComplianceTab />,
+    },
+    {
+      key: 'ai-compare',
+      label: (
+        <Space>
+          <DiffOutlined />
+          AI比对
+          {aiCompareResult && <Tag color="success">已比对</Tag>}
+        </Space>
+      ),
+      children: <AICompareTab />,
     },
     {
       key: 'chat',
