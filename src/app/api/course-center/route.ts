@@ -80,6 +80,51 @@ async function getUndergraduateCourses(params: {
   const table = tables.undergraduateCourse;
   const f = table.fields;
 
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const whereConditions: string[] = [];
+    const queryParams: (string | number)[] = [];
+
+    if (params.keyword) {
+      whereConditions.push(`(${f.courseCode} LIKE ? OR ${f.courseName} LIKE ? OR ${f.deptName} LIKE ? OR ${f.responsiblePerson} LIKE ?)`);
+      const keyword = `%${params.keyword}%`;
+      queryParams.push(keyword, keyword, keyword, keyword);
+    }
+
+    if (params.dept) {
+      whereConditions.push(`${f.deptCode} = ?`);
+      queryParams.push(params.dept);
+    }
+
+    if (params.status) {
+      whereConditions.push(`${f.statusCode} = ?`);
+      queryParams.push(params.status);
+    }
+
+    const whereClause = whereConditions.length > 0 ? whereConditions.join(' AND ') : undefined;
+    const page = params.page || 1;
+    const per_page = params.per_page || 10;
+
+    const { rows, total } = await queryByDataObjectId(
+      table.dataObjectId,
+      whereClause,
+      `${f.courseCode} ASC`,
+      queryParams,
+      page,
+      per_page
+    );
+
+    const max_page = Math.ceil(total / per_page);
+
+    return {
+      data: rows,
+      total,
+      page,
+      per_page,
+      max_page,
+    };
+  }
+
   try {
     const whereConditions: string[] = [];
     const queryParams: (string | number)[] = [];
@@ -177,6 +222,51 @@ async function getGraduateCourses(params: {
   const table = tables.graduateCourse;
   const f = table.fields;
 
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const whereConditions: string[] = [];
+    const queryParams: (string | number)[] = [];
+
+    if (params.keyword) {
+      whereConditions.push(`(${f.courseCode} LIKE ? OR ${f.courseName} LIKE ? OR ${f.deptName} LIKE ? OR ${f.responsiblePerson} LIKE ?)`);
+      const keyword = `%${params.keyword}%`;
+      queryParams.push(keyword, keyword, keyword, keyword);
+    }
+
+    if (params.dept) {
+      whereConditions.push(`${f.deptCode} = ?`);
+      queryParams.push(params.dept);
+    }
+
+    if (params.status) {
+      whereConditions.push(`${f.statusCode} = ?`);
+      queryParams.push(params.status);
+    }
+
+    const whereClause = whereConditions.length > 0 ? whereConditions.join(' AND ') : undefined;
+    const page = params.page || 1;
+    const per_page = params.per_page || 10;
+
+    const { rows, total } = await queryByDataObjectId(
+      table.dataObjectId,
+      whereClause,
+      `${f.courseCode} ASC`,
+      queryParams,
+      page,
+      per_page
+    );
+
+    const max_page = Math.ceil(total / per_page);
+
+    return {
+      data: rows,
+      total,
+      page,
+      per_page,
+      max_page,
+    };
+  }
+
   try {
     const whereConditions: string[] = [];
     const queryParams: (string | number)[] = [];
@@ -265,9 +355,28 @@ async function getGraduateCourses(params: {
 async function getAllDepartments(courseType: 'undergraduate' | 'graduate') {
   const { pool, config } = await getDataSourceConnection();
   const { tables } = config;
-  
+
   const table = courseType === 'graduate' ? tables.graduateCourse : tables.undergraduateCourse;
   const f = table.fields;
+
+  // 如果使用数据对象，直接查询数据对象
+  if (table.dataObjectId) {
+    const { rows } = await queryByDataObjectId(
+      table.dataObjectId,
+      `${f.deptCode} IS NOT NULL AND ${f.deptCode} != '' AND ${f.deptName} IS NOT NULL AND ${f.deptName} != ''`,
+      `${f.deptName} ASC`
+    );
+    // 去重
+    const distinctRows = new Map<string, { code: string; name: string }>();
+    (rows as Array<{ [key: string]: string }>).forEach(row => {
+      const code = row[f.deptCode];
+      const name = row[f.deptName];
+      if (code && name && !distinctRows.has(code)) {
+        distinctRows.set(code, { code, name });
+      }
+    });
+    return Array.from(distinctRows.values());
+  }
 
   try {
     const [rows] = await pool.execute(

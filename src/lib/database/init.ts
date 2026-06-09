@@ -144,6 +144,26 @@ CREATE TABLE IF NOT EXISTS pioc_keys (
   FOREIGN KEY (user_id) REFERENCES pioc_users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 创建API密钥表（用于第三方API访问）
+CREATE TABLE IF NOT EXISTS pioc_api_keys (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL COMMENT '密钥名称',
+  api_key VARCHAR(64) NOT NULL UNIQUE COMMENT 'API密钥',
+  api_secret VARCHAR(128) NOT NULL COMMENT 'API密钥签名密钥',
+  user_id INT NOT NULL COMMENT '关联用户ID',
+  permissions JSON COMMENT '权限配置，如["read", "write"]',
+  allowed_ips JSON COMMENT '允许的IP白名单',
+  rate_limit INT DEFAULT 1000 COMMENT '每分钟请求限制',
+  status TINYINT DEFAULT 1 COMMENT '状态：1启用，0禁用',
+  last_used_at DATETIME COMMENT '最后使用时间',
+  expires_at DATETIME COMMENT '过期时间',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_api_key (api_key),
+  INDEX idx_user_id (user_id),
+  FOREIGN KEY (user_id) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='第三方API密钥表';
+
 -- 创建数据对象表
 CREATE TABLE IF NOT EXISTS pioc_data_objects (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -358,7 +378,8 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (16, '教师中心', '查看教师详细信息，包括教职生涯、科研情况、教学情况等', 'UserOutlined', '/teacher-center', 1),
   (17, 'IDC机房管理', '管理机房基础设施、环境设备、机柜及设备信息', 'DatabaseOutlined', '/idc', 1),
   (18, '配置管理', '管理和分析各类配置文件，支持版本追踪、AI解读和合规检查', 'SettingOutlined', '/configsys', 1),
-  (19, '规则管理', '管理系统规则，支持规则的创建、编辑、分享', 'FileTextOutlined', '/rules', 1);
+  (19, '规则管理', '管理系统规则，支持规则的创建、编辑、分享', 'FileTextOutlined', '/rules', 1),
+  (20, 'API密钥管理', '创建和管理第三方API访问密钥，支持权限控制和IP白名单', 'SafetyOutlined', '/api-keys', 1);
 
 -- 插入默认菜单
 INSERT IGNORE INTO pioc_menus (id, name, path, icon, parent_id, sort_order, status, app_id) VALUES
@@ -472,8 +493,8 @@ async function assignMenuAppPermission(connection: mysql.PoolConnection) {
 
 async function assignAdditionalAppPermissions(connection: mysql.PoolConnection) {
   try {
-    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15）
-    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20）
+    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
     for (const appId of additionalAppIds) {
       await connection.execute(
         'INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (?, ?)',

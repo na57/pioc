@@ -60,9 +60,17 @@ async function postVersionsHandler(request: NextRequest) {
   try {
     const body = await request.json();
     const { configId, versionNumber, content } = body;
-    const userId = request.headers.get('x-user-id') || '';
+    const userId = request.headers.get('x-user-id');
     const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
     const isAdmin = userRoles.includes('系统管理员');
+
+    // 验证用户必须登录
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, message: '用户未登录，无法创建版本' },
+        { status: 401 }
+      );
+    }
 
     if (!configId || !versionNumber || !content) {
       return NextResponse.json(
