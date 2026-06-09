@@ -36,6 +36,7 @@ export interface AIConfig {
   aiModel: string;
   aiApiUrl: string;
   aiApiKey: string;
+  maxTokens?: number;
 }
 
 export abstract class BaseAIQueryService {
@@ -54,10 +55,11 @@ export abstract class BaseAIQueryService {
       throw new Error('未配置AI provider，请在 config.yaml 中配置 ai.providers');
     }
 
-    const aiModel = firstProvider.models?.[0]?.modelId || 'gpt-4o';
+    const firstModel = firstProvider.models?.[0];
+    const aiModel = firstModel?.modelId || 'gpt-4o';
     const aiApiUrl = `${firstProvider.baseUrl}/chat/completions`;
     const aiApiKey = firstProvider.apiKey;
-    const maxTokens = firstProvider.maxTokens;
+    const maxTokens = firstModel?.maxTokens;
 
     return { aiModel, aiApiUrl, aiApiKey, maxTokens };
   }
