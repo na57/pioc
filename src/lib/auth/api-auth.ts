@@ -152,3 +152,103 @@ export function generateSignature(
     .update(signString)
     .digest('hex');
 }
+
+// 验证API请求（仅验证Key和Secret，不验证签名）
+export async function validateApiRequestWithoutSignature(request: NextRequest): Promise<
+  | { success: true; apiKey: apiKeyModel.ApiKey; userId: number }
+  | { success: false; message: string; status: number }
+> {
+  // 1. 获取API Key和Secret
+  const apiKey = request.headers.get('X-API-Key');
+  const apiSecret = request.headers.get('X-API-Secret');
+
+  if (!apiKey || !apiSecret) {
+    return {
+      success: false,
+      message: 'Missing API credentials. Required headers: X-API-Key, X-API-Secret',
+      status: 401,
+    };
+  }
+
+  // 2. 验证API Key
+  const keyRecord = await apiKeyModel.findByApiKey(apiKey);
+  if (!keyRecord) {
+    return {
+      success: false,
+      message: 'Invalid API key',
+      status: 401,
+    };
+  }
+
+  // 3. 验证API Secret
+  if (keyRecord.api_secret !== apiSecret) {
+    return {
+      success: false,
+      message: 'Invalid API secret',
+      status: 401,
+    };
+  }
+
+  // 4. 检查是否过期
+  if (keyRecord.expires_at && new Date(keyRecord.expires_at) < new Date()) {
+    return {
+      success: false,
+      message: 'API key expired',
+      status: 401,
+    };
+  }
+
+  // 5. 检查IP白名单
+  if (keyRecord.allowed_ips && keyRecord.allowed_ips.length > 0) {
+    const clientIp = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const clientIpStr = Array.isArray(clientIp) ? clientIp[0] : clientIp;
+    if (!keyRecord.allowed_ips.includes(clientIpStr)) {
+      return {
+        success: false,
+        message: 'IP not allowed',
+        status: 403,
+      };
+    }
+  }
+
+  // 6. 更新最后使用时间
+  await apiKeyModel.updateLastUsed(keyRecord.id);
+
+  return {
+    success: true,
+    apiKey: keyRecord,
+    userId: keyRecord.user_id,
+  };
+}
+
+// 创建API保护处理器（不验证签名）
+export function createApiHandlerWithoutSignature(
+  handler: (request: NextRequest, auth: { apiKey: apiKeyModel.ApiKey; userId: number }) => Promise<NextResponse>,
+  requiredPermissions?: string[]
+) {
+  return async (request: NextRequest) => {
+    const auth = await validateApiRequestWithoutSignature(request);
+
+    if (!auth.success) {
+      return NextResponse.json(
+        { success: false, message: auth.message },
+        { status: auth.status }
+      );
+    }
+
+    // 检查权限
+    if (requiredPermissions && requiredPermissions.length > 0) {
+      const hasPermission = requiredPermissions.every(p =>
+        auth.apiKey.permissions.includes(p)
+      );
+      if (!hasPermission) {
+        return NextResponse.json(
+          { success: false, message: 'Insufficient permissions' },
+          { status: 403 }
+        );
+      }
+    }
+
+    return handler(request, { apiKey: auth.apiKey, userId: auth.userId });
+  };
+}

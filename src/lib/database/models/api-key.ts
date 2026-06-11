@@ -42,7 +42,7 @@ export interface UpdateApiKeyData {
 }
 
 export async function findAll(): Promise<ApiKeyWithUser[]> {
-  return query<ApiKeyWithUser[]>(`
+  const results = await query<ApiKeyWithUser[]>(`
     SELECT 
       ak.*,
       u.username,
@@ -51,6 +51,17 @@ export async function findAll(): Promise<ApiKeyWithUser[]> {
     JOIN pioc_users u ON ak.user_id = u.id
     ORDER BY ak.created_at DESC
   `);
+  
+  // Parse JSON fields for all records
+  return results.map(record => {
+    if (typeof record.permissions === 'string') {
+      record.permissions = JSON.parse(record.permissions);
+    }
+    if (typeof record.allowed_ips === 'string') {
+      record.allowed_ips = record.allowed_ips ? JSON.parse(record.allowed_ips) : null;
+    }
+    return record;
+  });
 }
 
 export async function findById(id: number): Promise<ApiKeyWithUser | null> {
@@ -63,7 +74,19 @@ export async function findById(id: number): Promise<ApiKeyWithUser | null> {
     JOIN pioc_users u ON ak.user_id = u.id
     WHERE ak.id = ?
   `, [id]);
-  return results[0] || null;
+  
+  if (!results[0]) return null;
+  
+  // Parse JSON fields
+  const record = results[0];
+  if (typeof record.permissions === 'string') {
+    record.permissions = JSON.parse(record.permissions);
+  }
+  if (typeof record.allowed_ips === 'string') {
+    record.allowed_ips = record.allowed_ips ? JSON.parse(record.allowed_ips) : null;
+  }
+  
+  return record;
 }
 
 export async function findByApiKey(apiKey: string): Promise<ApiKey | null> {
@@ -71,14 +94,37 @@ export async function findByApiKey(apiKey: string): Promise<ApiKey | null> {
     'SELECT * FROM pioc_api_keys WHERE api_key = ? AND status = 1',
     [apiKey]
   );
-  return results[0] || null;
+  
+  if (!results[0]) return null;
+  
+  // Parse JSON fields
+  const record = results[0];
+  if (typeof record.permissions === 'string') {
+    record.permissions = JSON.parse(record.permissions);
+  }
+  if (typeof record.allowed_ips === 'string') {
+    record.allowed_ips = record.allowed_ips ? JSON.parse(record.allowed_ips) : null;
+  }
+  
+  return record;
 }
 
 export async function findByUserId(userId: number): Promise<ApiKey[]> {
-  return query<ApiKey[]>(
+  const results = await query<ApiKey[]>(
     'SELECT * FROM pioc_api_keys WHERE user_id = ? ORDER BY created_at DESC',
     [userId]
   );
+  
+  // Parse JSON fields for all records
+  return results.map(record => {
+    if (typeof record.permissions === 'string') {
+      record.permissions = JSON.parse(record.permissions);
+    }
+    if (typeof record.allowed_ips === 'string') {
+      record.allowed_ips = record.allowed_ips ? JSON.parse(record.allowed_ips) : null;
+    }
+    return record;
+  });
 }
 
 export async function create(data: CreateApiKeyData): Promise<number> {
