@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { query } from '@/lib/database/connection';
+import { isAdmin } from '@/lib/config/configsys';
+import { findUserRoles } from '@/lib/database/models/user';
 
 const appUrl = '/configsys';
 
 // 获取版本详情
 async function getVersionHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     // 获取版本信息
     const versions = await query<
@@ -55,11 +59,11 @@ async function getVersionHandler(
     });
 
     // 检查权限
-    if (!isAdmin && version.config_owner !== userId) {
+    if (!isAdminUser && version.config_owner !== username) {
       // 检查是否被共享
       const shares = await query<Array<Record<string, unknown>>>(
         `SELECT 1 FROM configsys_config_shares WHERE config_id = ? AND shared_with_user_id = ?`,
-        [version.config_id, userId]
+        [version.config_id, username]
       );
       if (shares.length === 0) {
         return NextResponse.json(
@@ -102,7 +106,7 @@ async function getVersionHandler(
         compliance_report: parseJsonField(version.compliance_report, null),
         diff_report: parseJsonField(version.diff_report, null),
         otherVersions,
-        isOwner: version.config_owner === userId || isAdmin,
+        isOwner: version.config_owner === username || isAdminUser,
       },
     });
   } catch (error) {
@@ -117,13 +121,15 @@ async function getVersionHandler(
 // 删除版本
 async function deleteVersionHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     // 检查权限
     const checkVersions = await query<
@@ -147,7 +153,7 @@ async function deleteVersionHandler(
       );
     }
 
-    if (!isAdmin && checkVersions[0].config_owner !== userId) {
+    if (!isAdminUser && checkVersions[0].config_owner !== username) {
       return NextResponse.json(
         { success: false, message: '无权删除此版本' },
         { status: 403 }
@@ -182,12 +188,17 @@ async function deleteVersionHandler(
   }
 }
 
-type HandlerFunction = (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<NextResponse>;
+type HandlerFunction = (
+  req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
+  ctx: { params: Promise<{ id: string }> }
+) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

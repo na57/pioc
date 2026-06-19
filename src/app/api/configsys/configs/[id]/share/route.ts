@@ -2,19 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { query } from '@/lib/database/connection';
 import { v4 as uuidv4 } from 'uuid';
+import { isAdmin } from '@/lib/config/configsys';
+import { findUserRoles } from '@/lib/database/models/user';
 
 const appUrl = '/configsys';
 
 // 获取配置的共享列表
 async function getSharesHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: configId } = await params;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     // 检查权限
     const configs = await query<Array<{ created_by: string }>>(
@@ -29,7 +33,7 @@ async function getSharesHandler(
       );
     }
 
-    if (!isAdmin && configs[0].created_by !== userId) {
+    if (!isAdminUser && configs[0].created_by !== username) {
       return NextResponse.json(
         { success: false, message: '无权查看此配置的共享信息' },
         { status: 403 }
@@ -71,15 +75,17 @@ async function getSharesHandler(
 // 共享配置给指定用户
 async function postShareHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: configId } = await params;
     const body = await request.json();
     const { userId: sharedWithUserId } = body;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     if (!sharedWithUserId) {
       return NextResponse.json(
@@ -101,7 +107,7 @@ async function postShareHandler(
       );
     }
 
-    if (!isAdmin && checkConfigs[0].created_by !== userId) {
+    if (!isAdminUser && checkConfigs[0].created_by !== username) {
       return NextResponse.json(
         { success: false, message: '无权共享此配置' },
         { status: 403 }
@@ -142,12 +148,17 @@ async function postShareHandler(
   }
 }
 
-type HandlerFunction = (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<NextResponse>;
+type HandlerFunction = (
+  req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
+  ctx: { params: Promise<{ id: string }> }
+) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { query } from '@/lib/database/connection';
+import { isAdmin } from '@/lib/config/configsys';
+import { findUserRoles } from '@/lib/database/models/user';
 
 const appUrl = '/configsys';
 
 // 获取配置详情
 async function getConfigHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     // 获取配置信息（包含关联的规则信息）
     const configs = await query<
@@ -46,11 +50,11 @@ async function getConfigHandler(
     const config = configs[0];
 
     // 检查权限
-    if (!isAdmin && config.created_by !== userId) {
+    if (!isAdminUser && config.created_by !== username) {
       // 检查是否被共享
       const shares = await query<Array<Record<string, unknown>>>(
         `SELECT 1 FROM configsys_config_shares WHERE config_id = ? AND shared_with_user_id = ?`,
-        [id, userId]
+        [id, username]
       );
       if (shares.length === 0) {
         return NextResponse.json(
@@ -84,7 +88,7 @@ async function getConfigHandler(
         ...config,
         versions,
         shares,
-        isOwner: config.created_by === userId || isAdmin,
+        isOwner: config.created_by === username || isAdminUser,
       },
     });
   } catch (error) {
@@ -99,15 +103,17 @@ async function getConfigHandler(
 // 更新配置
 async function putConfigHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const body = await request.json();
     const { name, description, complianceRuleId } = body;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     // 检查权限
     const configs = await query<Array<{ created_by: string }>>(
@@ -122,7 +128,7 @@ async function putConfigHandler(
       );
     }
 
-    if (!isAdmin && configs[0].created_by !== userId) {
+    if (!isAdminUser && configs[0].created_by !== username) {
       return NextResponse.json(
         { success: false, message: '无权修改此配置' },
         { status: 403 }
@@ -152,13 +158,15 @@ async function putConfigHandler(
 // 删除配置
 async function deleteConfigHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     // 检查权限
     const checkConfigs = await query<Array<{ created_by: string }>>(
@@ -173,7 +181,7 @@ async function deleteConfigHandler(
       );
     }
 
-    if (!isAdmin && checkConfigs[0].created_by !== userId) {
+    if (!isAdminUser && checkConfigs[0].created_by !== username) {
       return NextResponse.json(
         { success: false, message: '无权删除此配置' },
         { status: 403 }
@@ -195,12 +203,17 @@ async function deleteConfigHandler(
   }
 }
 
-type HandlerFunction = (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<NextResponse>;
+type HandlerFunction = (
+  req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
+  ctx: { params: Promise<{ id: string }> }
+) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

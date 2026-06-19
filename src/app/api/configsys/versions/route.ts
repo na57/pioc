@@ -2,18 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { query } from '@/lib/database/connection';
 import { v4 as uuidv4 } from 'uuid';
+import { isAdmin } from '@/lib/config/configsys';
+import { findUserRoles } from '@/lib/database/models/user';
 
 const appUrl = '/configsys';
 
 // 获取版本列表
-async function getVersionsHandler(request: NextRequest) {
+async function getVersionsHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const configId = searchParams.get('configId');
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
-    
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
+
     if (!configId) {
       return NextResponse.json(
         { success: false, message: '缺少配置ID参数' },
@@ -43,7 +49,7 @@ async function getVersionsHandler(request: NextRequest) {
       data: versions.map((v) => ({
         ...v,
         hasComplianceReport: !!v.compliance_report,
-        isOwner: isAdmin || v.created_by === userId,
+        isOwner: isAdminUser || v.created_by === username,
       })),
     });
   } catch (error) {
@@ -56,21 +62,17 @@ async function getVersionsHandler(request: NextRequest) {
 }
 
 // 创建新版本
-async function postVersionsHandler(request: NextRequest) {
+async function postVersionsHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const body = await request.json();
     const { configId, versionNumber, content } = body;
-    const userId = request.headers.get('x-user-id');
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
-
-    // 验证用户必须登录
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, message: '用户未登录，无法创建版本' },
-        { status: 401 }
-      );
-    }
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     if (!configId || !versionNumber || !content) {
       return NextResponse.json(
@@ -92,7 +94,7 @@ async function postVersionsHandler(request: NextRequest) {
       );
     }
 
-    if (!isAdmin && configs[0].created_by !== userId) {
+    if (!isAdminUser && configs[0].created_by !== username) {
       return NextResponse.json(
         { success: false, message: '无权为此配置添加版本' },
         { status: 403 }
@@ -116,7 +118,7 @@ async function postVersionsHandler(request: NextRequest) {
     await query(
       `INSERT INTO configsys_versions (id, config_id, version_number, content, created_by)
        VALUES (?, ?, ?, ?, ?)`,
-      [versionId, configId, versionNumber, content, userId]
+      [versionId, configId, versionNumber, content, username]
     );
 
     return NextResponse.json({

@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { query } from '@/lib/database/connection';
+import { isAdmin } from '@/lib/config/configsys';
+import { findUserRoles } from '@/lib/database/models/user';
 
 const appUrl = '/configsys';
 
 // 版本对比
 async function postCompareHandler(
   request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: baseVersionId } = await params;
     const body = await request.json();
     const { targetVersionId } = body;
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    const isAdmin = userRoles.includes('系统管理员');
+    const username = session.username;
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+    const isAdminUser = isAdmin(userRoleNames);
 
     if (!targetVersionId) {
       return NextResponse.json(
@@ -60,10 +64,10 @@ async function postCompareHandler(
     }
 
     // 检查权限
-    if (!isAdmin && baseVersion.config_owner !== userId) {
+    if (!isAdminUser && baseVersion.config_owner !== username) {
       const shares = await query<Array<Record<string, unknown>>>(
         `SELECT 1 FROM configsys_config_shares WHERE config_id = ? AND shared_with_user_id = ?`,
-        [baseVersion.config_id, userId]
+        [baseVersion.config_id, username]
       );
       if (shares.length === 0) {
         return NextResponse.json(
@@ -116,12 +120,17 @@ async function postCompareHandler(
   }
 }
 
-type HandlerFunction = (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<NextResponse>;
+type HandlerFunction = (
+  req: NextRequest,
+  session: { userId: number; username: string; email: string; name: string },
+  ctx: { params: Promise<{ id: string }> }
+) => Promise<NextResponse>;
 
 const wrapHandler = (handler: HandlerFunction) => {
   return async (request: NextRequest, context: { params: Promise<{ id: string }> }) => {
     const protectedHandler = createAppProtectedHandler(
-      (req: NextRequest) => handler(req, context),
+      (req: NextRequest, session: { userId: number; username: string; email: string; name: string }) =>
+        handler(req, session, context),
       appUrl
     );
     return protectedHandler(request, context);

@@ -2,34 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAppProtectedHandler } from '@/lib/auth/middleware';
 import { query } from '@/lib/database/connection';
 import { v4 as uuidv4 } from 'uuid';
+import { isAdmin } from '@/lib/config/configsys';
+import { findUserRoles } from '@/lib/database/models/user';
 
 const appUrl = '/configsys';
 
 // 获取配置列表
-async function getConfigsHandler(request: NextRequest) {
+async function getConfigsHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '10');
     const keyword = searchParams.get('keyword') || '';
-    const userId = request.headers.get('x-user-id') || '';
-    const userRoles = JSON.parse(request.headers.get('x-user-roles') || '[]');
-    
+    const userId = String(session.userId);
+    const username = session.username;
+
+    // 从数据库获取用户角色
+    const userRoles = await findUserRoles(session.userId);
+    const userRoleNames = userRoles.map(r => r.name);
+
     // 检查是否是管理员
-    const isAdmin = userRoles.includes('系统管理员');
-    
+    const isAdminUser = isAdmin(userRoleNames);
+
     let sql = `
-      SELECT DISTINCT c.*, 
+      SELECT DISTINCT c.*,
         (SELECT COUNT(*) FROM configsys_versions WHERE config_id = c.id) as version_count
       FROM configsys_configs c
       LEFT JOIN configsys_config_shares s ON c.id = s.config_id
       WHERE 1=1
     `;
     const params: any[] = [];
-    
-    if (!isAdmin) {
+
+    if (!isAdminUser) {
       sql += ` AND (c.created_by = ? OR s.shared_with_user_id = ?)`;
-      params.push(userId, userId);
+      params.push(username, username);
     }
     
     if (keyword) {
@@ -44,16 +53,16 @@ async function getConfigsHandler(request: NextRequest) {
     
     // 获取总数
     let countSql = `
-      SELECT COUNT(DISTINCT c.id) as total 
+      SELECT COUNT(DISTINCT c.id) as total
       FROM configsys_configs c
       LEFT JOIN configsys_config_shares s ON c.id = s.config_id
       WHERE 1=1
     `;
     const countParams: any[] = [];
-    
-    if (!isAdmin) {
+
+    if (!isAdminUser) {
       countSql += ` AND (c.created_by = ? OR s.shared_with_user_id = ?)`;
-      countParams.push(userId, userId);
+      countParams.push(username, username);
     }
     
     if (keyword) {
@@ -81,11 +90,14 @@ async function getConfigsHandler(request: NextRequest) {
 }
 
 // 创建配置
-async function postConfigsHandler(request: NextRequest) {
+async function postConfigsHandler(
+  request: NextRequest,
+  session: { userId: number; username: string; email: string; name: string }
+) {
   try {
     const body = await request.json();
     const { name, description, complianceRuleId } = body;
-    const userId = request.headers.get('x-user-id') || '';
+    const username = session.username;
 
     if (!name) {
       return NextResponse.json(
@@ -100,7 +112,7 @@ async function postConfigsHandler(request: NextRequest) {
     await query(
       `INSERT INTO configsys_configs (id, name, description, compliance_rule_id, created_by)
        VALUES (?, ?, ?, ?, ?)`,
-      [configId, name, description || '', complianceRuleId || null, userId]
+      [configId, name, description || '', complianceRuleId || null, username]
     );
 
     return NextResponse.json({
