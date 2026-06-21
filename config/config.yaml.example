@@ -255,6 +255,19 @@ ai:
   maxRetries: 3
 
 #------------------------------------------
+# 听力训练应用配置
+#------------------------------------------
+listeningTraining:
+  # TTS 音频生成配置
+  tts:
+    # API 地址
+    apiUrl: "https://new-api-itc.ynu.edu.cn/v1/chat/completions"
+    # 模型名称
+    model: "bosonai/higgs-audio-v3-tts-4b"
+    # API 密钥（从密钥管理应用获取）
+    apiKey: ""
+
+#------------------------------------------
 # 系统功能开关
 #------------------------------------------
 features:

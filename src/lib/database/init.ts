@@ -379,7 +379,8 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (17, 'IDC机房管理', '管理机房基础设施、环境设备、机柜及设备信息', 'DatabaseOutlined', '/idc', 1),
   (18, '配置管理', '管理和分析各类配置文件，支持版本追踪、AI解读和合规检查', 'SettingOutlined', '/configsys', 1),
   (19, '规则管理', '管理系统规则，支持规则的创建、编辑、分享', 'FileTextOutlined', '/rules', 1),
-  (20, 'API密钥管理', '创建和管理第三方API访问密钥，支持权限控制和IP白名单', 'SafetyOutlined', '/api-keys', 1);
+  (20, 'API密钥管理', '创建和管理第三方API访问密钥，支持权限控制和IP白名单', 'SafetyOutlined', '/api-keys', 1),
+  (21, '听力训练', '基于艾宾浩斯记忆曲线的英语听力练习应用', 'SoundOutlined', '/listening-training', 1);
 
 -- 插入默认菜单
 INSERT IGNORE INTO pioc_menus (id, name, path, icon, parent_id, sort_order, status, app_id) VALUES
@@ -494,7 +495,7 @@ async function assignMenuAppPermission(connection: mysql.PoolConnection) {
 async function assignAdditionalAppPermissions(connection: mysql.PoolConnection) {
   try {
     // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20）
-    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
     for (const appId of additionalAppIds) {
       await connection.execute(
         'INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (?, ?)',

@@ -132,7 +132,7 @@ async function postShareHandler(
     await query(
       `INSERT INTO configsys_config_shares (id, config_id, shared_with_user_id, shared_by) 
        VALUES (?, ?, ?, ?)`,
-      [shareId, configId, sharedWithUserId, userId]
+      [shareId, configId, sharedWithUserId, username]
     );
 
     return NextResponse.json({

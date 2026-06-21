@@ -156,6 +156,13 @@ export interface AppConfig {
       };
     };
   };
+  listeningTraining?: {
+    tts: {
+      apiUrl: string;
+      model: string;
+      apiKey: string;
+    };
+  };
   features: {
     allowUserRegistration: boolean;
     enableCasLogin: boolean;

@@ -22,6 +22,7 @@ export const BUILTIN_APPS = {
   CONFIG_SYS: 18,        // 配置管理
   RULE_MANAGEMENT: 19,   // 规则管理
   API_KEY_MANAGEMENT: 20, // API密钥管理
+  LISTENING_TRAINING: 21, // 听力训练
 } as const;
 
 // 内置应用URL映射
@@ -46,6 +47,7 @@ export const BUILTIN_APP_URLS = {
   '/configsys': BUILTIN_APPS.CONFIG_SYS,
   '/rules': BUILTIN_APPS.RULE_MANAGEMENT,
   '/api-keys': BUILTIN_APPS.API_KEY_MANAGEMENT,
+  '/listening-training': BUILTIN_APPS.LISTENING_TRAINING,
 } as const;
 
 export interface App {
