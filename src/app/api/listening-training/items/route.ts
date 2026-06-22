@@ -54,6 +54,10 @@ async function getItemsHandler(
       );
     }
 
+    // 获取各状态的数量统计
+    const countsResult = await listeningTrainingDataService.queryItemCountsByStatus(wordbookId, session.userId);
+    const counts = countsResult.success ? countsResult.data : { all: 0, unknown: 0, known: 0, familiar: 0 };
+
     return NextResponse.json({
       success: true,
       data: {
@@ -63,6 +67,7 @@ async function getItemsHandler(
           pageSize,
           total: (result.data || []).length,
         },
+        counts,
       },
     });
   } catch (error) {

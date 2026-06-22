@@ -273,11 +273,62 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
   }
 
   /**
-   * 查询待复习的词条
+   * 查询各状态的词条数量统计
    */
-  async queryPracticeItems(wordbookId: string, userId: number, dailyLimit?: number) {
+  async queryItemCountsByStatus(wordbookId: string, userId: number) {
     const tableConfig = this.configLoader.getTableConfig('items');
     const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const dataSourceId = tableConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+    
+    // 查询总数
+    const allResult = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT COUNT(*) as count FROM ${tableConfig.name} WHERE wordbook_id = ?`,
+      [wordbookId]
+    );
+    
+    // 查询各状态数量
+    const statusResult = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT 
+        COALESCE(ui.status, 'unknown') as status,
+        COUNT(*) as count
+       FROM ${tableConfig.name} i
+       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
+       WHERE i.wordbook_id = ?
+       GROUP BY ui.status`,
+      [userId, wordbookId]
+    );
+    
+    const counts = {
+      all: allResult.success && allResult.data ? allResult.data[0]?.count || 0 : 0,
+      unknown: 0,
+      known: 0,
+      familiar: 0,
+    };
+    
+    if (statusResult.success && Array.isArray(statusResult.data)) {
+      statusResult.data.forEach((row: any) => {
+        if (row.status === 'unknown') counts.unknown = row.count;
+        else if (row.status === 'known') counts.known = row.count;
+        else if (row.status === 'familiar') counts.familiar = row.count;
+        else counts.unknown += row.count; // NULL 或未知状态计入 unknown
+      });
+    }
+    
+    return { success: true, data: counts };
+  }
+
+  /**
+   * 查询待复习的词条
+   * @param wordbookId 词书ID，如果提供则只查询该词书的词条
+   * @param userId 用户ID
+   * @param dailyLimit 每日限制数量（用于限制返回的词条数量）
+   */
+  async queryPracticeItems(wordbookId: string | null, userId: number, dailyLimit?: number) {
+    const tableConfig = this.configLoader.getTableConfig('items');
+    const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
     const dataSourceId = tableConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
     
     // 如果没有提供 dailyLimit，从用户设置中获取
@@ -291,20 +342,26 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
       }
     }
     
+    // 构建查询条件
+    const wordbookCondition = wordbookId ? 'AND i.wordbook_id = ?' : '';
+    const params = wordbookId ? [userId, userId, wordbookId, limit] : [userId, userId, limit];
+    
     const result = await this.queryService.executeRawQuery(
       dataSourceId,
       `SELECT 
         i.id, i.content,
         COALESCE(ui.status, 'unknown') as status,
-        COALESCE(ui.review_count, 0) as review_count
+        COALESCE(ui.review_count, 0) as review_count,
+        w.id as wordbook_id, w.name as wordbook_name
        FROM ${tableConfig.name} i
+       JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
        LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
-       WHERE i.wordbook_id = ? 
-       AND (ui.status IS NULL OR ui.status NOT IN ('familiar'))
+       WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
        AND (ui.status IS NULL OR ui.next_review_at <= NOW())
+       ${wordbookCondition}
        ORDER BY ui.next_review_at ASC, i.created_at ASC
        LIMIT ?`,
-      [userId, wordbookId, limit]
+      params
     );
     
     return result;

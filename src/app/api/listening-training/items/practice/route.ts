@@ -17,31 +17,7 @@ async function getPracticeItemsHandler(
     const { searchParams } = new URL(request.url);
     const wordbookId = searchParams.get('wordbook_id');
 
-    if (!wordbookId) {
-      return NextResponse.json(
-        { success: false, message: '缺少词书ID参数' },
-        { status: 400 }
-      );
-    }
-
-    // 验证词书归属
-    const wordbookResult = await listeningTrainingDataService.queryWordbookById(wordbookId);
-    if (!wordbookResult.success || !wordbookResult.data || wordbookResult.data.length === 0) {
-      return NextResponse.json(
-        { success: false, message: '词书不存在' },
-        { status: 404 }
-      );
-    }
-    
-    const wordbook = wordbookResult.data[0];
-    if (wordbook.user_id !== session.userId) {
-      return NextResponse.json(
-        { success: false, message: '无权限访问该词书' },
-        { status: 403 }
-      );
-    }
-
-    // 查询待复习词条（使用新的数据结构）
+    // 查询待复习词条（如果指定了词书ID，则只查询该词书的词条）
     const result = await listeningTrainingDataService.queryPracticeItems(wordbookId, session.userId);
     
     if (!result.success) {
@@ -51,11 +27,14 @@ async function getPracticeItemsHandler(
       );
     }
 
-    // 查询今日已完成复习数
+    // 查询今日已完成复习数（所有词书）
     const configLoader = getListeningTrainingConfigLoader();
     const queryService = getListeningTrainingQueryService();
     const userItemsConfig = configLoader.getTableConfig('userItems');
+    const itemsConfig = configLoader.getTableConfig('items');
     const dataSourceId = userItemsConfig.dataSourceId || configLoader.getDataSourceId() || '1';
+    
+    // 所有词书今日完成数
     const todayCompleted = await queryService.executeRawQuery(
       dataSourceId,
       `SELECT COUNT(*) as count FROM ${userItemsConfig.name} 
@@ -63,6 +42,20 @@ async function getPracticeItemsHandler(
        AND last_review_at >= CURDATE()`,
       [session.userId]
     );
+    
+    // 当前词书今日完成数
+    let wordbookCompleted = { success: true, data: [{ count: 0 }] };
+    if (wordbookId) {
+      wordbookCompleted = await queryService.executeRawQuery(
+        dataSourceId,
+        `SELECT COUNT(*) as count FROM ${userItemsConfig.name} ui
+         JOIN ${itemsConfig.name} i ON ui.item_id = i.id
+         WHERE ui.user_id = ? 
+         AND i.wordbook_id = ?
+         AND ui.last_review_at >= CURDATE()`,
+        [session.userId, wordbookId]
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -70,6 +63,7 @@ async function getPracticeItemsHandler(
         items: result.data || [],
         total: (result.data || []).length,
         completed_today: todayCompleted.success && todayCompleted.data ? todayCompleted.data[0]?.count || 0 : 0,
+        completed_in_wordbook: wordbookCompleted.success && wordbookCompleted.data ? wordbookCompleted.data[0]?.count || 0 : 0,
       },
     });
   } catch (error) {
