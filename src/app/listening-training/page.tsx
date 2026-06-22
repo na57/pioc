@@ -537,7 +537,7 @@ export default function ListeningTrainingPage() {
           {/* 词书选择在练习、词本和词书管理页面显示 */}
           {activeTab !== 'settings' && (
             <Select
-              style={{ width: 320 }}
+              style={{ width: '100%', maxWidth: 320 }}
               placeholder="选择词书"
               value={selectedWordbook || undefined}
               onChange={setSelectedWordbook}
@@ -583,9 +583,8 @@ export default function ListeningTrainingPage() {
       {activeTab === 'practice' && (
         <Card>
           <Spin spinning={loading} description="加载中...">
-            {practiceItems.length > 0 && currentItem ? (
-              // 检查是否已完成每日任务（加练模式下显示正常练习界面）
-              (completedToday >= userSettings.daily_limit && extraPracticeCount === 0) ? (
+            {/* 优先检查是否已完成每日任务（不在加练模式下） */}
+            {(completedToday >= userSettings.daily_limit && extraPracticeCount === 0) ? (
                 // 每日任务完成界面
                 <div style={{ textAlign: 'center', padding: '60px 0' }}>
                   <CheckCircleOutlined style={{ fontSize: 80, color: '#52c41a', marginBottom: 24 }} />
@@ -604,9 +603,9 @@ export default function ListeningTrainingPage() {
                       size="large"
                       icon={<SoundOutlined />}
                       onClick={() => {
-                        // 加练一组：增加加练计数，重置当前索引继续练习
+                        // 加练一组：增加加练计数，重新获取练习列表（排除已学习词条）
                         setExtraPracticeCount(prev => prev + 1);
-                        setCurrentIndex(0);
+                        fetchPracticeItems();
                       }}
                     >
                       加练一组
@@ -619,75 +618,77 @@ export default function ListeningTrainingPage() {
                     </Button>
                   </Space>
                 </div>
-              ) : (
-                // 正常练习界面
-                <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                  {/* 显示词书来源 */}
-                  <div style={{ marginBottom: 16 }}>
-                    <Text type="secondary">
-                      来自词书: {currentItem.wordbook_name}
-                    </Text>
-                  </div>
-                  
-                  <Row justify="center" style={{ marginBottom: 40 }}>
-                    <Col>
-                      <Button
-                        type="primary"
-                        size="large"
-                        icon={<SoundOutlined />}
-                        onClick={() => playAudio(currentItem.content)}
-                        loading={audioLoading}
-                        style={{ width: 200, height: 60, fontSize: 18 }}
-                      >
-                        播放音频
-                      </Button>
-                    </Col>
-                  </Row>
-
-                  <div style={{ marginBottom: 40 }}>
-                    <Text type="secondary">
-                      本书第 {completedInCurrentWordbook + currentIndex + 1} 个 | 今日已完成: {completedToday} / {extraPracticeCount > 0 ? userSettings.daily_limit * (extraPracticeCount + 1) : userSettings.daily_limit}
-                    </Text>
-                    <Progress 
-                      percent={Math.min(Math.round((completedToday / (extraPracticeCount > 0 ? userSettings.daily_limit * (extraPracticeCount + 1) : userSettings.daily_limit)) * 100), 100)} 
-                      showInfo={false}
-                      style={{ marginTop: 8, maxWidth: 400, margin: '8px auto' }}
-                    />
-                  </div>
-
-                  <Row justify="center" gutter={24}>
-                    <Col>
-                      <Button
-                        size="large"
-                        danger
-                        style={{ width: 120, height: 50, fontSize: 15 }}
-                        onClick={() => submitReview('unknown')}
-                      >
-                        没懂
-                      </Button>
-                    </Col>
-                    <Col>
-                      <Button
-                        size="large"
-                        type="primary"
-                        style={{ width: 120, height: 50, fontSize: 15 }}
-                        onClick={() => submitReview('known')}
-                      >
-                        懂了
-                      </Button>
-                    </Col>
-                    <Col>
-                      <Button
-                        size="large"
-                        style={{ width: 120, height: 50, backgroundColor: '#52c41a', color: '#fff', fontSize: 15 }}
-                        onClick={() => submitReview('familiar')}
-                      >
-                        熟识
-                      </Button>
-                    </Col>
-                  </Row>
+            ) : practiceItems.length > 0 && currentItem ? (
+              // 正常练习界面
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                {/* 显示词书来源 */}
+                <div style={{ marginBottom: 16 }}>
+                  <Text type="secondary">
+                    来自词书: {currentItem.wordbook_name}
+                  </Text>
                 </div>
-              )
+                
+                <Row justify="center" style={{ marginBottom: 40 }}>
+                  <Col>
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={<SoundOutlined />}
+                      onClick={() => playAudio(currentItem.content)}
+                      loading={audioLoading}
+                      style={{ width: 200, height: 60, fontSize: 18 }}
+                    >
+                      播放音频
+                    </Button>
+                  </Col>
+                </Row>
+
+                <div style={{ marginBottom: 40 }}>
+                  <Text type="secondary">
+                    本书第 {completedInCurrentWordbook + 1} 个 | 今日已完成: {completedToday} / {extraPracticeCount > 0 ? userSettings.daily_limit * (extraPracticeCount + 1) : userSettings.daily_limit}
+                  </Text>
+                  <Progress 
+                    percent={Math.min(Math.round((completedToday / (extraPracticeCount > 0 ? userSettings.daily_limit * (extraPracticeCount + 1) : userSettings.daily_limit)) * 100), 100)} 
+                    showInfo={false}
+                    style={{ marginTop: 8, maxWidth: 400, margin: '8px auto' }}
+                  />
+                </div>
+
+                <Row justify="center" gutter={[16, 16]}>
+                  <Col xs={8} sm={8} md={8} lg={8}>
+                    <Button
+                      size="large"
+                      danger
+                      block
+                      style={{ height: 50, fontSize: 15 }}
+                      onClick={() => submitReview('unknown')}
+                    >
+                      没懂
+                    </Button>
+                  </Col>
+                  <Col xs={8} sm={8} md={8} lg={8}>
+                    <Button
+                      size="large"
+                      type="primary"
+                      block
+                      style={{ height: 50, fontSize: 15 }}
+                      onClick={() => submitReview('known')}
+                    >
+                      懂了
+                    </Button>
+                  </Col>
+                  <Col xs={8} sm={8} md={8} lg={8}>
+                    <Button
+                      size="large"
+                      block
+                      style={{ height: 50, backgroundColor: '#52c41a', color: '#fff', fontSize: 15 }}
+                      onClick={() => submitReview('familiar')}
+                    >
+                      熟识
+                    </Button>
+                  </Col>
+                </Row>
+              </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '80px 0' }}>
                 <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
