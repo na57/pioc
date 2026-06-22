@@ -6,6 +6,7 @@
 import * as mysql from 'mysql2/promise';
 import { findById as findDataObjectById } from '../database/models/dataObject';
 import { findById as findDataSourceById } from '../database/models/dataSource';
+import { getPool } from '../database/connection';
 import {
   TableConfig,
   QueryOptions,
@@ -24,25 +25,24 @@ class ConnectionManager {
 
   /**
    * 获取数据源连接
+   * 如果数据源ID为空或数据源不存在，则使用主数据库连接
    */
-  async getConnection(dataSourceId: string): Promise<mysql.Connection> {
-    // 检查缓存
-    const cached = this.cache.get(dataSourceId);
-    if (cached) {
-      try {
-        // 测试连接是否有效
-        await cached.ping();
-        return cached;
-      } catch {
-        // 连接已失效，从缓存中移除
-        this.cache.delete(dataSourceId);
-      }
+  async getConnection(dataSourceId: string): Promise<{ connection: mysql.Connection; isMainDb: boolean }> {
+    // 如果数据源ID为空，直接使用主数据库
+    if (!dataSourceId) {
+      const pool = getPool();
+      const connection = await pool.getConnection();
+      return { connection: connection as unknown as mysql.Connection, isMainDb: true };
     }
 
     // 获取数据源配置
     const dataSource = await findDataSourceById(dataSourceId);
     if (!dataSource) {
-      throw new Error(`数据源不存在: ${dataSourceId}`);
+      // 数据源不存在，使用主数据库连接
+      console.warn(`数据源不存在: ${dataSourceId}，使用主数据库连接`);
+      const pool = getPool();
+      const connection = await pool.getConnection();
+      return { connection: connection as unknown as mysql.Connection, isMainDb: true };
     }
 
     if (dataSource.status !== 1) {
@@ -51,6 +51,19 @@ class ConnectionManager {
 
     if (dataSource.type !== 'mysql') {
       throw new Error(`暂不支持非MySQL数据源: ${dataSource.type}`);
+    }
+
+    // 检查缓存
+    const cached = this.cache.get(dataSourceId);
+    if (cached) {
+      try {
+        // 测试连接是否有效
+        await cached.ping();
+        return { connection: cached, isMainDb: false };
+      } catch {
+        // 连接已失效，从缓存中移除
+        this.cache.delete(dataSourceId);
+      }
     }
 
     // 创建新连接
@@ -65,7 +78,20 @@ class ConnectionManager {
 
     // 缓存连接
     this.cache.set(dataSourceId, connection);
-    return connection;
+    return { connection, isMainDb: false };
+  }
+
+  /**
+   * 释放连接
+   * 主数据库连接释放回连接池，外部连接关闭
+   */
+  async releaseConnection(dataSourceId: string, connection: mysql.Connection, isMainDb: boolean): Promise<void> {
+    if (isMainDb) {
+      // 主数据库连接释放回连接池
+      (connection as any).release?.();
+    } else {
+      // 外部数据源连接不在这里关闭，由缓存管理
+    }
   }
 
   /**
@@ -245,13 +271,8 @@ export class DataQueryService {
     dataSourceId: string | undefined,
     options: QueryOptions
   ): Promise<QueryResult<T>> {
-    if (!dataSourceId) {
-      return {
-        success: false,
-        data: [],
-        error: '未配置数据源ID',
-      };
-    }
+    // 如果没有配置数据源ID，使用空字符串（表示主数据库）
+    const effectiveDataSourceId = dataSourceId || '';
 
     // 构建字段列表
     const fieldList = options.select
@@ -277,11 +298,7 @@ export class DataQueryService {
 
     // 执行计数查询
     const countSql = `SELECT COUNT(*) as total FROM ${tableName}`;
-    const total = await this.executeCountQuery(
-      dataSourceId,
-      countSql,
-      []
-    );
+    const total = await this.executeCountQuery(effectiveDataSourceId, countSql, []);
 
     // 添加分页
     let queryParams = options.params || [];
@@ -292,7 +309,7 @@ export class DataQueryService {
     }
 
     // 执行查询
-    const data = await this.executeQuery<T>(dataSourceId, querySql, queryParams);
+    const data = await this.executeQuery<T>(effectiveDataSourceId, querySql, queryParams);
 
     return {
       success: true,
@@ -309,7 +326,7 @@ export class DataQueryService {
     sql: string,
     params: unknown[]
   ): Promise<T[]> {
-    const connection = await connectionManager.getConnection(dataSourceId);
+    const { connection, isMainDb } = await connectionManager.getConnection(dataSourceId);
 
     try {
       const [rows] = await connection.query(sql, params);
@@ -318,11 +335,14 @@ export class DataQueryService {
       // 如果连接已关闭，尝试重新连接
       if (error.message && error.message.includes('connection is in closed state')) {
         await connectionManager.closeConnection(dataSourceId);
-        const newConnection = await connectionManager.getConnection(dataSourceId);
+        const { connection: newConnection } = await connectionManager.getConnection(dataSourceId);
         const [rows] = await newConnection.query(sql, params);
         return rows as T[];
       }
       throw error;
+    } finally {
+      // 释放连接
+      await connectionManager.releaseConnection(dataSourceId, connection, isMainDb);
     }
   }
 
@@ -364,9 +384,13 @@ export class DataQueryService {
       }
     }
 
-    const connection = await connectionManager.getConnection(dataSourceId);
-    const [rows] = await connection.query(countSql, params);
-    return (rows as Array<{ total: number }>)[0]?.total || 0;
+    const { connection, isMainDb } = await connectionManager.getConnection(dataSourceId);
+    try {
+      const [rows] = await connection.query(countSql, params);
+      return (rows as Array<{ total: number }>)[0]?.total || 0;
+    } finally {
+      await connectionManager.releaseConnection(dataSourceId, connection, isMainDb);
+    }
   }
 
   /**
@@ -401,11 +425,16 @@ export class DataQueryService {
     params: unknown[] = []
   ): Promise<QueryResult<T>> {
     try {
-      const data = await this.executeQuery<T>(dataSourceId, sql, params);
-      return {
-        success: true,
-        data,
-      };
+      const { connection, isMainDb } = await connectionManager.getConnection(dataSourceId);
+      try {
+        const [rows] = await connection.query(sql, params);
+        return {
+          success: true,
+          data: rows as T[],
+        };
+      } finally {
+        await connectionManager.releaseConnection(dataSourceId, connection, isMainDb);
+      }
     } catch (error) {
       console.error('执行原始查询失败:', error);
       return {

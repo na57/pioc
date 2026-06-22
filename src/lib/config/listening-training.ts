@@ -84,7 +84,7 @@ export interface ListeningTrainingConfig extends AppBaseConfig {
 // ============================================
 
 const defaultConfig: ListeningTrainingConfig = {
-  dataSourceId: '1',
+  // 不使用外部数据源，直接使用主数据库
   tables: {
     wordbooks: {
       name: 'pioc_lt_wordbooks',
