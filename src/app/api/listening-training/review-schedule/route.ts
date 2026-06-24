@@ -18,7 +18,7 @@ async function getReviewScheduleHandler(
 
     if (!result.success) {
       return NextResponse.json(
-        { success: false, message: '查询失败', error: result.error },
+        { success: false, message: '查询失败', error: 'error' in result ? result.error : '未知错误' },
         { status: 500 }
       );
     }
