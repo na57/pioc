@@ -8,23 +8,38 @@ import {
 
 const appUrl = '/listening-training';
 
-// 艾宾浩斯复习间隔（毫秒）
-const REVIEW_INTERVALS = [
-  5 * 60 * 1000,       // 5分钟
-  30 * 60 * 1000,      // 30分钟
-  12 * 60 * 60 * 1000, // 12小时
-  24 * 60 * 60 * 1000, // 1天
-  2 * 24 * 60 * 60 * 1000,  // 2天
-  4 * 24 * 60 * 60 * 1000,  // 4天
-  7 * 24 * 60 * 60 * 1000,  // 7天
-  15 * 24 * 60 * 60 * 1000, // 15天
-  30 * 24 * 60 * 60 * 1000, // 30天
+// 艾宾浩斯复习间隔（天）- 基于复习次数的间隔
+// 用于"懂了"状态的词条
+const REVIEW_INTERVALS_DAYS = [
+  1,   // 第1次复习后 - 1天后
+  2,   // 第2次复习后 - 2天后
+  4,   // 第3次复习后 - 4天后
+  7,   // 第4次复习后 - 7天后
+  15,  // 第5次复习后 - 15天后
+  30,  // 第6次复习后 - 30天后
 ];
 
-function calculateNextReview(reviewCount: number): Date {
-  const index = Math.min(reviewCount, REVIEW_INTERVALS.length - 1);
-  const interval = REVIEW_INTERVALS[index];
-  return new Date(Date.now() + interval);
+function calculateNextReview(reviewCount: number, choice: string): Date | null {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (choice === 'unknown') {
+    // 没懂 - 第二天凌晨4点复习
+    const nextReview = new Date(today);
+    nextReview.setDate(today.getDate() + 1);
+    nextReview.setHours(4, 0, 0, 0);
+    return nextReview;
+  } else if (choice === 'known') {
+    // 懂了 - 按照艾宾浩斯曲线复习，最短一天
+    const intervalDays = REVIEW_INTERVALS_DAYS[Math.min(reviewCount - 1, REVIEW_INTERVALS_DAYS.length - 1)];
+    const nextReview = new Date(today);
+    nextReview.setDate(today.getDate() + intervalDays);
+    nextReview.setHours(4, 0, 0, 0);
+    return nextReview;
+  }
+
+  // 熟识 - 不再复习，返回 null
+  return null;
 }
 
 // POST /api/listening-training/items/:id/review - 提交复习结果
@@ -107,12 +122,12 @@ async function reviewItemHandler(
       // 懂了 - 还需要再次复习
       newStatus = 'known';
       newReviewCount = (userItem?.review_count || 0) + 1;
-      nextReviewAt = calculateNextReview(newReviewCount);
+      nextReviewAt = calculateNextReview(newReviewCount, choice);
     } else {
       // 没懂 - 进入艾宾浩斯复习队列
       newStatus = 'unknown';
       newReviewCount = (userItem?.review_count || 0) + 1;
-      nextReviewAt = calculateNextReview(newReviewCount);
+      nextReviewAt = calculateNextReview(newReviewCount, choice);
     }
 
     // 更新用户词条学习状态

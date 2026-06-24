@@ -357,9 +357,12 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
        JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
        LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
        WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
-       AND (ui.status IS NULL OR ui.next_review_at <= NOW())
+       AND (ui.next_review_at IS NULL OR ui.next_review_at <= NOW())
        ${wordbookCondition}
-       ORDER BY ui.next_review_at ASC, i.created_at ASC
+       ORDER BY 
+         CASE WHEN ui.next_review_at IS NULL THEN 0 ELSE 1 END,
+         ui.next_review_at ASC, 
+         i.created_at ASC
        LIMIT ?`,
       params
     );
@@ -569,6 +572,172 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     );
     
     return result;
+  }
+
+  /**
+   * 查询未来复习计划统计
+   * 根据艾宾浩斯遗忘曲线模拟未来每天需要复习的词条数量
+   * @param userId 用户ID
+   * @param days 查询未来多少天
+   */
+  async queryReviewSchedule(userId: number, days: number) {
+    const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = userItemsConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    // 获取用户设置
+    const settingsResult = await this.getOrCreateUserSettings(userId);
+    const dailyLimit = settingsResult.success && settingsResult.data
+      ? (settingsResult.data as { daily_limit?: number }).daily_limit || 20
+      : 20;
+
+    // 艾宾浩斯复习间隔（天）- 用于模拟未来的复习时间点
+    const REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30];
+
+    // 1. 查询所有非熟识状态的词条（包括已有学习记录的和全新的）
+    const allItemsResult = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT 
+        i.id,
+        COALESCE(ui.status, 'new') as status,
+        COALESCE(ui.review_count, 0) as review_count,
+        ui.next_review_at,
+        ui.last_review_at
+       FROM ${itemsConfig.name} i
+       JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
+       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
+       WHERE ui.status IS NULL OR ui.status NOT IN ('familiar')`,
+      [userId, userId]
+    );
+
+    // 2. 查询今日已完成数量
+    const todayCompletedResult = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT COUNT(*) as count
+       FROM ${userItemsConfig.name}
+       WHERE user_id = ?
+       AND last_review_at >= CURDATE()`,
+      [userId]
+    );
+
+    if (!allItemsResult.success) {
+      return allItemsResult;
+    }
+
+    // 生成从今天开始的日期序列
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const schedule: Array<{ date: string; count: number; newItems: number; reviewItems: number }> = [];
+
+    // 初始化每天的计数
+    for (let i = 0; i < days; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      schedule.push({
+        date: date.toISOString().split('T')[0],
+        count: 0,
+        newItems: 0,
+        reviewItems: 0,
+      });
+    }
+
+    // 计算新词条和复习词条
+    const items = allItemsResult.data || [];
+    let totalNewItems = 0;
+    let newItemsToDistribute: Array<{ id: string; startDay: number }> = [];
+
+    // 先处理所有词条，计算它们在未来每天的复习时间点
+    items.forEach((item: any) => {
+      const status = item.status;
+      const reviewCount = item.review_count || 0;
+      const nextReviewAt = item.next_review_at ? new Date(item.next_review_at) : null;
+      const lastReviewAt = item.last_review_at ? new Date(item.last_review_at) : null;
+
+      if (status === 'new' || status === null) {
+        // 全新词条，需要安排首次学习
+        totalNewItems++;
+        newItemsToDistribute.push({ id: item.id, startDay: 0 });
+      } else {
+        // 已有学习记录的词条，模拟未来的复习时间点
+        // 从 next_review_at 开始，按照艾宾浩斯曲线计算后续复习时间
+        let currentReviewDate = nextReviewAt;
+        let currentReviewCount = reviewCount;
+
+        while (currentReviewDate && currentReviewDate < new Date(today.getTime() + days * 24 * 60 * 60 * 1000)) {
+          // 计算这个复习日期对应的是第几天
+          const dayIndex = Math.floor((currentReviewDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+
+          if (dayIndex >= 0 && dayIndex < days) {
+            schedule[dayIndex].reviewItems++;
+            schedule[dayIndex].count++;
+          }
+
+          // 模拟这次复习后的下一次复习（假设用户点击"懂了"）
+          currentReviewCount++;
+          if (currentReviewCount - 1 < REVIEW_INTERVALS.length) {
+            const interval = REVIEW_INTERVALS[currentReviewCount - 1];
+            currentReviewDate = new Date(currentReviewDate.getTime() + interval * 24 * 60 * 60 * 1000);
+          } else {
+            currentReviewDate = null;
+          }
+        }
+      }
+    });
+
+    // 计算今日已完成数量
+    const todayCompleted = todayCompletedResult.success && todayCompletedResult.data
+      ? todayCompletedResult.data[0]?.count || 0
+      : 0;
+
+    // 分配新词条到各天（考虑每日上限）
+    let accumulatedNewItems = 0;
+    const remainingNewItems = totalNewItems;
+
+    for (let i = 0; i < days; i++) {
+      const daySchedule = schedule[i];
+
+      // 计算今天还能学习多少新词条
+      const availableSlots = Math.max(0, dailyLimit - daySchedule.count);
+      const newItemsForDay = Math.min(
+        remainingNewItems - accumulatedNewItems,
+        availableSlots
+      );
+
+      if (newItemsForDay > 0) {
+        daySchedule.newItems = newItemsForDay;
+        daySchedule.count += newItemsForDay;
+        accumulatedNewItems += newItemsForDay;
+
+        // 模拟这些新词条在未来日期的复习（假设用户点击"懂了"）
+        for (let j = 0; j < newItemsForDay; j++) {
+          let reviewCount = 1; // 今天学习后，review_count 变为 1
+          let nextReviewDay = i + REVIEW_INTERVALS[0]; // 第1次复习间隔1天
+
+          while (nextReviewDay < days && reviewCount <= REVIEW_INTERVALS.length) {
+            schedule[nextReviewDay].reviewItems++;
+            schedule[nextReviewDay].count++;
+
+            reviewCount++;
+            if (reviewCount - 1 < REVIEW_INTERVALS.length) {
+              nextReviewDay += REVIEW_INTERVALS[reviewCount - 1];
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: schedule,
+      summary: {
+        totalNewItems,
+        todayCompleted,
+        dailyLimit,
+      }
+    };
   }
 }
 

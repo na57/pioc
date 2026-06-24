@@ -10,7 +10,6 @@ import {
   Row,
   Col,
   Badge,
-  message,
   Spin,
   Progress,
   Modal,
@@ -18,6 +17,7 @@ import {
   InputNumber,
   Form,
   Divider,
+  DatePicker,
 } from 'antd';
 import {
   SoundOutlined,
@@ -27,9 +27,12 @@ import {
   QuestionCircleOutlined,
   EyeOutlined,
   SettingOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { App } from 'antd';
 import ActionButton from '@/app/tags/components/ActionButton';
+import ReactECharts from 'echarts-for-react';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -70,7 +73,7 @@ interface UserSettings {
 
 export default function ListeningTrainingPage() {
   const { message: messageApi } = App.useApp();
-  const [activeTab, setActiveTab] = useState<'practice' | 'vocabulary' | 'wordbooks' | 'settings'>('practice');
+  const [activeTab, setActiveTab] = useState<'practice' | 'vocabulary' | 'wordbooks' | 'schedule' | 'settings'>('practice');
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [selectedWordbook, setSelectedWordbook] = useState<string>('');
   const [practiceItems, setPracticeItems] = useState<PracticeItem[]>([]);
@@ -131,6 +134,12 @@ export default function ListeningTrainingPage() {
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsChanged, setSettingsChanged] = useState(false);
 
+  // 复习计划相关
+  const [scheduleDays, setScheduleDays] = useState<number>(30);
+  const [scheduleData, setScheduleData] = useState<Array<{ date: string; count: number; newItems: number; reviewItems: number }>>([]);
+  const [scheduleSummary, setScheduleSummary] = useState<{ totalNewItems: number; todayCompleted: number; dailyLimit: number } | null>(null);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+
   // 获取词书列表
   const fetchWordbooks = useCallback(async () => {
     try {
@@ -188,6 +197,25 @@ export default function ListeningTrainingPage() {
       setLoading(false);
     }
   }, [selectedWordbook, vocabularyStatus, messageApi]);
+
+  // 获取复习计划数据
+  const fetchSchedule = useCallback(async () => {
+    setScheduleLoading(true);
+    try {
+      const response = await fetch(`/api/listening-training/review-schedule?days=${scheduleDays}`);
+      const data = await response.json();
+      if (data.success) {
+        setScheduleData(data.data.schedule);
+        setScheduleSummary(data.data.summary || null);
+      } else {
+        messageApi.error(data.message || '获取复习计划失败');
+      }
+    } catch (error) {
+      messageApi.error('获取复习计划失败');
+    } finally {
+      setScheduleLoading(false);
+    }
+  }, [scheduleDays, messageApi]);
 
   // 获取用户设置
   const fetchUserSettings = useCallback(async () => {
@@ -274,16 +302,19 @@ export default function ListeningTrainingPage() {
       fetchPracticeItems();
     } else if (activeTab === 'vocabulary') {
       fetchVocabulary();
+    } else if (activeTab === 'schedule') {
+      fetchSchedule();
     }
-  }, [activeTab, selectedWordbook, fetchPracticeItems, fetchVocabulary]);
+  }, [activeTab, selectedWordbook, fetchPracticeItems, fetchVocabulary, fetchSchedule]);
 
   // 练习页面加载后，自动播放第一个词条（在未完成每日任务或加练模式下）
   useEffect(() => {
-    if (activeTab === 'practice' && 
-        practiceItems.length > 0 && 
-        currentIndex === 0 && 
+    const totalLimit = userSettings.daily_limit * (extraPracticeCount + 1);
+    if (activeTab === 'practice' &&
+        practiceItems.length > 0 &&
+        currentIndex === 0 &&
         userSettings.auto_play &&
-        (completedToday < userSettings.daily_limit || extraPracticeCount > 0)) {
+        completedToday < totalLimit) {
       const firstItem = practiceItems[0];
       if (firstItem) {
         // 延迟一点播放，确保页面已渲染
@@ -407,9 +438,8 @@ export default function ListeningTrainingPage() {
             }
           }
         } else {
-          // 复习完成，重置加练状态
+          // 复习完成
           messageApi.success(extraPracticeCount > 0 ? '加练完成！' : '今日复习完成！');
-          setExtraPracticeCount(0);
           fetchPracticeItems();
         }
       } else {
@@ -570,7 +600,12 @@ export default function ListeningTrainingPage() {
             >
               词书管理
             </Button>
-            <ActionButton 
+            <ActionButton
+              icon={<CalendarOutlined />}
+              tooltip="复习计划"
+              onClick={() => setActiveTab('schedule')}
+            />
+            <ActionButton
               icon={<SettingOutlined />}
               tooltip="设置"
               onClick={() => setActiveTab('settings')}
@@ -583,18 +618,25 @@ export default function ListeningTrainingPage() {
       {activeTab === 'practice' && (
         <Card>
           <Spin spinning={loading} description="加载中...">
-            {/* 优先检查是否已完成每日任务（不在加练模式下） */}
-            {(completedToday >= userSettings.daily_limit && extraPracticeCount === 0) ? (
+            {/* 优先检查是否已完成每日任务 */}
+            {(completedToday >= userSettings.daily_limit * (extraPracticeCount + 1)) ? (
                 // 每日任务完成界面
                 <div style={{ textAlign: 'center', padding: '60px 0' }}>
                   <CheckCircleOutlined style={{ fontSize: 80, color: '#52c41a', marginBottom: 24 }} />
-                  <Title level={3} style={{ marginBottom: 16 }}>🎉 今日任务已完成！</Title>
+                  <Title level={3} style={{ marginBottom: 16 }}>
+                    {extraPracticeCount > 0 ? '🎉 加练完成！' : '🎉 今日任务已完成！'}
+                  </Title>
                   <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
-                    已完成 {completedToday} / {userSettings.daily_limit} 个词条
+                    已完成 {completedToday} / {userSettings.daily_limit * (extraPracticeCount + 1)} 个词条
+                    {extraPracticeCount > 0 && (
+                      <span style={{ display: 'block', marginTop: 8, color: '#52c41a' }}>
+                        (包含 {extraPracticeCount} 组加练)
+                      </span>
+                    )}
                   </Text>
                   <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
                     <Text style={{ color: '#52c41a', fontWeight: 500 }}>
-                      太棒了！今日学习目标已达成
+                      {extraPracticeCount > 0 ? '太棒了！继续加油！' : '太棒了！今日学习目标已达成'}
                     </Text>
                   </div>
                   <Space size="large">
@@ -903,6 +945,133 @@ export default function ListeningTrainingPage() {
             </Form.Item>
           </Form>
         </Card>
+      )}
+
+      {/* 复习计划页面 */}
+      {activeTab === 'schedule' && (
+        <Spin spinning={scheduleLoading} description="加载中...">
+          <Card>
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <CalendarOutlined />
+                <Text>时间范围:</Text>
+                <Select
+                  value={scheduleDays}
+                  onChange={(value) => setScheduleDays(value)}
+                  style={{ width: 120 }}
+                  options={[
+                    { value: 7, label: '未来7天' },
+                    { value: 14, label: '未来14天' },
+                    { value: 30, label: '未来30天' },
+                    { value: 60, label: '未来60天' },
+                    { value: 90, label: '未来90天' },
+                  ]}
+                />
+                <Button icon={<ReloadOutlined />} onClick={fetchSchedule} loading={scheduleLoading}>
+                  刷新
+                </Button>
+              </Space>
+            </div>
+
+            {scheduleData.length > 0 ? (
+              <>
+                {/* 统计摘要 */}
+                {scheduleSummary && (
+                  <Card style={{ marginBottom: 16, backgroundColor: '#f6ffed' }}>
+                    <Space size="large" wrap>
+                      <div>
+                        <Text type="secondary">每日学习上限</Text>
+                        <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                          {scheduleSummary.dailyLimit} 个
+                        </div>
+                      </div>
+                      <div>
+                        <Text type="secondary">待学习新词条</Text>
+                        <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff' }}>
+                          {scheduleSummary.totalNewItems} 个
+                        </div>
+                      </div>
+                      <div>
+                        <Text type="secondary">今日已完成</Text>
+                        <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                          {scheduleSummary.todayCompleted} 个
+                        </div>
+                      </div>
+                    </Space>
+                  </Card>
+                )}
+
+                <ReactECharts
+                  option={{
+                    title: {
+                      text: `未来${scheduleDays}天复习计划统计`,
+                      left: 'center',
+                      textStyle: { fontSize: 18, fontWeight: 'normal' },
+                    },
+                    tooltip: {
+                      trigger: 'axis',
+                      formatter: (params: any) => {
+                        const data = params[0];
+                        const dateIndex = data.dataIndex;
+                        const item = scheduleData[dateIndex];
+                        if (!item) return '';
+                        return `${item.date}<br/>总计: <b>${item.count}</b> 个词条<br/>新词条: ${item.newItems} 个<br/>复习: ${item.reviewItems} 个`;
+                      },
+                    },
+                    legend: {
+                      data: ['新词条', '复习词条'],
+                      bottom: 0,
+                    },
+                    grid: {
+                      left: '3%',
+                      right: '4%',
+                      bottom: '15%',
+                      top: '15%',
+                      containLabel: true,
+                    },
+                    xAxis: {
+                      type: 'category',
+                      data: scheduleData.map((item) => dayjs(item.date).format('MM-DD')),
+                      axisLabel: {
+                        rotate: 45,
+                        interval: Math.floor(scheduleData.length / 10),
+                      },
+                    },
+                    yAxis: {
+                      type: 'value',
+                      name: '词条数量',
+                      minInterval: 1,
+                    },
+                    series: [
+                      {
+                        name: '新词条',
+                        type: 'bar',
+                        stack: 'total',
+                        data: scheduleData.map((item) => item.newItems),
+                        itemStyle: { color: '#1890ff' },
+                      },
+                      {
+                        name: '复习词条',
+                        type: 'bar',
+                        stack: 'total',
+                        data: scheduleData.map((item) => item.reviewItems),
+                        itemStyle: { color: '#52c41a' },
+                      },
+                    ],
+                  }}
+                  style={{ height: 400, width: '100%' }}
+                  opts={{ renderer: 'canvas' }}
+                />
+
+
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                <Text type="secondary">暂无复习计划数据</Text>
+              </div>
+            )}
+          </Card>
+        </Spin>
       )}
 
       {/* 词条详情弹窗 */}

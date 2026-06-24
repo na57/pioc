@@ -1,6 +1,6 @@
 {
   "name": "pioc",
-  "version": "0.35.3",
+  "version": "0.36.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 8080",
@@ -16,6 +16,7 @@
     "bcryptjs": "^3.0.3",
     "cookie": "^1.1.1",
     "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.6",
     "highlight.js": "^11.11.1",
     "jose": "^6.2.2",
     "js-yaml": "^4.1.1",
