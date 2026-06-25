@@ -66,6 +66,20 @@ export interface UserSettingsFieldMapping extends Record<string, string> {
   updatedAt: string;
 }
 
+// 每日学习清单表
+export interface DailyPlanFieldMapping extends Record<string, string> {
+  id: string;
+  userId: string;
+  planDate: string;
+  itemId: string;
+  wordbookId: string;
+  itemType: string;
+  status: string;
+  completedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ============================================
 // 应用配置类型
 // ============================================
@@ -76,6 +90,7 @@ export interface ListeningTrainingConfig extends AppBaseConfig {
     items: TableConfig<ItemFieldMapping>;
     userItems: TableConfig<UserItemFieldMapping>;
     userSettings: TableConfig<UserSettingsFieldMapping>;
+    dailyPlan: TableConfig<DailyPlanFieldMapping>;
   };
 }
 
@@ -136,6 +151,21 @@ const defaultConfig: ListeningTrainingConfig = {
         playCount: 'play_count',
         playInterval: 'play_interval',
         extraSettings: 'extra_settings',
+        createdAt: 'created_at',
+        updatedAt: 'updated_at',
+      },
+    },
+    dailyPlan: {
+      name: 'pioc_lt_daily_plan',
+      fields: {
+        id: 'id',
+        userId: 'user_id',
+        planDate: 'plan_date',
+        itemId: 'item_id',
+        wordbookId: 'wordbook_id',
+        itemType: 'item_type',
+        status: 'status',
+        completedAt: 'completed_at',
         createdAt: 'created_at',
         updatedAt: 'updated_at',
       },
@@ -636,6 +666,205 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
       values
     );
     
+    return result;
+  }
+
+  // ============================================
+  // 每日学习清单相关方法
+  // ============================================
+
+  /**
+   * 获取或创建今日学习清单
+   * 只自动添加待复习词条，新词条需要用户手动选择添加
+   * @param userId 用户ID
+   * @param dailyLimit 每日学习数量
+   */
+  async getOrCreateDailyPlan(userId: number, dailyLimit: number) {
+    const dailyPlanConfig = this.configLoader.getTableConfig('dailyPlan');
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. 检查今日是否已有学习清单
+    const existingPlan = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT dp.*, i.content, w.name as wordbook_name
+       FROM ${dailyPlanConfig.name} dp
+       JOIN ${itemsConfig.name} i ON dp.item_id = i.id
+       JOIN ${wordbooksConfig.name} w ON dp.wordbook_id = w.id
+       WHERE dp.user_id = ? AND dp.plan_date = ?
+       ORDER BY dp.item_type DESC, dp.created_at ASC`,
+      [userId, today]
+    );
+
+    if (existingPlan.success && Array.isArray(existingPlan.data) && existingPlan.data.length > 0) {
+      return { success: true, data: existingPlan.data, isNew: false };
+    }
+
+    // 2. 没有清单，需要创建
+    // 2.1 获取待复习词条（按艾宾浩斯曲线到期需要复习的）
+    const reviewItemsResult = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT
+        i.id, i.content, i.wordbook_id,
+        w.name as wordbook_name,
+        COALESCE(ui.status, 'unknown') as status,
+        COALESCE(ui.review_count, 0) as review_count
+       FROM ${itemsConfig.name} i
+       JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
+       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
+       WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
+       AND (ui.next_review_at IS NULL OR ui.next_review_at <= NOW())
+       ORDER BY ui.next_review_at ASC, i.created_at ASC
+       LIMIT ?`,
+      [userId, userId, dailyLimit]
+    );
+
+    const reviewItems = reviewItemsResult.success && Array.isArray(reviewItemsResult.data) 
+      ? reviewItemsResult.data 
+      : [];
+
+    // 2.2 创建学习清单记录（只添加待复习词条）
+    const planItems: any[] = [];
+
+    for (const item of reviewItems) {
+      await this.queryService.executeRawQuery(
+        dataSourceId,
+        `INSERT INTO ${dailyPlanConfig.name} 
+         (user_id, plan_date, item_id, wordbook_id, item_type, status)
+         VALUES (?, ?, ?, ?, 'review', 'pending')`,
+        [userId, today, item.id, item.wordbook_id]
+      );
+      planItems.push({ ...item, item_type: 'review', status: 'pending' });
+    }
+
+    // 注意：新词条不再自动添加，需要用户手动选择
+
+    return { success: true, data: planItems, isNew: true, reviewCount: reviewItems.length };
+  }
+
+  /**
+   * 获取今日学习清单（不自动创建）
+   * @param userId 用户ID
+   */
+  async getTodayPlan(userId: number) {
+    const dailyPlanConfig = this.configLoader.getTableConfig('dailyPlan');
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT dp.*, i.content, w.name as wordbook_name
+       FROM ${dailyPlanConfig.name} dp
+       JOIN ${itemsConfig.name} i ON dp.item_id = i.id
+       JOIN ${wordbooksConfig.name} w ON dp.wordbook_id = w.id
+       WHERE dp.user_id = ? AND dp.plan_date = ?
+       ORDER BY dp.item_type DESC, dp.created_at ASC`,
+      [userId, today]
+    );
+
+    return result;
+  }
+
+  /**
+   * 更新学习清单中词条的状态
+   * @param userId 用户ID
+   * @param itemId 词条ID
+   * @param status 新状态
+   */
+  async updatePlanItemStatus(userId: number, itemId: string, status: 'completed' | 'skipped') {
+    const dailyPlanConfig = this.configLoader.getTableConfig('dailyPlan');
+    const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `UPDATE ${dailyPlanConfig.name} 
+       SET status = ?, completed_at = NOW()
+       WHERE user_id = ? AND plan_date = ? AND item_id = ?`,
+      [status, userId, today, itemId]
+    );
+
+    return result;
+  }
+
+  /**
+   * 用户自选词条添加到今日学习清单
+   * @param userId 用户ID
+   * @param itemIds 词条ID数组
+   */
+  async addItemsToDailyPlan(userId: number, itemIds: string[]) {
+    const dailyPlanConfig = this.configLoader.getTableConfig('dailyPlan');
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // 获取词条信息
+    const itemsResult = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT id, wordbook_id FROM ${itemsConfig.name} WHERE id IN (${itemIds.map(() => '?').join(',')})`,
+      itemIds
+    );
+
+    if (!itemsResult.success || !Array.isArray(itemsResult.data)) {
+      return { success: false, error: '获取词条信息失败' };
+    }
+
+    // 批量插入
+    for (const item of itemsResult.data) {
+      await this.queryService.executeRawQuery(
+        dataSourceId,
+        `INSERT IGNORE INTO ${dailyPlanConfig.name} 
+         (user_id, plan_date, item_id, wordbook_id, item_type, status)
+         VALUES (?, ?, ?, ?, 'new', 'pending')`,
+        [userId, today, item.id, item.wordbook_id]
+      );
+    }
+
+    return { success: true, addedCount: itemsResult.data.length };
+  }
+
+  /**
+   * 获取词书中可供选择的词条（排除已在今日清单中的，且只返回未学习过的词条）
+   * @param userId 用户ID
+   * @param wordbookId 词书ID
+   */
+  async getSelectableItems(userId: number, wordbookId: string) {
+    const dailyPlanConfig = this.configLoader.getTableConfig('dailyPlan');
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT 
+        i.id, i.content,
+        'new' as status,
+        0 as review_count
+       FROM ${itemsConfig.name} i
+       WHERE i.wordbook_id = ?
+       AND i.id NOT IN (
+         SELECT item_id FROM ${dailyPlanConfig.name} 
+         WHERE user_id = ? AND plan_date = ?
+       )
+       AND i.id NOT IN (
+         SELECT item_id FROM ${userItemsConfig.name} 
+         WHERE user_id = ?
+       )
+       ORDER BY i.created_at ASC`,
+      [wordbookId, userId, today, userId]
+    );
+
     return result;
   }
 

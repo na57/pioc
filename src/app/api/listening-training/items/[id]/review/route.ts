@@ -150,6 +150,9 @@ async function reviewItemHandler(
       );
     }
 
+    // 更新学习清单中该词条的状态为已完成
+    await listeningTrainingDataService.updatePlanItemStatus(session.userId, itemId, 'completed');
+
     return NextResponse.json({
       success: true,
       data: {

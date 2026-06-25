@@ -8,15 +8,14 @@ import {
 
 const appUrl = '/listening-training';
 
-// GET /api/listening-training/items/practice - 获取待复习词条
+// GET /api/listening-training/items/practice - 获取今日学习清单
 async function getPracticeItemsHandler(
   request: NextRequest,
   session: { userId: number; username: string; email: string; name: string }
 ) {
   try {
     const { searchParams } = new URL(request.url);
-    const wordbookId = searchParams.get('wordbook_id');
-    const supplementNew = searchParams.get('supplement_new') === 'true'; // 是否补充新词条
+    const mode = searchParams.get('mode') || 'daily'; // 'daily' | 'extra'
 
     // 获取用户设置
     const settingsResult = await listeningTrainingDataService.getOrCreateUserSettings(session.userId);
@@ -24,64 +23,56 @@ async function getPracticeItemsHandler(
       ? (settingsResult.data as { daily_limit?: number }).daily_limit || 20
       : 20;
 
-    // 1. 查询待复习词条（不区分词书，按待复习时间先后）
-    const reviewResult = await listeningTrainingDataService.queryPracticeItems(
-      session.userId,
-      dailyLimit
-    );
+    let items: any[] = [];
+    let isExtraMode = mode === 'extra';
+    let reviewCount = 0;
+    let needMoreItems = false;
+    let neededCount = 0;
 
-    if (!reviewResult.success) {
-      return NextResponse.json(
-        { success: false, message: '查询失败', error: reviewResult.error },
-        { status: 500 }
-      );
-    }
-
-    let items = reviewResult.data || [];
-    let supplementedFromNew = false;
-    let needMoreWordbooks = false;
-    let availableWordbooks: Array<{ id: string; name: string; new_items_count: number }> = [];
-
-    // 2. 如果待复习词条不足，且用户选择补充新词条，则从所有词书中获取新词条
-    if (items.length < dailyLimit && supplementNew) {
-      const neededCount = dailyLimit - items.length;
-      const newItemsResult = await listeningTrainingDataService.queryNewItems(
-        session.userId,
-        neededCount
-      );
-
-      if (newItemsResult.success && newItemsResult.data && newItemsResult.data.length > 0) {
-        items = [...items, ...newItemsResult.data];
-        supplementedFromNew = true;
+    if (isExtraMode) {
+      // 加练模式：返回空列表，让用户自己选择
+      items = [];
+    } else {
+      // 日常学习模式：获取或创建今日学习清单
+      const planResult = await listeningTrainingDataService.getOrCreateDailyPlan(session.userId, dailyLimit);
+      if (planResult.success && planResult.data) {
+        items = planResult.data;
+        reviewCount = planResult.reviewCount || 0;
+        
+        // 检查是否需要补充新词条
+        // 如果待复习词条数量 < 每日目标，则需要补充新词条
+        if (reviewCount < dailyLimit) {
+          needMoreItems = true;
+          neededCount = dailyLimit - reviewCount;
+        }
       }
     }
 
-    // 3. 如果仍然不足，查询其他有可学习词条的词书
-    if (items.length < dailyLimit && wordbookId) {
-      const otherWordbooksResult = await listeningTrainingDataService.queryOtherWordbooks(
-        session.userId,
-        wordbookId
-      );
-
-      if (otherWordbooksResult.success && otherWordbooksResult.data && otherWordbooksResult.data.length > 0) {
-        needMoreWordbooks = true;
-        availableWordbooks = otherWordbooksResult.data as Array<{ id: string; name: string; new_items_count: number; total_items: number }>;
-      }
-    }
-
-    // 查询今日已完成复习数（所有词书）
+    // 查询今日已完成数量（从学习清单中统计）
     const configLoader = getListeningTrainingConfigLoader();
     const queryService = getListeningTrainingQueryService();
-    const userItemsConfig = configLoader.getTableConfig('userItems');
-    const dataSourceId = userItemsConfig.dataSourceId || configLoader.getDataSourceId() || '1';
+    const dailyPlanConfig = configLoader.getTableConfig('dailyPlan');
+    const dataSourceId = dailyPlanConfig.dataSourceId || configLoader.getDataSourceId() || '1';
 
+    const today = new Date().toISOString().split('T')[0];
     const todayCompleted = await queryService.executeRawQuery(
       dataSourceId,
-      `SELECT COUNT(*) as count FROM ${userItemsConfig.name} 
-       WHERE user_id = ? 
-       AND last_review_at >= CURDATE()`,
-      [session.userId]
+      `SELECT COUNT(*) as count FROM ${dailyPlanConfig.name} 
+       WHERE user_id = ? AND plan_date = ? AND status = 'completed'`,
+      [session.userId, today]
     );
+
+    const completedCount = todayCompleted.success && todayCompleted.data 
+      ? todayCompleted.data[0]?.count || 0 
+      : 0;
+
+    // 计算待复习和新词条数量
+    const pendingReviewCount = items.filter((item: any) => item.item_type === 'review' && item.status === 'pending').length;
+    const pendingNewCount = items.filter((item: any) => item.item_type === 'new' && item.status === 'pending').length;
+    
+    // 计算还需要选择多少个新词条（考虑用户可能已经选择了一些）
+    const selectedNewCount = items.filter((item: any) => item.item_type === 'new').length;
+    const stillNeedCount = Math.max(0, neededCount - selectedNewCount);
 
     return NextResponse.json({
       success: true,
@@ -89,17 +80,21 @@ async function getPracticeItemsHandler(
         items,
         total: items.length,
         daily_limit: dailyLimit,
-        completed_today: todayCompleted.success && todayCompleted.data ? todayCompleted.data[0]?.count || 0 : 0,
-        supplemented_from_new: supplementedFromNew,
-        need_more_wordbooks: needMoreWordbooks,
-        available_wordbooks: availableWordbooks,
-        shortfall: Math.max(0, dailyLimit - items.length),
+        completed_today: completedCount,
+        pending_count: items.filter((item: any) => item.status === 'pending').length,
+        review_count: pendingReviewCount,
+        new_count: pendingNewCount,
+        need_more_items: stillNeedCount > 0,
+        needed_count: stillNeedCount,
+        total_needed: neededCount,
+        review_total: reviewCount,
+        mode: isExtraMode ? 'extra' : 'daily',
       },
     });
   } catch (error) {
     console.error('Failed to fetch practice items:', error);
     return NextResponse.json(
-      { success: false, message: '获取待复习词条失败', error: String(error) },
+      { success: false, message: '获取学习清单失败', error: String(error) },
       { status: 500 }
     );
   }

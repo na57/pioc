@@ -17,7 +17,10 @@ import {
   InputNumber,
   Form,
   Divider,
-  DatePicker,
+  List,
+  Checkbox,
+  Tag,
+  Alert,
 } from 'antd';
 import {
   SoundOutlined,
@@ -28,6 +31,7 @@ import {
   EyeOutlined,
   SettingOutlined,
   CalendarOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { App } from 'antd';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -52,6 +56,7 @@ interface PracticeItem {
   review_count: number;
   wordbook_id: string;
   wordbook_name: string;
+  item_type: 'review' | 'new';
 }
 
 interface VocabularyItem {
@@ -81,32 +86,14 @@ export default function ListeningTrainingPage() {
   const [loading, setLoading] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [completedToday, setCompletedToday] = useState(0);
-  const [completedInCurrentWordbook, setCompletedInCurrentWordbook] = useState(0); // 当前词书今日已完成数量
-  // 加练次数 - 从 localStorage 读取，检查是否是同一天
-  const [extraPracticeCount, setExtraPracticeCount] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedCount = localStorage.getItem('listening-training-extra-practice');
-      const savedDate = localStorage.getItem('listening-training-extra-practice-date');
-      const today = new Date().toDateString();
-      // 如果是同一天，恢复加练次数；否则重置为0
-      if (savedDate === today && savedCount) {
-        return parseInt(savedCount, 10);
-      }
-    }
-    return 0;
-  });
+  const [dailyLimit, setDailyLimit] = useState(20);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [newCount, setNewCount] = useState(0);
+  const [isExtraMode, setIsExtraMode] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioCache, setAudioCache] = useState<Record<string, string>>({});
-  const isPlayingRef = useRef(false); // 防止重复播放
-
-  // 词条不足相关状态
-  const [dailyLimit, setDailyLimit] = useState(20);
-  const [supplementedFromNew, setSupplementedFromNew] = useState(false);
-  const [needMoreWordbooks, setNeedMoreWordbooks] = useState(false);
-  const [availableWordbooks, setAvailableWordbooks] = useState<Array<{ id: string; name: string; new_items_count: number; total_items: number }>>([]);
-  const [shortfall, setShortfall] = useState(0);
-  const [supplementModalVisible, setSupplementModalVisible] = useState(false);
-  const [switchWordbookModalVisible, setSwitchWordbookModalVisible] = useState(false);
+  const isPlayingRef = useRef(false);
 
   // 词本相关
   const [vocabularyItems, setVocabularyItems] = useState<VocabularyItem[]>([]);
@@ -124,7 +111,6 @@ export default function ListeningTrainingPage() {
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState('');
-  // 在线编辑词书
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editWordbookName, setEditWordbookName] = useState('');
   const [editWordbookItems, setEditWordbookItems] = useState('');
@@ -138,7 +124,6 @@ export default function ListeningTrainingPage() {
     play_count: 1,
     play_interval: 1,
   });
-  // 设置编辑状态（用于本地修改，点击保存后才提交）
   const [settingsForm, setSettingsForm] = useState<UserSettings>(userSettings);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsChanged, setSettingsChanged] = useState(false);
@@ -148,6 +133,21 @@ export default function ListeningTrainingPage() {
   const [scheduleData, setScheduleData] = useState<Array<{ date: string; count: number; newItems: number; reviewItems: number }>>([]);
   const [scheduleSummary, setScheduleSummary] = useState<{ totalNewItems: number; todayCompleted: number; dailyLimit: number } | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(false);
+
+  // 自选词条弹窗
+  const [selectItemsModalVisible, setSelectItemsModalVisible] = useState(false);
+  const [selectableItems, setSelectableItems] = useState<Array<{ id: string; content: string; status: string; wordbook_id?: string; wordbook_name?: string }>>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [selectItemsLoading, setSelectItemsLoading] = useState(false);
+  const [selectableWordbooks, setSelectableWordbooks] = useState<Array<{ id: string; name: string; total_items: number }>>([]);
+  const [selectedWordbookForSelect, setSelectedWordbookForSelect] = useState<string>('');
+
+  // 需要补充词条的状态
+  const [needMoreItems, setNeedMoreItems] = useState(false);
+  const [neededCount, setNeededCount] = useState(0);
+  const [totalNeeded, setTotalNeeded] = useState(0);
+  const [reviewTotal, setReviewTotal] = useState(0);
+  const [showSelectPrompt, setShowSelectPrompt] = useState(true);
 
   // 获取词书列表
   const fetchWordbooks = useCallback(async () => {
@@ -165,38 +165,37 @@ export default function ListeningTrainingPage() {
     }
   }, [selectedWordbook, messageApi]);
 
-  // 获取待复习词条
-  const fetchPracticeItems = useCallback(async (supplementNew = false) => {
-    if (!selectedWordbook) return;
+  // 获取今日学习清单
+  const fetchPracticeItems = useCallback(async (extraMode = false, skipPrompt = false) => {
     setLoading(true);
+    setIsExtraMode(extraMode);
     try {
-      const response = await fetch(`/api/listening-training/items/practice?wordbook_id=${selectedWordbook}&supplement_new=${supplementNew}`);
+      const mode = extraMode ? 'extra' : 'daily';
+      const response = await fetch(`/api/listening-training/items/practice?mode=${mode}`);
       const data = await response.json();
       if (data.success) {
         setPracticeItems(data.data.items);
         setCompletedToday(data.data.completed_today);
         setDailyLimit(data.data.daily_limit);
-        setSupplementedFromNew(data.data.supplemented_from_new);
-        setNeedMoreWordbooks(data.data.need_more_wordbooks);
-        setAvailableWordbooks(data.data.available_wordbooks || []);
-        setShortfall(data.data.shortfall);
+        setPendingCount(data.data.pending_count);
+        setReviewCount(data.data.review_count);
+        setNewCount(data.data.new_count);
+        setNeedMoreItems(data.data.need_more_items);
+        setNeededCount(data.data.needed_count);
+        setTotalNeeded(data.data.total_needed);
+        setReviewTotal(data.data.review_total);
+        // 如果跳过提示，直接显示练习界面
+        if (skipPrompt) {
+          setShowSelectPrompt(false);
+        }
         setCurrentIndex(0);
-
-        // 如果词条不足且未补充过，显示补充提示
-        if (data.data.items.length < data.data.daily_limit && !supplementNew && !data.data.supplemented_from_new) {
-          setSupplementModalVisible(true);
-        }
-        // 如果补充后仍然不足，且有其他可学习的词书，显示更换词书提示
-        else if (data.data.items.length < data.data.daily_limit && data.data.need_more_wordbooks) {
-          setSwitchWordbookModalVisible(true);
-        }
       }
     } catch (error) {
-      messageApi.error('获取待复习词条失败');
+      messageApi.error('获取学习清单失败');
     } finally {
       setLoading(false);
     }
-  }, [selectedWordbook, messageApi]);
+  }, [messageApi]);
 
   // 获取词本
   const fetchVocabulary = useCallback(async () => {
@@ -208,7 +207,6 @@ export default function ListeningTrainingPage() {
       const data = await response.json();
       if (data.success) {
         setVocabularyItems(data.data.list);
-        // 更新各状态数量
         if (data.data.counts) {
           setVocabularyCounts(data.data.counts);
         }
@@ -306,14 +304,6 @@ export default function ListeningTrainingPage() {
     setSettingsChanged(true);
   };
 
-  // 保存加练次数到 localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('listening-training-extra-practice', extraPracticeCount.toString());
-      localStorage.setItem('listening-training-extra-practice-date', new Date().toDateString());
-    }
-  }, [extraPracticeCount]);
-
   useEffect(() => {
     fetchWordbooks();
     fetchUserSettings();
@@ -329,24 +319,22 @@ export default function ListeningTrainingPage() {
     }
   }, [activeTab, selectedWordbook, fetchPracticeItems, fetchVocabulary, fetchSchedule]);
 
-  // 练习页面加载后，自动播放第一个词条（在未完成每日任务或加练模式下）
+  // 练习页面加载后，自动播放第一个词条
   useEffect(() => {
-    const totalLimit = userSettings.daily_limit * (extraPracticeCount + 1);
     if (activeTab === 'practice' &&
         practiceItems.length > 0 &&
         currentIndex === 0 &&
         userSettings.auto_play &&
-        completedToday < totalLimit) {
+        pendingCount > 0) {
       const firstItem = practiceItems[0];
       if (firstItem) {
-        // 延迟一点播放，确保页面已渲染
         const timer = setTimeout(() => {
           playAudio(firstItem.content);
         }, 500);
         return () => clearTimeout(timer);
       }
     }
-  }, [activeTab, practiceItems, currentIndex, userSettings.auto_play, completedToday, userSettings.daily_limit, extraPracticeCount]);
+  }, [activeTab, practiceItems, currentIndex, userSettings.auto_play, pendingCount]);
 
   // 生成音频
   const generateAudio = async (text: string) => {
@@ -376,9 +364,8 @@ export default function ListeningTrainingPage() {
     }
   };
 
-  // 播放音频（支持多次播放）
+  // 播放音频
   const playAudio = async (text: string, count?: number, interval?: number) => {
-    // 如果正在播放，先停止当前播放
     if (isPlayingRef.current && audioRef.current) {
       try {
         audioRef.current.pause();
@@ -399,7 +386,6 @@ export default function ListeningTrainingPage() {
       return;
     }
 
-    // 播放多次
     for (let i = 0; i < playCount; i++) {
       try {
         await new Promise<void>((resolve, reject) => {
@@ -413,17 +399,14 @@ export default function ListeningTrainingPage() {
           const playPromise = audioRef.current.play();
           if (playPromise !== undefined) {
             playPromise.catch((e) => {
-              // 忽略播放中断错误
               resolve();
             });
           }
         });
       } catch (e) {
-        // 播放失败，继续下一次
         console.log('Audio play error:', e);
       }
       
-      // 如果不是最后一次播放，等待间隔时间
       if (i < playCount - 1 && playInterval > 0) {
         await new Promise(resolve => setTimeout(resolve, playInterval));
       }
@@ -445,24 +428,31 @@ export default function ListeningTrainingPage() {
       const data = await response.json();
       if (data.success) {
         setCompletedToday(prev => prev + 1);
-        setCompletedInCurrentWordbook(prev => prev + 1);
+        setPendingCount(prev => Math.max(0, prev - 1));
+        
+        // 更新当前词条在学习清单中的状态
+        setPracticeItems(prev => {
+          const newItems = [...prev];
+          if (newItems[currentIndex]) {
+            newItems[currentIndex] = { ...newItems[currentIndex], status: 'completed' };
+          }
+          return newItems;
+        });
+
         if (currentIndex < practiceItems.length - 1) {
           const nextIndex = currentIndex + 1;
           setCurrentIndex(nextIndex);
-          // 根据用户设置决定是否自动播放下一个词条的语音（在加练模式下也播放）
-          if (userSettings.auto_play || extraPracticeCount > 0) {
+          if (userSettings.auto_play) {
             const nextItem = practiceItems[nextIndex];
             if (nextItem) {
-              // 等待状态更新后再播放
               setTimeout(() => {
                 playAudio(nextItem.content);
               }, 500);
             }
           }
         } else {
-          // 复习完成
-          messageApi.success(extraPracticeCount > 0 ? '加练完成！' : '今日复习完成！');
-          fetchPracticeItems();
+          messageApi.success(isExtraMode ? '加练完成！' : '今日学习完成！');
+          fetchPracticeItems(isExtraMode);
         }
       } else {
         messageApi.error(data.message || '提交失败');
@@ -577,7 +567,80 @@ export default function ListeningTrainingPage() {
     }
   };
 
+  // 获取可选词条
+  const fetchSelectableItems = async (wordbookId?: string) => {
+    setSelectItemsLoading(true);
+    try {
+      const url = wordbookId 
+        ? `/api/listening-training/selectable-items?wordbook_id=${wordbookId}`
+        : '/api/listening-training/selectable-items';
+      const response = await fetch(url);
+      const data = await response.json();
+      if (data.success) {
+        setSelectableWordbooks(data.data.wordbooks);
+        setSelectableItems(data.data.items);
+        // 如果有指定词书，使用指定的；否则使用第一个词书
+        const defaultWordbookId = wordbookId || data.data.wordbooks[0]?.id || '';
+        setSelectedWordbookForSelect(defaultWordbookId);
+        setSelectedItemIds([]);
+        setSelectItemsModalVisible(true);
+      } else {
+        messageApi.error(data.message || '获取词条失败');
+      }
+    } catch (error) {
+      messageApi.error('获取词条失败');
+    } finally {
+      setSelectItemsLoading(false);
+    }
+  };
+
+  // 切换选择的词书
+  const handleWordbookChangeForSelect = async (wordbookId: string) => {
+    setSelectedWordbookForSelect(wordbookId);
+    setSelectItemsLoading(true);
+    try {
+      const response = await fetch(`/api/listening-training/selectable-items?wordbook_id=${wordbookId}`);
+      const data = await response.json();
+      if (data.success) {
+        setSelectableItems(data.data.items);
+        setSelectedItemIds([]);
+      } else {
+        messageApi.error(data.message || '获取词条失败');
+      }
+    } catch (error) {
+      messageApi.error('获取词条失败');
+    } finally {
+      setSelectItemsLoading(false);
+    }
+  };
+
+  // 添加选中词条到学习清单
+  const addSelectedItemsToPlan = async () => {
+    if (selectedItemIds.length === 0) {
+      messageApi.error('请至少选择一个词条');
+      return;
+    }
+    try {
+      const response = await fetch('/api/listening-training/daily-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds: selectedItemIds }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        messageApi.success(`成功添加 ${data.data.addedCount} 个词条`);
+        setSelectItemsModalVisible(false);
+        fetchPracticeItems(isExtraMode);
+      } else {
+        messageApi.error(data.message || '添加失败');
+      }
+    } catch (error) {
+      messageApi.error('添加词条失败');
+    }
+  };
+
   const currentItem = practiceItems[currentIndex];
+  const hasPendingItems = pendingCount > 0;
 
   return (
     <div style={{ padding: 24 }}>
@@ -586,20 +649,6 @@ export default function ListeningTrainingPage() {
       {/* 顶部选择栏 */}
       <Card style={{ marginBottom: 16 }}>
         <Space size="large" wrap>
-          {/* 词书选择在练习、词本和词书管理页面显示 */}
-          {activeTab !== 'settings' && (
-            <Select
-              style={{ width: '100%', maxWidth: 320 }}
-              placeholder="选择词书"
-              value={selectedWordbook || undefined}
-              onChange={setSelectedWordbook}
-            >
-              {wordbooks.map(wb => (
-                <Option key={wb.id} value={wb.id}>{wb.name}</Option>
-              ))}
-            </Select>
-          )}
-          
           <Space>
             <Button 
               type={activeTab === 'practice' ? 'primary' : 'default'}
@@ -640,56 +689,126 @@ export default function ListeningTrainingPage() {
       {activeTab === 'practice' && (
         <Card>
           <Spin spinning={loading} description="加载中...">
-            {/* 优先检查是否已完成每日任务 */}
-            {(completedToday >= userSettings.daily_limit * (extraPracticeCount + 1)) ? (
-                // 每日任务完成界面
-                <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                  <CheckCircleOutlined style={{ fontSize: 80, color: '#52c41a', marginBottom: 24 }} />
-                  <Title level={3} style={{ marginBottom: 16 }}>
-                    {extraPracticeCount > 0 ? '🎉 加练完成！' : '🎉 今日任务已完成！'}
-                  </Title>
-                  <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
-                    已完成 {completedToday} / {userSettings.daily_limit * (extraPracticeCount + 1)} 个词条
-                    {extraPracticeCount > 0 && (
-                      <span style={{ display: 'block', marginTop: 8, color: '#52c41a' }}>
-                        (包含 {extraPracticeCount} 组加练)
-                      </span>
-                    )}
+            {!isExtraMode && !hasPendingItems && practiceItems.length > 0 ? (
+              // 今日任务完成界面
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <CheckCircleOutlined style={{ fontSize: 80, color: '#52c41a', marginBottom: 24 }} />
+                <Title level={3} style={{ marginBottom: 16 }}>
+                  🎉 今日任务已完成！
+                </Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
+                  已完成 {completedToday} / {dailyLimit} 个词条
+                </Text>
+                <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+                  <Text style={{ color: '#52c41a', fontWeight: 500 }}>
+                    太棒了！今日学习目标已达成
                   </Text>
-                  <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
-                    <Text style={{ color: '#52c41a', fontWeight: 500 }}>
-                      {extraPracticeCount > 0 ? '太棒了！继续加油！' : '太棒了！今日学习目标已达成'}
+                </div>
+                <Space size="large">
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<PlusOutlined />}
+                    onClick={() => fetchSelectableItems()}
+                  >
+                    自选词条加练
+                  </Button>
+                  <Button
+                    size="large"
+                    onClick={() => setActiveTab('vocabulary')}
+                  >
+                    查看词本
+                  </Button>
+                </Space>
+              </div>
+            ) : !isExtraMode && needMoreItems && showSelectPrompt ? (
+              // 需要补充新词条的提示界面
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <Title level={3} style={{ marginBottom: 16 }}>
+                  今日学习清单
+                </Title>
+                <div style={{ marginBottom: 24 }}>
+                  <Space direction="vertical" size="small">
+                    <Text type="secondary">
+                      每日目标: {dailyLimit} 个词条
+                    </Text>
+                    <Text type="secondary">
+                      待复习词条: {reviewTotal} 个
+                    </Text>
+                    <Text type="secondary">
+                      已选新词条: {newCount} 个
+                    </Text>
+                  </Space>
+                </div>
+                {neededCount > 0 ? (
+                  <div style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+                    <Text style={{ color: '#1890ff', fontWeight: 500 }}>
+                      还可以选择 {neededCount} 个新词条（选几个都行）
                     </Text>
                   </div>
-                  <Space size="large">
+                ) : (
+                  <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+                    <Text style={{ color: '#52c41a', fontWeight: 500 }}>
+                      词条数量已达到每日目标，可以开始学习啦！
+                    </Text>
+                  </div>
+                )}
+                <Space size="large">
+                  {neededCount > 0 && (
                     <Button
                       type="primary"
                       size="large"
-                      icon={<SoundOutlined />}
-                      onClick={() => {
-                        // 加练一组：增加加练计数，重新获取练习列表（排除已学习词条）
-                        setExtraPracticeCount(prev => prev + 1);
-                        fetchPracticeItems();
-                      }}
+                      icon={<PlusOutlined />}
+                      onClick={() => fetchSelectableItems()}
                     >
-                      加练一组
+                      选择新词条
                     </Button>
-                    <Button
-                      size="large"
-                      onClick={() => setActiveTab('vocabulary')}
-                    >
-                      查看词本
-                    </Button>
-                  </Space>
+                  )}
+                  <Button
+                    type={neededCount > 0 ? 'default' : 'primary'}
+                    size="large"
+                    onClick={() => setShowSelectPrompt(false)}
+                  >
+                    开始学习
+                  </Button>
+                </Space>
+              </div>
+            ) : isExtraMode && !hasPendingItems ? (
+              // 加练模式，但没有选择词条
+              <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                <Title level={3} style={{ marginBottom: 16 }}>
+                  加练模式
+                </Title>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
+                  请选择要加练的词条
+                </Text>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<PlusOutlined />}
+                  onClick={() => fetchSelectableItems()}
+                >
+                  选择加练词条
+                </Button>
+                <div style={{ marginTop: 16 }}>
+                  <Button onClick={() => fetchPracticeItems(false)}>
+                    返回日常学习
+                  </Button>
                 </div>
+              </div>
             ) : practiceItems.length > 0 && currentItem ? (
               // 正常练习界面
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                {/* 显示词书来源 */}
+                {/* 显示词书来源和词条类型 */}
                 <div style={{ marginBottom: 16 }}>
-                  <Text type="secondary">
-                    来自词书: {currentItem.wordbook_name}
-                  </Text>
+                  <Space>
+                    <Text type="secondary">
+                      来自词书: {currentItem.wordbook_name}
+                    </Text>
+                    <Tag color={currentItem.item_type === 'review' ? 'blue' : 'green'}>
+                      {currentItem.item_type === 'review' ? '待复习' : '新词条'}
+                    </Tag>
+                  </Space>
                 </div>
                 
                 <Row justify="center" style={{ marginBottom: 40 }}>
@@ -709,13 +828,20 @@ export default function ListeningTrainingPage() {
 
                 <div style={{ marginBottom: 40 }}>
                   <Text type="secondary">
-                    本书第 {completedInCurrentWordbook + 1} 个 | 今日已完成: {completedToday} / {extraPracticeCount > 0 ? userSettings.daily_limit * (extraPracticeCount + 1) : userSettings.daily_limit}
+                    {isExtraMode ? '加练模式' : `今日学习: ${completedToday} / ${dailyLimit}`}
+                    {!isExtraMode && (
+                      <span style={{ marginLeft: 16 }}>
+                        (待复习: {reviewCount}, 新词条: {newCount})
+                      </span>
+                    )}
                   </Text>
-                  <Progress 
-                    percent={Math.min(Math.round((completedToday / (extraPracticeCount > 0 ? userSettings.daily_limit * (extraPracticeCount + 1) : userSettings.daily_limit)) * 100), 100)} 
-                    showInfo={false}
-                    style={{ marginTop: 8, maxWidth: 400, margin: '8px auto' }}
-                  />
+                  {!isExtraMode && (
+                    <Progress 
+                      percent={Math.min(Math.round((completedToday / dailyLimit) * 100), 100)} 
+                      showInfo={false}
+                      style={{ marginTop: 8, maxWidth: 400, margin: '8px auto' }}
+                    />
+                  )}
                 </div>
 
                 <Row justify="center" gutter={[16, 16]}>
@@ -752,28 +878,24 @@ export default function ListeningTrainingPage() {
                     </Button>
                   </Col>
                 </Row>
+
+                {isExtraMode && (
+                  <div style={{ marginTop: 24 }}>
+                    <Button onClick={() => fetchPracticeItems(false)}>
+                      结束加练，返回日常学习
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '80px 0' }}>
                 <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
                 <Title level={4}>
-                  {supplementedFromNew ? '词条已补充完成' : '今日复习完成'}
+                  暂无学习清单
                 </Title>
                 <Text type="secondary">
-                  {supplementedFromNew
-                    ? `已学习 ${practiceItems.length} 个词条（包含补充的新词条）`
-                    : '当前没有需要复习的词条，请稍后再来'}
+                  请先创建词书并添加词条
                 </Text>
-                {needMoreWordbooks && availableWordbooks.length > 0 && (
-                  <div style={{ marginTop: 24 }}>
-                    <Button
-                      type="primary"
-                      onClick={() => setSwitchWordbookModalVisible(true)}
-                    >
-                      查看其他词书
-                    </Button>
-                  </div>
-                )}
               </div>
             )}
           </Spin>
@@ -784,7 +906,17 @@ export default function ListeningTrainingPage() {
       {activeTab === 'vocabulary' && (
         <Card>
           <div style={{ marginBottom: 16 }}>
-            <Space>
+            <Space wrap>
+              <Select
+                style={{ width: 200 }}
+                placeholder="选择词书"
+                value={selectedWordbook || undefined}
+                onChange={setSelectedWordbook}
+              >
+                {wordbooks.map(wb => (
+                  <Option key={wb.id} value={wb.id}>{wb.name}</Option>
+                ))}
+              </Select>
               <Button type={vocabularyStatus === 'all' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('all')}>
                 全部 ({vocabularyCounts.all})
               </Button>
@@ -1234,79 +1366,87 @@ export default function ListeningTrainingPage() {
         </div>
       </Modal>
 
-      {/* 补充新词条提示弹窗 */}
+      {/* 自选词条弹窗 */}
       <Modal
-        title="词条数量不足"
-        open={supplementModalVisible}
-        onCancel={() => setSupplementModalVisible(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setSupplementModalVisible(false)}>
-            暂不补充
-          </Button>,
-          <Button
-            key="supplement"
-            type="primary"
-            onClick={() => {
-              setSupplementModalVisible(false);
-              fetchPracticeItems(true);
-              messageApi.success('已补充新词条');
-            }}
-          >
-            补充新词条
-          </Button>,
-        ]}
+        title="选择词条"
+        open={selectItemsModalVisible}
+        onCancel={() => setSelectItemsModalVisible(false)}
+        onOk={addSelectedItemsToPlan}
+        width={700}
+        confirmLoading={selectItemsLoading}
       >
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <p style={{ fontSize: 16, marginBottom: 16 }}>
-            当前待复习的词条只有 <strong>{practiceItems.length}</strong> 个，
-            距离每日目标 <strong>{dailyLimit}</strong> 个还缺少 <strong>{shortfall}</strong> 个。
-          </p>
-          <p style={{ color: '#666' }}>
-            是否从所有词书中补充新词条来学习？
-          </p>
-        </div>
-      </Modal>
-
-      {/* 更换词书提示弹窗 */}
-      <Modal
-        title="建议更换词书"
-        open={switchWordbookModalVisible}
-        onCancel={() => setSwitchWordbookModalVisible(false)}
-        footer={[
-          <Button key="cancel" onClick={() => setSwitchWordbookModalVisible(false)}>
-            暂不更换
-          </Button>,
-        ]}
-      >
-        <div style={{ padding: '10px 0' }}>
-          <p style={{ marginBottom: 16 }}>
-            即使补充了新词条，当前可用词条仍然不足。
-            以下词书还有未学习的词条，建议更换词书：
-          </p>
-          <div style={{ maxHeight: 300, overflow: 'auto' }}>
-            {availableWordbooks.map((wb) => (
-              <Card
-                key={wb.id}
-                size="small"
-                style={{ marginBottom: 8, cursor: 'pointer' }}
+        <Spin spinning={selectItemsLoading}>
+          {selectableWordbooks.length === 0 ? (
+            // 没有词书时的提示
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <BookOutlined style={{ fontSize: 64, color: '#d9d9d9', marginBottom: 16 }} />
+              <Title level={4} style={{ marginBottom: 8 }}>
+                还没有词书
+              </Title>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
+                请先创建或上传一个词书，然后才能选择词条进行学习
+              </Text>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
                 onClick={() => {
-                  setSelectedWordbook(wb.id);
-                  setSwitchWordbookModalVisible(false);
-                  messageApi.success(`已切换到词书: ${wb.name}`);
+                  setSelectItemsModalVisible(false);
+                  setActiveTab('wordbooks');
                 }}
-                hoverable
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 500 }}>{wb.name}</span>
-                  <Badge count={wb.new_items_count} style={{ backgroundColor: '#52c41a' }} />
-                </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
-                  共 {wb.total_items} 个词条，{wb.new_items_count} 个未学习
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+                去创建词书
+              </Button>
+            </div>
+          ) : (
+            <>
+              <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
+                <Select
+                  style={{ width: '100%' }}
+                  placeholder="选择词书"
+                  value={selectedWordbookForSelect}
+                  onChange={handleWordbookChangeForSelect}
+                >
+                  {selectableWordbooks.map(wb => (
+                    <Option key={wb.id} value={wb.id}>
+                      {wb.name} ({wb.total_items} 词条)
+                    </Option>
+                  ))}
+                </Select>
+                <Alert
+                  title={`已选择 ${selectedItemIds.length} 个词条`}
+                  type="info"
+                />
+              </Space>
+              <div style={{ maxHeight: 400, overflow: 'auto' }}>
+                {selectableItems.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <Text type="secondary">该词书没有可选的新词条</Text>
+                  </div>
+                ) : (
+                  <List
+                    dataSource={selectableItems}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <Checkbox
+                          checked={selectedItemIds.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedItemIds(prev => [...prev, item.id]);
+                            } else {
+                              setSelectedItemIds(prev => prev.filter(id => id !== item.id));
+                            }
+                          }}
+                        >
+                          <span>{item.content}</span>
+                        </Checkbox>
+                      </List.Item>
+                    )}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </Spin>
       </Modal>
     </div>
   );
