@@ -21,6 +21,7 @@ import {
   Checkbox,
   Tag,
   Alert,
+  Tabs,
 } from 'antd';
 import {
   SoundOutlined,
@@ -136,7 +137,7 @@ export default function ListeningTrainingPage() {
 
   // 自选词条弹窗
   const [selectItemsModalVisible, setSelectItemsModalVisible] = useState(false);
-  const [selectableItems, setSelectableItems] = useState<Array<{ id: string; content: string; status: string; wordbook_id?: string; wordbook_name?: string }>>([]);
+  const [selectableItems, setSelectableItems] = useState<Array<{ id: string; content: string; status: string; select_status: 'available' | 'selected' | 'learned'; wordbook_id?: string; wordbook_name?: string }>>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [selectItemsLoading, setSelectItemsLoading] = useState(false);
   const [selectableWordbooks, setSelectableWordbooks] = useState<Array<{ id: string; name: string; total_items: number }>>([]);
@@ -166,7 +167,7 @@ export default function ListeningTrainingPage() {
   }, [selectedWordbook, messageApi]);
 
   // 获取今日学习清单
-  const fetchPracticeItems = useCallback(async (extraMode = false, skipPrompt = false) => {
+  const fetchPracticeItems = useCallback(async (extraMode = false) => {
     setLoading(true);
     setIsExtraMode(extraMode);
     try {
@@ -184,10 +185,6 @@ export default function ListeningTrainingPage() {
         setNeededCount(data.data.needed_count);
         setTotalNeeded(data.data.total_needed);
         setReviewTotal(data.data.review_total);
-        // 如果跳过提示，直接显示练习界面
-        if (skipPrompt) {
-          setShowSelectPrompt(false);
-        }
         setCurrentIndex(0);
       }
     } catch (error) {
@@ -642,607 +639,627 @@ export default function ListeningTrainingPage() {
   const currentItem = practiceItems[currentIndex];
   const hasPendingItems = pendingCount > 0;
 
-  return (
-    <div style={{ padding: 24 }}>
-      <Title level={2}>听力训练</Title>
-      
-      {/* 顶部选择栏 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space size="large" wrap>
-          <Space>
-            <Button 
-              type={activeTab === 'practice' ? 'primary' : 'default'}
-              icon={<SoundOutlined />}
-              onClick={() => setActiveTab('practice')}
-            >
-              练习
-            </Button>
-            <Button 
-              type={activeTab === 'vocabulary' ? 'primary' : 'default'}
-              icon={<BookOutlined />}
-              onClick={() => setActiveTab('vocabulary')}
-            >
-              词本
-            </Button>
-            <Button 
-              type={activeTab === 'wordbooks' ? 'primary' : 'default'}
-              icon={<EyeOutlined />}
-              onClick={() => setActiveTab('wordbooks')}
-            >
-              词书管理
-            </Button>
-            <ActionButton
-              icon={<CalendarOutlined />}
-              tooltip="复习计划"
-              onClick={() => setActiveTab('schedule')}
-            />
-            <ActionButton
-              icon={<SettingOutlined />}
-              tooltip="设置"
-              onClick={() => setActiveTab('settings')}
-            />
-          </Space>
-        </Space>
-      </Card>
-
-      {/* 练习页面 */}
-      {activeTab === 'practice' && (
-        <Card>
-          <Spin spinning={loading} description="加载中...">
-            {!isExtraMode && !hasPendingItems && practiceItems.length > 0 ? (
-              // 今日任务完成界面
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <CheckCircleOutlined style={{ fontSize: 80, color: '#52c41a', marginBottom: 24 }} />
-                <Title level={3} style={{ marginBottom: 16 }}>
-                  🎉 今日任务已完成！
-                </Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
-                  已完成 {completedToday} / {dailyLimit} 个词条
+  // 渲染练习页面内容
+  const renderPracticeContent = () => (
+    <Card>
+      <Spin spinning={loading} description="加载中...">
+        {!isExtraMode && !hasPendingItems && practiceItems.length > 0 ? (
+          // 今日任务完成界面
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <CheckCircleOutlined style={{ fontSize: 80, color: '#52c41a', marginBottom: 24 }} />
+            <Title level={3} style={{ marginBottom: 16 }}>
+              🎉 今日任务已完成！
+            </Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
+              已完成 {completedToday} / {dailyLimit} 个词条
+            </Text>
+            <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+              <Text style={{ color: '#52c41a', fontWeight: 500 }}>
+                太棒了！今日学习目标已达成
+              </Text>
+            </div>
+            <Space size="large">
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={() => fetchSelectableItems()}
+              >
+                自选词条加练
+              </Button>
+              <Button
+                size="large"
+                onClick={() => setActiveTab('vocabulary')}
+              >
+                查看词本
+              </Button>
+            </Space>
+          </div>
+        ) : !isExtraMode && needMoreItems && showSelectPrompt ? (
+          // 需要补充新词条的提示界面
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Title level={3} style={{ marginBottom: 16 }}>
+              今日学习清单
+            </Title>
+            <div style={{ marginBottom: 24 }}>
+              <Space orientation="vertical" size="small">
+                <Text type="secondary">
+                  每日目标: {dailyLimit} 个词条
                 </Text>
-                <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
-                  <Text style={{ color: '#52c41a', fontWeight: 500 }}>
-                    太棒了！今日学习目标已达成
-                  </Text>
-                </div>
-                <Space size="large">
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={<PlusOutlined />}
-                    onClick={() => fetchSelectableItems()}
-                  >
-                    自选词条加练
-                  </Button>
-                  <Button
-                    size="large"
-                    onClick={() => setActiveTab('vocabulary')}
-                  >
-                    查看词本
-                  </Button>
-                </Space>
-              </div>
-            ) : !isExtraMode && needMoreItems && showSelectPrompt ? (
-              // 需要补充新词条的提示界面
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <Title level={3} style={{ marginBottom: 16 }}>
-                  今日学习清单
-                </Title>
-                <div style={{ marginBottom: 24 }}>
-                  <Space direction="vertical" size="small">
-                    <Text type="secondary">
-                      每日目标: {dailyLimit} 个词条
-                    </Text>
-                    <Text type="secondary">
-                      待复习词条: {reviewTotal} 个
-                    </Text>
-                    <Text type="secondary">
-                      已选新词条: {newCount} 个
-                    </Text>
-                  </Space>
-                </div>
-                {neededCount > 0 ? (
-                  <div style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
-                    <Text style={{ color: '#1890ff', fontWeight: 500 }}>
-                      还可以选择 {neededCount} 个新词条（选几个都行）
-                    </Text>
-                  </div>
-                ) : (
-                  <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
-                    <Text style={{ color: '#52c41a', fontWeight: 500 }}>
-                      词条数量已达到每日目标，可以开始学习啦！
-                    </Text>
-                  </div>
-                )}
-                <Space size="large">
-                  {neededCount > 0 && (
-                    <Button
-                      type="primary"
-                      size="large"
-                      icon={<PlusOutlined />}
-                      onClick={() => fetchSelectableItems()}
-                    >
-                      选择新词条
-                    </Button>
-                  )}
-                  <Button
-                    type={neededCount > 0 ? 'default' : 'primary'}
-                    size="large"
-                    onClick={() => setShowSelectPrompt(false)}
-                  >
-                    开始学习
-                  </Button>
-                </Space>
-              </div>
-            ) : isExtraMode && !hasPendingItems ? (
-              // 加练模式，但没有选择词条
-              <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                <Title level={3} style={{ marginBottom: 16 }}>
-                  加练模式
-                </Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
-                  请选择要加练的词条
+                <Text type="secondary">
+                  待复习词条: {reviewTotal} 个
                 </Text>
+                <Text type="secondary">
+                  已选新词条: {newCount} 个
+                </Text>
+              </Space>
+            </div>
+            {neededCount > 0 ? (
+              <div style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+                <Text style={{ color: '#1890ff', fontWeight: 500 }}>
+                  还可以选择 {neededCount} 个新词条（选几个都行）
+                </Text>
+              </div>
+            ) : (
+              <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+                <Text style={{ color: '#52c41a', fontWeight: 500 }}>
+                  词条数量已达到每日目标，可以开始学习啦！
+                </Text>
+              </div>
+            )}
+            <Space size="large">
+              {neededCount > 0 && (
                 <Button
                   type="primary"
                   size="large"
                   icon={<PlusOutlined />}
                   onClick={() => fetchSelectableItems()}
                 >
-                  选择加练词条
+                  选择新词条
                 </Button>
-                <div style={{ marginTop: 16 }}>
-                  <Button onClick={() => fetchPracticeItems(false)}>
-                    返回日常学习
-                  </Button>
-                </div>
-              </div>
-            ) : practiceItems.length > 0 && currentItem ? (
-              // 正常练习界面
-              <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                {/* 显示词书来源和词条类型 */}
-                <div style={{ marginBottom: 16 }}>
-                  <Space>
-                    <Text type="secondary">
-                      来自词书: {currentItem.wordbook_name}
-                    </Text>
-                    <Tag color={currentItem.item_type === 'review' ? 'blue' : 'green'}>
-                      {currentItem.item_type === 'review' ? '待复习' : '新词条'}
-                    </Tag>
-                  </Space>
-                </div>
-                
-                <Row justify="center" style={{ marginBottom: 40 }}>
-                  <Col>
-                    <Button
-                      type="primary"
-                      size="large"
-                      icon={<SoundOutlined />}
-                      onClick={() => playAudio(currentItem.content)}
-                      loading={audioLoading}
-                      style={{ width: 200, height: 60, fontSize: 18 }}
-                    >
-                      播放音频
-                    </Button>
-                  </Col>
-                </Row>
-
-                <div style={{ marginBottom: 40 }}>
-                  <Text type="secondary">
-                    {isExtraMode ? '加练模式' : `今日学习: ${completedToday} / ${dailyLimit}`}
-                    {!isExtraMode && (
-                      <span style={{ marginLeft: 16 }}>
-                        (待复习: {reviewCount}, 新词条: {newCount})
-                      </span>
-                    )}
-                  </Text>
-                  {!isExtraMode && (
-                    <Progress 
-                      percent={Math.min(Math.round((completedToday / dailyLimit) * 100), 100)} 
-                      showInfo={false}
-                      style={{ marginTop: 8, maxWidth: 400, margin: '8px auto' }}
-                    />
-                  )}
-                </div>
-
-                <Row justify="center" gutter={[16, 16]}>
-                  <Col xs={8} sm={8} md={8} lg={8}>
-                    <Button
-                      size="large"
-                      danger
-                      block
-                      style={{ height: 50, fontSize: 15 }}
-                      onClick={() => submitReview('unknown')}
-                    >
-                      没懂
-                    </Button>
-                  </Col>
-                  <Col xs={8} sm={8} md={8} lg={8}>
-                    <Button
-                      size="large"
-                      type="primary"
-                      block
-                      style={{ height: 50, fontSize: 15 }}
-                      onClick={() => submitReview('known')}
-                    >
-                      懂了
-                    </Button>
-                  </Col>
-                  <Col xs={8} sm={8} md={8} lg={8}>
-                    <Button
-                      size="large"
-                      block
-                      style={{ height: 50, backgroundColor: '#52c41a', color: '#fff', fontSize: 15 }}
-                      onClick={() => submitReview('familiar')}
-                    >
-                      熟识
-                    </Button>
-                  </Col>
-                </Row>
-
-                {isExtraMode && (
-                  <div style={{ marginTop: 24 }}>
-                    <Button onClick={() => fetchPracticeItems(false)}>
-                      结束加练，返回日常学习
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '80px 0' }}>
-                <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
-                <Title level={4}>
-                  暂无学习清单
-                </Title>
-                <Text type="secondary">
-                  请先创建词书并添加词条
-                </Text>
-              </div>
-            )}
-          </Spin>
-        </Card>
-      )}
-
-      {/* 词本页面 */}
-      {activeTab === 'vocabulary' && (
-        <Card>
-          <div style={{ marginBottom: 16 }}>
-            <Space wrap>
-              <Select
-                style={{ width: 200 }}
-                placeholder="选择词书"
-                value={selectedWordbook || undefined}
-                onChange={setSelectedWordbook}
+              )}
+              <Button
+                type={neededCount > 0 ? 'default' : 'primary'}
+                size="large"
+                onClick={() => setShowSelectPrompt(false)}
               >
-                {wordbooks.map(wb => (
-                  <Option key={wb.id} value={wb.id}>{wb.name}</Option>
-                ))}
-              </Select>
-              <Button type={vocabularyStatus === 'all' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('all')}>
-                全部 ({vocabularyCounts.all})
-              </Button>
-              <Button type={vocabularyStatus === 'unknown' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('unknown')}>
-                没懂 ({vocabularyCounts.unknown})
-              </Button>
-              <Button type={vocabularyStatus === 'known' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('known')}>
-                懂了 ({vocabularyCounts.known})
-              </Button>
-              <Button type={vocabularyStatus === 'familiar' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('familiar')}>
-                熟识 ({vocabularyCounts.familiar})
+                开始学习
               </Button>
             </Space>
           </div>
-
-          <Spin spinning={loading} description="加载中...">
-            <Row gutter={[16, 16]}>
-              {vocabularyItems.map((item) => (
-                <Col key={item.id} xs={24} sm={12} md={8} lg={6} xl={6} xxl={4}>
-                  <Card
-                    size="small"
-                    hoverable
-                    onClick={() => {
-                      setSelectedItem(item);
-                      setDetailModalVisible(true);
-                    }}
-                    extra={
-                      <Badge
-                        status={item.status === 'unknown' ? 'error' : item.status === 'known' ? 'warning' : 'success'}
-                        text={item.status === 'unknown' ? '没懂' : item.status === 'known' ? '懂了' : '熟识'}
-                      />
-                    }
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <SoundOutlined />
-                      <Text ellipsis style={{ flex: 1 }}>{item.content}</Text>
-                    </div>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
-          </Spin>
-        </Card>
-      )}
-
-      {/* 词书管理页面 */}
-      {activeTab === 'wordbooks' && (
-        <Card>
-          <div style={{ marginBottom: 16 }}>
-            <Space>
-              <Button type="primary" onClick={() => setUploadModalVisible(true)}>
-                上传词书
-              </Button>
-              <Button onClick={() => setEditModalVisible(true)}>
-                在线创建
-              </Button>
-            </Space>
-          </div>
-
-          <Row gutter={[16, 16]}>
-            {wordbooks.map((wb) => (
-              <Col key={wb.id} xs={24} sm={12} md={8} lg={8} xl={6} xxl={6}>
-                <Card
-                  size="small"
-                  hoverable
-                  actions={[
-                    <Button key="practice" type="link" onClick={() => {
-                      setSelectedWordbook(wb.id);
-                      setActiveTab('practice');
-                    }}>练习</Button>,
-                    <Button key="delete" danger type="link" onClick={() => deleteWordbook(wb.id)}>删除</Button>,
-                  ]}
-                >
-                  <Card.Meta
-                    title={wb.name}
-                    description={`${wb.total_items} 词条 · ${new Date(wb.created_at).toLocaleDateString()}`}
-                  />
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </Card>
-      )}
-
-      {/* 设置页面 */}
-      {activeTab === 'settings' && (
-        <Card
-          title="学习设置"
-          loading={settingsLoading}
-          extra={
+        ) : isExtraMode && !hasPendingItems ? (
+          // 加练模式，但没有选择词条
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Title level={3} style={{ marginBottom: 16 }}>
+              加练模式
+            </Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 16 }}>
+              请选择要加练的词条
+            </Text>
             <Button
               type="primary"
-              onClick={saveUserSettings}
-              disabled={!settingsChanged}
+              size="large"
+              icon={<PlusOutlined />}
+              onClick={() => fetchSelectableItems()}
             >
-              保存设置
+              选择加练词条
             </Button>
-          }
-        >
-          <Form layout="vertical" style={{ maxWidth: 600 }}>
-            <Form.Item label="每日学习数量">
-              <InputNumber
-                min={1}
-                max={100}
-                value={settingsForm.daily_limit}
-                onChange={(value) => {
-                  if (value) {
-                    updateSettingsForm({ daily_limit: value });
-                  }
-                }}
-                style={{ width: 200 }}
-              />
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                每天最多学习 {settingsForm.daily_limit} 个词条
-              </Text>
-            </Form.Item>
-
-            <Divider />
-
-            <Form.Item label="词条出现顺序">
-              <Select
-                value={settingsForm.item_order}
-                onChange={(value) => updateSettingsForm({ item_order: value })}
-                style={{ width: 200 }}
-              >
-                <Option value="sequential">顺序出现</Option>
-                <Option value="random">随机出现</Option>
-              </Select>
-            </Form.Item>
-
-            <Divider />
-
-            <Form.Item label="自动播放">
-              <Space>
-                <Switch
-                  checked={settingsForm.auto_play}
-                  onChange={(checked) => updateSettingsForm({ auto_play: checked })}
-                />
-                <Text type="secondary">
-                  {settingsForm.auto_play ? '提交后自动播放下一个词条' : '手动点击播放'}
-                </Text>
-              </Space>
-            </Form.Item>
-
-            <Divider />
-
-            <Form.Item label="优先复习">
-              <Space>
-                <Switch
-                  checked={settingsForm.review_unknown_first}
-                  onChange={(checked) => updateSettingsForm({ review_unknown_first: checked })}
-                />
-                <Text type="secondary">
-                  {settingsForm.review_unknown_first ? '优先复习"没懂"的词条' : '按默认顺序复习'}
-                </Text>
-              </Space>
-            </Form.Item>
-
-            <Divider />
-
-            <Form.Item label="播放次数">
-              <InputNumber
-                min={1}
-                max={10}
-                value={settingsForm.play_count}
-                onChange={(value) => {
-                  if (value) {
-                    updateSettingsForm({ play_count: value });
-                  }
-                }}
-                style={{ width: 200 }}
-              />
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                每个词条播放 {settingsForm.play_count} 次
-              </Text>
-            </Form.Item>
-
-            <Divider />
-
-            <Form.Item label="播放间隔">
-              <InputNumber
-                min={0}
-                max={10}
-                step={0.5}
-                value={settingsForm.play_interval}
-                onChange={(value) => {
-                  if (value !== null) {
-                    updateSettingsForm({ play_interval: value });
-                  }
-                }}
-                style={{ width: 200 }}
-              />
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                多次播放之间的间隔时间（秒）
-              </Text>
-            </Form.Item>
-          </Form>
-        </Card>
-      )}
-
-      {/* 复习计划页面 */}
-      {activeTab === 'schedule' && (
-        <Spin spinning={scheduleLoading} description="加载中...">
-          <Card>
+            <div style={{ marginTop: 16 }}>
+              <Button onClick={() => fetchPracticeItems(false)}>
+                返回日常学习
+              </Button>
+            </div>
+          </div>
+        ) : practiceItems.length > 0 && currentItem ? (
+          // 正常练习界面
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            {/* 显示词书来源和词条类型 */}
             <div style={{ marginBottom: 16 }}>
               <Space>
-                <CalendarOutlined />
-                <Text>时间范围:</Text>
-                <Select
-                  value={scheduleDays}
-                  onChange={(value) => setScheduleDays(value)}
-                  style={{ width: 120 }}
-                  options={[
-                    { value: 7, label: '未来7天' },
-                    { value: 14, label: '未来14天' },
-                    { value: 30, label: '未来30天' },
-                    { value: 60, label: '未来60天' },
-                    { value: 90, label: '未来90天' },
-                  ]}
-                />
-                <Button icon={<ReloadOutlined />} onClick={fetchSchedule} loading={scheduleLoading}>
-                  刷新
-                </Button>
+                <Text type="secondary">
+                  来自词书: {currentItem.wordbook_name}
+                </Text>
+                <Tag color={currentItem.item_type === 'review' ? 'blue' : 'green'}>
+                  {currentItem.item_type === 'review' ? '待复习' : '新词条'}
+                </Tag>
               </Space>
             </div>
+            
+            <Row justify="center" style={{ marginBottom: 40 }}>
+              <Col>
+                <Button
+                  type="primary"
+                  size="large"
+                  icon={<SoundOutlined />}
+                  onClick={() => playAudio(currentItem.content)}
+                  loading={audioLoading}
+                  style={{ width: 200, height: 60, fontSize: 18 }}
+                >
+                  播放音频
+                </Button>
+              </Col>
+            </Row>
 
-            {scheduleData.length > 0 ? (
-              <>
-                {/* 统计摘要 */}
-                {scheduleSummary && (
-                  <Card style={{ marginBottom: 16, backgroundColor: '#f6ffed' }}>
-                    <Space size="large" wrap>
-                      <div>
-                        <Text type="secondary">每日学习上限</Text>
-                        <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
-                          {scheduleSummary.dailyLimit} 个
-                        </div>
-                      </div>
-                      <div>
-                        <Text type="secondary">待学习新词条</Text>
-                        <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff' }}>
-                          {scheduleSummary.totalNewItems} 个
-                        </div>
-                      </div>
-                      <div>
-                        <Text type="secondary">今日已完成</Text>
-                        <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
-                          {scheduleSummary.todayCompleted} 个
-                        </div>
-                      </div>
-                    </Space>
-                  </Card>
+            <div style={{ marginBottom: 40 }}>
+              <Text type="secondary">
+                {isExtraMode ? '加练模式' : `今日学习: ${completedToday} / ${dailyLimit}`}
+                {!isExtraMode && (
+                  <span style={{ marginLeft: 16 }}>
+                    (待复习: {reviewCount}, 新词条: {newCount})
+                  </span>
                 )}
-
-                <ReactECharts
-                  option={{
-                    title: {
-                      text: `未来${scheduleDays}天复习计划统计`,
-                      left: 'center',
-                      textStyle: { fontSize: 18, fontWeight: 'normal' },
-                    },
-                    tooltip: {
-                      trigger: 'axis',
-                      formatter: (params: any) => {
-                        const data = params[0];
-                        const dateIndex = data.dataIndex;
-                        const item = scheduleData[dateIndex];
-                        if (!item) return '';
-                        return `${item.date}<br/>总计: <b>${item.count}</b> 个词条<br/>新词条: ${item.newItems} 个<br/>复习: ${item.reviewItems} 个`;
-                      },
-                    },
-                    legend: {
-                      data: ['新词条', '复习词条'],
-                      bottom: 0,
-                    },
-                    grid: {
-                      left: '3%',
-                      right: '4%',
-                      bottom: '15%',
-                      top: '15%',
-                      containLabel: true,
-                    },
-                    xAxis: {
-                      type: 'category',
-                      data: scheduleData.map((item) => dayjs(item.date).format('MM-DD')),
-                      axisLabel: {
-                        rotate: 45,
-                        interval: Math.floor(scheduleData.length / 10),
-                      },
-                    },
-                    yAxis: {
-                      type: 'value',
-                      name: '词条数量',
-                      minInterval: 1,
-                    },
-                    series: [
-                      {
-                        name: '新词条',
-                        type: 'bar',
-                        stack: 'total',
-                        data: scheduleData.map((item) => item.newItems),
-                        itemStyle: { color: '#1890ff' },
-                      },
-                      {
-                        name: '复习词条',
-                        type: 'bar',
-                        stack: 'total',
-                        data: scheduleData.map((item) => item.reviewItems),
-                        itemStyle: { color: '#52c41a' },
-                      },
-                    ],
-                  }}
-                  style={{ height: 400, width: '100%' }}
-                  opts={{ renderer: 'canvas' }}
+              </Text>
+              {!isExtraMode && (
+                <Progress 
+                  percent={Math.min(Math.round((completedToday / dailyLimit) * 100), 100)} 
+                  showInfo={false}
+                  style={{ marginTop: 8, maxWidth: 400, margin: '8px auto' }}
                 />
+              )}
+            </div>
 
+            <Row justify="center" gutter={[16, 16]}>
+              <Col xs={8} sm={8} md={8} lg={8}>
+                <Button
+                  size="large"
+                  danger
+                  block
+                  style={{ height: 50, fontSize: 15 }}
+                  onClick={() => submitReview('unknown')}
+                >
+                  没懂
+                </Button>
+              </Col>
+              <Col xs={8} sm={8} md={8} lg={8}>
+                <Button
+                  size="large"
+                  type="primary"
+                  block
+                  style={{ height: 50, fontSize: 15 }}
+                  onClick={() => submitReview('known')}
+                >
+                  懂了
+                </Button>
+              </Col>
+              <Col xs={8} sm={8} md={8} lg={8}>
+                <Button
+                  size="large"
+                  block
+                  style={{ height: 50, backgroundColor: '#52c41a', color: '#fff', fontSize: 15 }}
+                  onClick={() => submitReview('familiar')}
+                >
+                  熟识
+                </Button>
+              </Col>
+            </Row>
 
-              </>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '80px 0' }}>
-                <Text type="secondary">暂无复习计划数据</Text>
+            {isExtraMode && (
+              <div style={{ marginTop: 24 }}>
+                <Button onClick={() => fetchPracticeItems(false)}>
+                  结束加练，返回日常学习
+                </Button>
               </div>
             )}
-          </Card>
-        </Spin>
-      )}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+            <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
+            <Title level={4}>
+              暂无学习清单
+            </Title>
+            <Text type="secondary">
+              请先创建词书并添加词条
+            </Text>
+          </div>
+        )}
+      </Spin>
+    </Card>
+  );
+
+  // 渲染词本页面内容
+  const renderVocabularyContent = () => (
+    <Card>
+      <div style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Select
+            style={{ width: 200 }}
+            placeholder="选择词书"
+            value={selectedWordbook || undefined}
+            onChange={setSelectedWordbook}
+          >
+            {wordbooks.map(wb => (
+              <Option key={wb.id} value={wb.id}>{wb.name}</Option>
+            ))}
+          </Select>
+          <Button type={vocabularyStatus === 'all' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('all')}>
+            全部 ({vocabularyCounts.all})
+          </Button>
+          <Button type={vocabularyStatus === 'unknown' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('unknown')}>
+            没懂 ({vocabularyCounts.unknown})
+          </Button>
+          <Button type={vocabularyStatus === 'known' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('known')}>
+            懂了 ({vocabularyCounts.known})
+          </Button>
+          <Button type={vocabularyStatus === 'familiar' ? 'primary' : 'default'} onClick={() => setVocabularyStatus('familiar')}>
+            熟识 ({vocabularyCounts.familiar})
+          </Button>
+        </Space>
+      </div>
+
+      <Spin spinning={loading} description="加载中...">
+        <Row gutter={[16, 16]}>
+          {vocabularyItems.map((item) => (
+            <Col key={item.id} xs={24} sm={12} md={8} lg={6} xl={6} xxl={4}>
+              <Card
+                size="small"
+                hoverable
+                onClick={() => {
+                  setSelectedItem(item);
+                  setDetailModalVisible(true);
+                }}
+                extra={
+                  <Badge
+                    status={item.status === 'unknown' ? 'error' : item.status === 'known' ? 'warning' : 'success'}
+                    text={item.status === 'unknown' ? '没懂' : item.status === 'known' ? '懂了' : '熟识'}
+                  />
+                }
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <SoundOutlined />
+                  <Text ellipsis style={{ flex: 1 }}>{item.content}</Text>
+                </div>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </Spin>
+    </Card>
+  );
+
+  // 渲染词书管理页面内容
+  const renderWordbooksContent = () => (
+    <Card>
+      <div style={{ marginBottom: 16 }}>
+        <Space>
+          <Button type="primary" onClick={() => setUploadModalVisible(true)}>
+            上传词书
+          </Button>
+          <Button onClick={() => setEditModalVisible(true)}>
+            在线创建
+          </Button>
+        </Space>
+      </div>
+
+      <Row gutter={[16, 16]}>
+        {wordbooks.map((wb) => (
+          <Col key={wb.id} xs={24} sm={12} md={8} lg={8} xl={6} xxl={6}>
+            <Card
+              size="small"
+              hoverable
+              actions={[
+                <Button key="practice" type="link" onClick={() => {
+                  setSelectedWordbook(wb.id);
+                  setActiveTab('practice');
+                }}>练习</Button>,
+                <Button key="delete" danger type="link" onClick={() => deleteWordbook(wb.id)}>删除</Button>,
+              ]}
+            >
+              <Card.Meta
+                title={wb.name}
+                description={`${wb.total_items} 词条 · ${new Date(wb.created_at).toLocaleDateString()}`}
+              />
+            </Card>
+          </Col>
+        ))}
+      </Row>
+    </Card>
+  );
+
+  // 渲染设置页面内容
+  const renderSettingsContent = () => (
+    <Card
+      title="学习设置"
+      loading={settingsLoading}
+      extra={
+        <Button
+          type="primary"
+          onClick={saveUserSettings}
+          disabled={!settingsChanged}
+        >
+          保存设置
+        </Button>
+      }
+    >
+      <Form layout="vertical" style={{ maxWidth: 600 }}>
+        <Form.Item label="每日学习数量">
+          <InputNumber
+            min={1}
+            max={100}
+            value={settingsForm.daily_limit}
+            onChange={(value) => {
+              if (value) {
+                updateSettingsForm({ daily_limit: value });
+              }
+            }}
+            style={{ width: 200 }}
+          />
+          <Text type="secondary" style={{ marginLeft: 8 }}>
+            每天最多学习 {settingsForm.daily_limit} 个词条
+          </Text>
+        </Form.Item>
+
+        <Divider />
+
+        <Form.Item label="词条出现顺序">
+          <Select
+            value={settingsForm.item_order}
+            onChange={(value) => updateSettingsForm({ item_order: value })}
+            style={{ width: 200 }}
+          >
+            <Option value="sequential">顺序出现</Option>
+            <Option value="random">随机出现</Option>
+          </Select>
+        </Form.Item>
+
+        <Divider />
+
+        <Form.Item label="自动播放">
+          <Space>
+            <Switch
+              checked={settingsForm.auto_play}
+              onChange={(checked) => updateSettingsForm({ auto_play: checked })}
+            />
+            <Text type="secondary">
+              {settingsForm.auto_play ? '提交后自动播放下一个词条' : '手动点击播放'}
+            </Text>
+          </Space>
+        </Form.Item>
+
+        <Divider />
+
+        <Form.Item label="优先复习">
+          <Space>
+            <Switch
+              checked={settingsForm.review_unknown_first}
+              onChange={(checked) => updateSettingsForm({ review_unknown_first: checked })}
+            />
+            <Text type="secondary">
+              {settingsForm.review_unknown_first ? '优先复习"没懂"的词条' : '按默认顺序复习'}
+            </Text>
+          </Space>
+        </Form.Item>
+
+        <Divider />
+
+        <Form.Item label="播放次数">
+          <InputNumber
+            min={1}
+            max={10}
+            value={settingsForm.play_count}
+            onChange={(value) => {
+              if (value) {
+                updateSettingsForm({ play_count: value });
+              }
+            }}
+            style={{ width: 200 }}
+          />
+          <Text type="secondary" style={{ marginLeft: 8 }}>
+            每个词条播放 {settingsForm.play_count} 次
+          </Text>
+        </Form.Item>
+
+        <Divider />
+
+        <Form.Item label="播放间隔">
+          <InputNumber
+            min={0}
+            max={10}
+            step={0.5}
+            value={settingsForm.play_interval}
+            onChange={(value) => {
+              if (value !== null) {
+                updateSettingsForm({ play_interval: value });
+              }
+            }}
+            style={{ width: 200 }}
+          />
+          <Text type="secondary" style={{ marginLeft: 8 }}>
+            多次播放之间的间隔时间（秒）
+          </Text>
+        </Form.Item>
+      </Form>
+    </Card>
+  );
+
+  // 渲染复习计划页面内容
+  const renderScheduleContent = () => (
+    <Spin spinning={scheduleLoading} description="加载中...">
+      <Card>
+        <div style={{ marginBottom: 16 }}>
+          <Space>
+            <CalendarOutlined />
+            <Text>时间范围:</Text>
+            <Select
+              value={scheduleDays}
+              onChange={(value) => setScheduleDays(value)}
+              style={{ width: 120 }}
+              options={[
+                { value: 7, label: '未来7天' },
+                { value: 14, label: '未来14天' },
+                { value: 30, label: '未来30天' },
+                { value: 60, label: '未来60天' },
+                { value: 90, label: '未来90天' },
+              ]}
+            />
+            <Button icon={<ReloadOutlined />} onClick={fetchSchedule} loading={scheduleLoading}>
+              刷新
+            </Button>
+          </Space>
+        </div>
+
+        {scheduleData.length > 0 ? (
+          <>
+            {/* 统计摘要 */}
+            {scheduleSummary && (
+              <Card style={{ marginBottom: 16, backgroundColor: '#f6ffed' }}>
+                <Space size="large" wrap>
+                  <div>
+                    <Text type="secondary">每日学习上限</Text>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                      {scheduleSummary.dailyLimit} 个
+                    </div>
+                  </div>
+                  <div>
+                    <Text type="secondary">待学习新词条</Text>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff' }}>
+                      {scheduleSummary.totalNewItems} 个
+                    </div>
+                  </div>
+                  <div>
+                    <Text type="secondary">今日已完成</Text>
+                    <div style={{ fontSize: 24, fontWeight: 'bold', color: '#52c41a' }}>
+                      {scheduleSummary.todayCompleted} 个
+                    </div>
+                  </div>
+                </Space>
+              </Card>
+            )}
+
+            <ReactECharts
+              option={{
+                title: {
+                  text: `未来${scheduleDays}天复习计划统计`,
+                  left: 'center',
+                  textStyle: { fontSize: 18, fontWeight: 'normal' },
+                },
+                tooltip: {
+                  trigger: 'axis',
+                  formatter: (params: any) => {
+                    const data = params[0];
+                    const dateIndex = data.dataIndex;
+                    const item = scheduleData[dateIndex];
+                    if (!item) return '';
+                    return `${item.date}<br/>总计: <b>${item.count}</b> 个词条<br/>新词条: ${item.newItems} 个<br/>复习: ${item.reviewItems} 个`;
+                  },
+                },
+                legend: {
+                  data: ['新词条', '复习词条'],
+                  bottom: 0,
+                },
+                grid: {
+                  left: '3%',
+                  right: '4%',
+                  bottom: '15%',
+                  top: '15%',
+                  containLabel: true,
+                },
+                xAxis: {
+                  type: 'category',
+                  data: scheduleData.map((item) => dayjs(item.date).format('MM-DD')),
+                  axisLabel: {
+                    rotate: 45,
+                    interval: Math.floor(scheduleData.length / 10),
+                  },
+                },
+                yAxis: {
+                  type: 'value',
+                  name: '词条数量',
+                  minInterval: 1,
+                },
+                series: [
+                  {
+                    name: '新词条',
+                    type: 'bar',
+                    stack: 'total',
+                    data: scheduleData.map((item) => item.newItems),
+                    itemStyle: { color: '#1890ff' },
+                  },
+                  {
+                    name: '复习词条',
+                    type: 'bar',
+                    stack: 'total',
+                    data: scheduleData.map((item) => item.reviewItems),
+                    itemStyle: { color: '#52c41a' },
+                  },
+                ],
+              }}
+              style={{ height: 400, width: '100%' }}
+              opts={{ renderer: 'canvas' }}
+            />
+
+
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+            <Text type="secondary">暂无复习计划数据</Text>
+          </div>
+        )}
+      </Card>
+    </Spin>
+  );
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Title level={2}>听力训练</Title>
+      
+      {/* 顶部 Tabs 导航 */}
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as typeof activeTab)}
+        style={{ marginBottom: 16 }}
+        items={[
+          {
+            key: 'practice',
+            label: (
+              <span>
+                <SoundOutlined />
+                练习
+              </span>
+            ),
+            children: renderPracticeContent(),
+          },
+          {
+            key: 'vocabulary',
+            label: (
+              <span>
+                <BookOutlined />
+                词本
+              </span>
+            ),
+            children: renderVocabularyContent(),
+          },
+          {
+            key: 'wordbooks',
+            label: (
+              <span>
+                <EyeOutlined />
+                词书管理
+              </span>
+            ),
+            children: renderWordbooksContent(),
+          },
+          {
+            key: 'schedule',
+            label: (
+              <span>
+                <CalendarOutlined />
+                复习计划
+              </span>
+            ),
+            children: renderScheduleContent(),
+          },
+          {
+            key: 'settings',
+            label: (
+              <span>
+                <SettingOutlined />
+                设置
+              </span>
+            ),
+            children: renderSettingsContent(),
+          },
+        ]}
+      />
 
       {/* 词条详情弹窗 */}
       <Modal
@@ -1368,7 +1385,7 @@ export default function ListeningTrainingPage() {
 
       {/* 自选词条弹窗 */}
       <Modal
-        title="选择词条"
+        title={`选择词条 (还需要 ${neededCount} 个)`}
         open={selectItemsModalVisible}
         onCancel={() => setSelectItemsModalVisible(false)}
         onOk={addSelectedItemsToPlan}
@@ -1399,7 +1416,7 @@ export default function ListeningTrainingPage() {
             </div>
           ) : (
             <>
-              <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
+              <Space orientation="vertical" style={{ width: '100%', marginBottom: 16 }}>
                 <Select
                   style={{ width: '100%' }}
                   placeholder="选择词书"
@@ -1412,36 +1429,96 @@ export default function ListeningTrainingPage() {
                     </Option>
                   ))}
                 </Select>
+                
+                {/* 一键选择按钮 */}
+                <Space wrap>
+                  <Button 
+                    onClick={() => {
+                      // 顺序选择：选择前 neededCount 个可用词条
+                      const availableItems = selectableItems.filter(item => item.select_status === 'available');
+                      const itemsToSelect = availableItems.slice(0, neededCount);
+                      setSelectedItemIds(itemsToSelect.map(item => item.id));
+                    }}
+                    disabled={neededCount <= 0}
+                  >
+                    顺序选择 {neededCount} 个
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      // 随机选择：随机选择 neededCount 个可用词条
+                      const availableItems = selectableItems.filter(item => item.select_status === 'available');
+                      const shuffled = [...availableItems].sort(() => Math.random() - 0.5);
+                      const itemsToSelect = shuffled.slice(0, neededCount);
+                      setSelectedItemIds(itemsToSelect.map(item => item.id));
+                    }}
+                    disabled={neededCount <= 0}
+                  >
+                    随机选择 {neededCount} 个
+                  </Button>
+                  <Button 
+                    onClick={() => setSelectedItemIds([])}
+                    disabled={selectedItemIds.length === 0}
+                  >
+                    清空选择
+                  </Button>
+                </Space>
+
                 <Alert
-                  title={`已选择 ${selectedItemIds.length} 个词条`}
+                  title={`已选择 ${selectedItemIds.length} 个词条 (还需要 ${Math.max(0, neededCount - selectedItemIds.length)} 个)`}
                   type="info"
                 />
               </Space>
               <div style={{ maxHeight: 400, overflow: 'auto' }}>
                 {selectableItems.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <Text type="secondary">该词书没有可选的新词条</Text>
+                    <Text type="secondary">该词书没有词条</Text>
                   </div>
                 ) : (
-                  <List
-                    dataSource={selectableItems}
-                    renderItem={(item) => (
-                      <List.Item>
-                        <Checkbox
-                          checked={selectedItemIds.includes(item.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedItemIds(prev => [...prev, item.id]);
-                            } else {
-                              setSelectedItemIds(prev => prev.filter(id => id !== item.id));
-                            }
-                          }}
-                        >
-                          <span>{item.content}</span>
-                        </Checkbox>
-                      </List.Item>
-                    )}
-                  />
+                  <Row gutter={[0, 0]}>
+                    {selectableItems.map((item: any) => {
+                      const isSelected = selectedItemIds.includes(item.id);
+                      const isAlreadySelected = item.select_status === 'selected';
+                      const isLearned = item.select_status === 'learned';
+                      
+                      return (
+                        <Col key={item.id} span={24}>
+                          <div style={{ 
+                            opacity: isAlreadySelected || isLearned ? 0.5 : 1,
+                            backgroundColor: isAlreadySelected ? '#f6ffed' : isLearned ? '#fff7e6' : 'transparent',
+                            padding: '8px 16px',
+                            borderBottom: '1px solid #f0f0f0'
+                          }}>
+                            <Checkbox
+                              checked={isSelected || isAlreadySelected}
+                              disabled={isAlreadySelected || isLearned}
+                              onChange={(e) => {
+                                if (isAlreadySelected || isLearned) return;
+                                if (e.target.checked) {
+                                  setSelectedItemIds(prev => [...prev, item.id]);
+                                } else {
+                                  setSelectedItemIds(prev => prev.filter(id => id !== item.id));
+                                }
+                              }}
+                            >
+                              <Space>
+                                <span style={{ 
+                                  textDecoration: isLearned ? 'line-through' : 'none'
+                                }}>
+                                  {item.content}
+                                </span>
+                                {isAlreadySelected && (
+                                  <Tag color="green">已加入今日清单</Tag>
+                                )}
+                                {isLearned && (
+                                  <Tag color="orange">已学习</Tag>
+                                )}
+                              </Space>
+                            </Checkbox>
+                          </div>
+                        </Col>
+                      );
+                    })}
+                  </Row>
                 )}
               </div>
             </>

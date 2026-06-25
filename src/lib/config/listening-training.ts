@@ -833,7 +833,7 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
   }
 
   /**
-   * 获取词书中可供选择的词条（排除已在今日清单中的，且只返回未学习过的词条）
+   * 获取词书中所有词条（包括已选择的和未选择的）
    * @param userId 用户ID
    * @param wordbookId 词书ID
    */
@@ -845,24 +845,32 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
 
     const today = new Date().toISOString().split('T')[0];
 
+    // 查询所有词条，标记是否已在今日清单中
     const result = await this.queryService.executeRawQuery(
       dataSourceId,
       `SELECT 
         i.id, i.content,
-        'new' as status,
-        0 as review_count
+        CASE 
+          WHEN dp.id IS NOT NULL THEN 'selected'
+          WHEN ui.id IS NOT NULL THEN 'learned'
+          ELSE 'available'
+        END as select_status,
+        COALESCE(ui.status, 'new') as status,
+        COALESCE(ui.review_count, 0) as review_count,
+        i.created_at
        FROM ${itemsConfig.name} i
+       LEFT JOIN ${dailyPlanConfig.name} dp ON i.id = dp.item_id 
+         AND dp.user_id = ? AND dp.plan_date = ?
+       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
        WHERE i.wordbook_id = ?
-       AND i.id NOT IN (
-         SELECT item_id FROM ${dailyPlanConfig.name} 
-         WHERE user_id = ? AND plan_date = ?
-       )
-       AND i.id NOT IN (
-         SELECT item_id FROM ${userItemsConfig.name} 
-         WHERE user_id = ?
-       )
-       ORDER BY i.created_at ASC`,
-      [wordbookId, userId, today, userId]
+       ORDER BY 
+         CASE 
+           WHEN dp.id IS NOT NULL THEN 2
+           WHEN ui.id IS NOT NULL THEN 3
+           ELSE 1
+         END,
+         i.created_at ASC`,
+      [userId, today, userId, wordbookId]
     );
 
     return result;
