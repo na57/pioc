@@ -99,6 +99,15 @@ export default function ListeningTrainingPage() {
   const [audioCache, setAudioCache] = useState<Record<string, string>>({});
   const isPlayingRef = useRef(false); // 防止重复播放
 
+  // 词条不足相关状态
+  const [dailyLimit, setDailyLimit] = useState(20);
+  const [supplementedFromNew, setSupplementedFromNew] = useState(false);
+  const [needMoreWordbooks, setNeedMoreWordbooks] = useState(false);
+  const [availableWordbooks, setAvailableWordbooks] = useState<Array<{ id: string; name: string; new_items_count: number }>>([]);
+  const [shortfall, setShortfall] = useState(0);
+  const [supplementModalVisible, setSupplementModalVisible] = useState(false);
+  const [switchWordbookModalVisible, setSwitchWordbookModalVisible] = useState(false);
+
   // 词本相关
   const [vocabularyItems, setVocabularyItems] = useState<VocabularyItem[]>([]);
   const [vocabularyStatus, setVocabularyStatus] = useState<string>('all');
@@ -157,17 +166,30 @@ export default function ListeningTrainingPage() {
   }, [selectedWordbook, messageApi]);
 
   // 获取待复习词条
-  const fetchPracticeItems = useCallback(async () => {
+  const fetchPracticeItems = useCallback(async (supplementNew = false) => {
     if (!selectedWordbook) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/listening-training/items/practice?wordbook_id=${selectedWordbook}`);
+      const response = await fetch(`/api/listening-training/items/practice?wordbook_id=${selectedWordbook}&supplement_new=${supplementNew}`);
       const data = await response.json();
       if (data.success) {
         setPracticeItems(data.data.items);
         setCompletedToday(data.data.completed_today);
-        setCompletedInCurrentWordbook(data.data.completed_in_wordbook || 0);
+        setDailyLimit(data.data.daily_limit);
+        setSupplementedFromNew(data.data.supplemented_from_new);
+        setNeedMoreWordbooks(data.data.need_more_wordbooks);
+        setAvailableWordbooks(data.data.available_wordbooks || []);
+        setShortfall(data.data.shortfall);
         setCurrentIndex(0);
+
+        // 如果词条不足且未补充过，显示补充提示
+        if (data.data.items.length < data.data.daily_limit && !supplementNew && !data.data.supplemented_from_new) {
+          setSupplementModalVisible(true);
+        }
+        // 如果补充后仍然不足，且有其他可学习的词书，显示更换词书提示
+        else if (data.data.items.length < data.data.daily_limit && data.data.need_more_wordbooks) {
+          setSwitchWordbookModalVisible(true);
+        }
       }
     } catch (error) {
       messageApi.error('获取待复习词条失败');
@@ -734,8 +756,24 @@ export default function ListeningTrainingPage() {
             ) : (
               <div style={{ textAlign: 'center', padding: '80px 0' }}>
                 <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
-                <Title level={4}>今日复习完成</Title>
-                <Text type="secondary">当前没有需要复习的词条，请稍后再来</Text>
+                <Title level={4}>
+                  {supplementedFromNew ? '词条已补充完成' : '今日复习完成'}
+                </Title>
+                <Text type="secondary">
+                  {supplementedFromNew
+                    ? `已学习 ${practiceItems.length} 个词条（包含补充的新词条）`
+                    : '当前没有需要复习的词条，请稍后再来'}
+                </Text>
+                {needMoreWordbooks && availableWordbooks.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <Button
+                      type="primary"
+                      onClick={() => setSwitchWordbookModalVisible(true)}
+                    >
+                      查看其他词书
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </Spin>
@@ -1193,6 +1231,81 @@ export default function ListeningTrainingPage() {
           <p style={{ marginTop: 8, color: '#999', fontSize: 12 }}>
             提示：每行输入一个词条（单词或句子），空行会被自动忽略
           </p>
+        </div>
+      </Modal>
+
+      {/* 补充新词条提示弹窗 */}
+      <Modal
+        title="词条数量不足"
+        open={supplementModalVisible}
+        onCancel={() => setSupplementModalVisible(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setSupplementModalVisible(false)}>
+            暂不补充
+          </Button>,
+          <Button
+            key="supplement"
+            type="primary"
+            onClick={() => {
+              setSupplementModalVisible(false);
+              fetchPracticeItems(true);
+              messageApi.success('已补充新词条');
+            }}
+          >
+            补充新词条
+          </Button>,
+        ]}
+      >
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <p style={{ fontSize: 16, marginBottom: 16 }}>
+            当前待复习的词条只有 <strong>{practiceItems.length}</strong> 个，
+            距离每日目标 <strong>{dailyLimit}</strong> 个还缺少 <strong>{shortfall}</strong> 个。
+          </p>
+          <p style={{ color: '#666' }}>
+            是否从所有词书中补充新词条来学习？
+          </p>
+        </div>
+      </Modal>
+
+      {/* 更换词书提示弹窗 */}
+      <Modal
+        title="建议更换词书"
+        open={switchWordbookModalVisible}
+        onCancel={() => setSwitchWordbookModalVisible(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setSwitchWordbookModalVisible(false)}>
+            暂不更换
+          </Button>,
+        ]}
+      >
+        <div style={{ padding: '10px 0' }}>
+          <p style={{ marginBottom: 16 }}>
+            即使补充了新词条，当前可用词条仍然不足。
+            以下词书还有未学习的词条，建议更换词书：
+          </p>
+          <div style={{ maxHeight: 300, overflow: 'auto' }}>
+            {availableWordbooks.map((wb) => (
+              <Card
+                key={wb.id}
+                size="small"
+                style={{ marginBottom: 8, cursor: 'pointer' }}
+                onClick={() => {
+                  setSelectedWordbook(wb.id);
+                  setSwitchWordbookModalVisible(false);
+                  messageApi.success(`已切换到词书: ${wb.name}`);
+                }}
+                hoverable
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 500 }}>{wb.name}</span>
+                  <Badge count={wb.new_items_count} style={{ backgroundColor: '#52c41a' }} />
+                </div>
+                <div style={{ marginTop: 4, fontSize: 12, color: '#999' }}>
+                  共 {wb.total_items} 个词条，{wb.new_items_count} 个未学习
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
       </Modal>
     </div>

@@ -320,17 +320,17 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
   }
 
   /**
-   * 查询待复习的词条
-   * @param wordbookId 词书ID，如果提供则只查询该词书的词条
+   * 查询待复习的词条（不区分词书，按待复习时间先后读取）
    * @param userId 用户ID
    * @param dailyLimit 每日限制数量（用于限制返回的词条数量）
+   * @param excludeWordbookId 要排除的词书ID（可选，用于更换词书时）
    */
-  async queryPracticeItems(wordbookId: string | null, userId: number, dailyLimit?: number) {
+  async queryPracticeItems(userId: number, dailyLimit?: number, excludeWordbookId?: string) {
     const tableConfig = this.configLoader.getTableConfig('items');
     const userItemsConfig = this.configLoader.getTableConfig('userItems');
     const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
     const dataSourceId = tableConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
-    
+
     // 如果没有提供 dailyLimit，从用户设置中获取
     let limit = dailyLimit;
     if (limit === undefined) {
@@ -341,14 +341,14 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
         limit = 20; // 默认限制
       }
     }
-    
-    // 构建查询条件
-    const wordbookCondition = wordbookId ? 'AND i.wordbook_id = ?' : '';
-    const params = wordbookId ? [userId, userId, wordbookId, limit] : [userId, userId, limit];
-    
+
+    // 构建排除条件
+    const excludeCondition = excludeWordbookId ? 'AND i.wordbook_id != ?' : '';
+    const params = excludeWordbookId ? [userId, userId, excludeWordbookId, limit] : [userId, userId, limit];
+
     const result = await this.queryService.executeRawQuery(
       dataSourceId,
-      `SELECT 
+      `SELECT
         i.id, i.content,
         COALESCE(ui.status, 'unknown') as status,
         COALESCE(ui.review_count, 0) as review_count,
@@ -358,15 +358,80 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
        LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
        WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
        AND (ui.next_review_at IS NULL OR ui.next_review_at <= NOW())
-       ${wordbookCondition}
-       ORDER BY 
+       ${excludeCondition}
+       ORDER BY
          CASE WHEN ui.next_review_at IS NULL THEN 0 ELSE 1 END,
-         ui.next_review_at ASC, 
+         ui.next_review_at ASC,
          i.created_at ASC
        LIMIT ?`,
       params
     );
-    
+
+    return result;
+  }
+
+  /**
+   * 获取新词条（从未学习过的词条）
+   * @param userId 用户ID
+   * @param limit 获取数量
+   * @param wordbookId 指定词书ID（可选，不指定则从所有词书中获取）
+   */
+  async queryNewItems(userId: number, limit: number, wordbookId?: string) {
+    const tableConfig = this.configLoader.getTableConfig('items');
+    const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = tableConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    // 构建词书条件
+    const wordbookCondition = wordbookId ? 'AND i.wordbook_id = ?' : '';
+    const params = wordbookId ? [userId, userId, wordbookId, limit] : [userId, userId, limit];
+
+    const result = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT
+        i.id, i.content,
+        'new' as status,
+        0 as review_count,
+        w.id as wordbook_id, w.name as wordbook_name
+       FROM ${tableConfig.name} i
+       JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
+       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
+       WHERE ui.id IS NULL
+       ${wordbookCondition}
+       ORDER BY i.created_at ASC
+       LIMIT ?`,
+      params
+    );
+
+    return result;
+  }
+
+  /**
+   * 获取用户的其他词书列表（排除指定词书）
+   * @param userId 用户ID
+   * @param excludeWordbookId 要排除的词书ID
+   */
+  async queryOtherWordbooks(userId: number, excludeWordbookId: string) {
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = wordbooksConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const result = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT
+        w.id, w.name, w.total_items,
+        COUNT(i.id) as new_items_count
+       FROM ${wordbooksConfig.name} w
+       LEFT JOIN pioc_lt_items i ON w.id = i.wordbook_id
+       LEFT JOIN pioc_lt_user_items ui ON i.id = ui.item_id AND ui.user_id = ?
+       WHERE w.user_id = ?
+       AND w.id != ?
+       AND ui.id IS NULL
+       GROUP BY w.id
+       HAVING new_items_count > 0
+       ORDER BY new_items_count DESC`,
+      [userId, userId, excludeWordbookId]
+    );
+
     return result;
   }
 

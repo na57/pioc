@@ -16,25 +16,65 @@ async function getPracticeItemsHandler(
   try {
     const { searchParams } = new URL(request.url);
     const wordbookId = searchParams.get('wordbook_id');
+    const supplementNew = searchParams.get('supplement_new') === 'true'; // 是否补充新词条
 
-    // 查询待复习词条（如果指定了词书ID，则只查询该词书的词条）
-    const result = await listeningTrainingDataService.queryPracticeItems(wordbookId, session.userId);
-    
-    if (!result.success) {
+    // 获取用户设置
+    const settingsResult = await listeningTrainingDataService.getOrCreateUserSettings(session.userId);
+    const dailyLimit = settingsResult.success && settingsResult.data
+      ? (settingsResult.data as { daily_limit?: number }).daily_limit || 20
+      : 20;
+
+    // 1. 查询待复习词条（不区分词书，按待复习时间先后）
+    const reviewResult = await listeningTrainingDataService.queryPracticeItems(
+      session.userId,
+      dailyLimit
+    );
+
+    if (!reviewResult.success) {
       return NextResponse.json(
-        { success: false, message: '查询失败', error: result.error },
+        { success: false, message: '查询失败', error: reviewResult.error },
         { status: 500 }
       );
+    }
+
+    let items = reviewResult.data || [];
+    let supplementedFromNew = false;
+    let needMoreWordbooks = false;
+    let availableWordbooks: Array<{ id: string; name: string; new_items_count: number }> = [];
+
+    // 2. 如果待复习词条不足，且用户选择补充新词条，则从所有词书中获取新词条
+    if (items.length < dailyLimit && supplementNew) {
+      const neededCount = dailyLimit - items.length;
+      const newItemsResult = await listeningTrainingDataService.queryNewItems(
+        session.userId,
+        neededCount
+      );
+
+      if (newItemsResult.success && newItemsResult.data && newItemsResult.data.length > 0) {
+        items = [...items, ...newItemsResult.data];
+        supplementedFromNew = true;
+      }
+    }
+
+    // 3. 如果仍然不足，查询其他有可学习词条的词书
+    if (items.length < dailyLimit && wordbookId) {
+      const otherWordbooksResult = await listeningTrainingDataService.queryOtherWordbooks(
+        session.userId,
+        wordbookId
+      );
+
+      if (otherWordbooksResult.success && otherWordbooksResult.data && otherWordbooksResult.data.length > 0) {
+        needMoreWordbooks = true;
+        availableWordbooks = otherWordbooksResult.data;
+      }
     }
 
     // 查询今日已完成复习数（所有词书）
     const configLoader = getListeningTrainingConfigLoader();
     const queryService = getListeningTrainingQueryService();
     const userItemsConfig = configLoader.getTableConfig('userItems');
-    const itemsConfig = configLoader.getTableConfig('items');
     const dataSourceId = userItemsConfig.dataSourceId || configLoader.getDataSourceId() || '1';
-    
-    // 所有词书今日完成数
+
     const todayCompleted = await queryService.executeRawQuery(
       dataSourceId,
       `SELECT COUNT(*) as count FROM ${userItemsConfig.name} 
@@ -42,28 +82,18 @@ async function getPracticeItemsHandler(
        AND last_review_at >= CURDATE()`,
       [session.userId]
     );
-    
-    // 当前词书今日完成数
-    let wordbookCompleted = { success: true, data: [{ count: 0 }] };
-    if (wordbookId) {
-      wordbookCompleted = await queryService.executeRawQuery(
-        dataSourceId,
-        `SELECT COUNT(*) as count FROM ${userItemsConfig.name} ui
-         JOIN ${itemsConfig.name} i ON ui.item_id = i.id
-         WHERE ui.user_id = ? 
-         AND i.wordbook_id = ?
-         AND ui.last_review_at >= CURDATE()`,
-        [session.userId, wordbookId]
-      );
-    }
 
     return NextResponse.json({
       success: true,
       data: {
-        items: result.data || [],
-        total: (result.data || []).length,
+        items,
+        total: items.length,
+        daily_limit: dailyLimit,
         completed_today: todayCompleted.success && todayCompleted.data ? todayCompleted.data[0]?.count || 0 : 0,
-        completed_in_wordbook: wordbookCompleted.success && wordbookCompleted.data ? wordbookCompleted.data[0]?.count || 0 : 0,
+        supplemented_from_new: supplementedFromNew,
+        need_more_wordbooks: needMoreWordbooks,
+        available_wordbooks: availableWordbooks,
+        shortfall: Math.max(0, dailyLimit - items.length),
       },
     });
   } catch (error) {

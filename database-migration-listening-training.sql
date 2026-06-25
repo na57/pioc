@@ -44,6 +44,45 @@ CREATE TABLE IF NOT EXISTS pioc_lt_items (
   FOREIGN KEY (wordbook_id) REFERENCES pioc_lt_wordbooks(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='听力训练词条表';
 
+-- 5. 创建用户词条学习状态表
+CREATE TABLE IF NOT EXISTS pioc_lt_user_items (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  user_id INT NOT NULL COMMENT '用户ID',
+  item_id CHAR(36) NOT NULL COMMENT '词条ID',
+  status ENUM('new', 'unknown', 'known', 'familiar') DEFAULT 'new' COMMENT '状态：new没听过/unknown没懂/known认识/familiar熟识',
+  review_count INT DEFAULT 0 COMMENT '复习次数',
+  last_review_at TIMESTAMP NULL DEFAULT NULL COMMENT '上次复习时间',
+  next_review_at TIMESTAMP NULL DEFAULT NULL COMMENT '下次复习时间',
+  history JSON COMMENT '复习历史记录：[{time, choice}]',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_id (user_id),
+  INDEX idx_item_id (item_id),
+  INDEX idx_status (status),
+  INDEX idx_next_review_at (next_review_at),
+  UNIQUE KEY uk_user_item (user_id, item_id),
+  FOREIGN KEY (user_id) REFERENCES pioc_users(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES pioc_lt_items(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户词条学习状态表';
+
+-- 6. 创建用户设置表
+CREATE TABLE IF NOT EXISTS pioc_lt_user_settings (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  user_id INT NOT NULL COMMENT '用户ID',
+  daily_limit INT DEFAULT 20 COMMENT '每日学习数量限制',
+  item_order VARCHAR(20) DEFAULT 'sequential' COMMENT '词条顺序：sequential顺序/random随机',
+  auto_play TINYINT(1) DEFAULT 1 COMMENT '是否自动播放',
+  review_unknown_first TINYINT(1) DEFAULT 1 COMMENT '是否优先复习未掌握的词条',
+  play_count INT DEFAULT 1 COMMENT '播放次数',
+  play_interval INT DEFAULT 1 COMMENT '播放间隔（秒）',
+  extra_settings JSON COMMENT '额外设置',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_id (user_id),
+  UNIQUE KEY uk_user_id (user_id),
+  FOREIGN KEY (user_id) REFERENCES pioc_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='听力训练用户设置表';
+
 -- 验证插入结果
 SELECT id, name, url, status FROM pioc_apps WHERE id = 21;
 SELECT role_id, app_id FROM pioc_role_apps WHERE app_id = 21;
