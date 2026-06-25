@@ -150,6 +150,9 @@ export default function ListeningTrainingPage() {
   const [reviewTotal, setReviewTotal] = useState(0);
   const [showSelectPrompt, setShowSelectPrompt] = useState(true);
 
+  // 显示/隐藏原文
+  const [showOriginal, setShowOriginal] = useState(false);
+
   // 获取词书列表
   const fetchWordbooks = useCallback(async () => {
     try {
@@ -439,6 +442,8 @@ export default function ListeningTrainingPage() {
         if (currentIndex < practiceItems.length - 1) {
           const nextIndex = currentIndex + 1;
           setCurrentIndex(nextIndex);
+          // 切换到下一个词条时隐藏原文
+          setShowOriginal(false);
           if (userSettings.auto_play) {
             const nextItem = practiceItems[nextIndex];
             if (nextItem) {
@@ -695,13 +700,13 @@ export default function ListeningTrainingPage() {
               </Space>
             </div>
             {neededCount > 0 ? (
-              <div style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+              <div style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8, padding: 16, marginTop: 0, marginRight: 'auto', marginBottom: 24, marginLeft: 'auto', maxWidth: 500 }}>
                 <Text style={{ color: '#1890ff', fontWeight: 500 }}>
                   还可以选择 {neededCount} 个新词条（选几个都行）
                 </Text>
               </div>
             ) : (
-              <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginBottom: 24, maxWidth: 500, margin: '0 auto 24px' }}>
+              <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: 16, marginTop: 0, marginRight: 'auto', marginBottom: 24, marginLeft: 'auto', maxWidth: 500 }}>
                 <Text style={{ color: '#52c41a', fontWeight: 500 }}>
                   词条数量已达到每日目标，可以开始学习啦！
                 </Text>
@@ -779,6 +784,23 @@ export default function ListeningTrainingPage() {
                 </Button>
               </Col>
             </Row>
+
+            {/* 显示原文按钮或原文 */}
+            <div style={{ marginBottom: 24, minHeight: 24 }}>
+              {!showOriginal ? (
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => setShowOriginal(true)}
+                >
+                  显示原文
+                </Button>
+              ) : (
+                <Text style={{ fontSize: 18, color: '#52c41a' }}>
+                  {currentItem.content}
+                </Text>
+              )}
+            </div>
 
             <div style={{ marginBottom: 40 }}>
               <Text type="secondary">

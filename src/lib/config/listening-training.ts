@@ -691,7 +691,8 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     // 1. 检查今日是否已有学习清单
     const existingPlan = await this.queryService.executeRawQuery(
       dataSourceId,
-      `SELECT dp.*, i.content, w.name as wordbook_name
+      `SELECT dp.item_id as id, i.content, dp.wordbook_id, w.name as wordbook_name,
+              dp.item_type, dp.status
        FROM ${dailyPlanConfig.name} dp
        JOIN ${itemsConfig.name} i ON dp.item_id = i.id
        JOIN ${wordbooksConfig.name} w ON dp.wordbook_id = w.id
