@@ -65,7 +65,7 @@ async function getPracticeItemsHandler(
 
       if (otherWordbooksResult.success && otherWordbooksResult.data && otherWordbooksResult.data.length > 0) {
         needMoreWordbooks = true;
-        availableWordbooks = otherWordbooksResult.data;
+        availableWordbooks = otherWordbooksResult.data as Array<{ id: string; name: string; new_items_count: number; total_items: number }>;
       }
     }
 

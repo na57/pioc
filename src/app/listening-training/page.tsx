@@ -103,7 +103,7 @@ export default function ListeningTrainingPage() {
   const [dailyLimit, setDailyLimit] = useState(20);
   const [supplementedFromNew, setSupplementedFromNew] = useState(false);
   const [needMoreWordbooks, setNeedMoreWordbooks] = useState(false);
-  const [availableWordbooks, setAvailableWordbooks] = useState<Array<{ id: string; name: string; new_items_count: number }>>([]);
+  const [availableWordbooks, setAvailableWordbooks] = useState<Array<{ id: string; name: string; new_items_count: number; total_items: number }>>([]);
   const [shortfall, setShortfall] = useState(0);
   const [supplementModalVisible, setSupplementModalVisible] = useState(false);
   const [switchWordbookModalVisible, setSwitchWordbookModalVisible] = useState(false);
