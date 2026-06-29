@@ -92,13 +92,21 @@ async function reviewItemHandler(
     const itemsConfig = configLoader.getTableConfig('items');
     const dataSourceId = itemsConfig.dataSourceId || configLoader.getDataSourceId() || '1';
     
+    console.log(`[DEBUG] Review API - itemId: ${itemId}, table: ${itemsConfig.name}, dataSourceId: ${dataSourceId}`);
+    
     const itemResult = await queryService.executeRawQuery(
       dataSourceId,
       `SELECT * FROM ${itemsConfig.name} WHERE id = ?`,
       [itemId]
     );
 
+    console.log(`[DEBUG] Review API - Query result: success=${itemResult.success}, data length=${itemResult.data?.length || 0}`);
+    if (itemResult.data && itemResult.data.length > 0) {
+      console.log(`[DEBUG] Review API - Found item:`, itemResult.data[0]);
+    }
+
     if (!itemResult.success || !itemResult.data || itemResult.data.length === 0) {
+      console.log(`[DEBUG] Review API - Item not found, returning 404`);
       return NextResponse.json(
         { success: false, message: '词条不存在' },
         { status: 404 }

@@ -823,6 +823,33 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
   }
 
   /**
+   * 获取今日已完成的词条清单
+   * @param userId 用户ID
+   * @returns 已完成的词条列表
+   */
+  async getTodayCompletedItems(userId: number) {
+    const dailyPlanConfig = this.configLoader.getTableConfig('dailyPlan');
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await this.queryService.executeRawQuery(
+      dataSourceId,
+      `SELECT dp.*, i.content, w.name as wordbook_name
+       FROM ${dailyPlanConfig.name} dp
+       JOIN ${itemsConfig.name} i ON dp.item_id = i.id
+       JOIN ${wordbooksConfig.name} w ON dp.wordbook_id = w.id
+       WHERE dp.user_id = ? AND dp.plan_date = ? AND dp.status = 'completed'
+       ORDER BY dp.completed_at ASC`,
+      [userId, today]
+    );
+
+    return result;
+  }
+
+  /**
    * 更新学习清单中词条的状态
    * @param userId 用户ID
    * @param itemId 词条ID
@@ -833,8 +860,8 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
 
     const today = new Date().toISOString().split('T')[0];
-    // 使用 UTC 时间，确保时区一致性
-    const nowUTC = new Date().toISOString();
+    // 使用 UTC 时间，格式化为 MySQL 支持的格式 'YYYY-MM-DD HH:MM:SS'
+    const nowUTC = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     const result = await this.queryService.executeRawQuery(
       dataSourceId,

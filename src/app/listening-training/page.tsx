@@ -422,7 +422,9 @@ export default function ListeningTrainingPage() {
     try {
       // 获取用户时区偏移（分钟）
       const timezoneOffset = new Date().getTimezoneOffset();
-      const response = await fetch(`/api/listening-training/items/${item.id}/review`, {
+      // 使用 item_id（词条的真实UUID）而不是 id（daily_plan的自增ID）
+      const itemId = item.item_id || item.id;
+      const response = await fetch(`/api/listening-training/items/${itemId}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ choice, timezoneOffset }),
