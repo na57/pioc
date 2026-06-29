@@ -694,7 +694,7 @@ export default function ListeningTrainingPage() {
                   每日目标: {dailyLimit} 个词条
                 </Text>
                 <Text type="secondary">
-                  待复习词条: {reviewTotal} 个
+                  待复习词条: {reviewCount} 个
                 </Text>
                 <Text type="secondary">
                   已选新词条: {newCount} 个

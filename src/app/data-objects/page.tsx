@@ -267,6 +267,15 @@ export default function DataObjectsPage() {
           dataIndex: key,
           key,
           ellipsis: true,
+          render: (value: unknown) => {
+            if (value === null || value === undefined) {
+              return '-';
+            }
+            if (typeof value === 'object') {
+              return JSON.stringify(value);
+            }
+            return String(value);
+          },
         }));
         setPreviewColumns(columns);
 

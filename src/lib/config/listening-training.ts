@@ -563,6 +563,62 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
   }
 
   // ============================================
+  // 公共方法：查询待复习词条
+  // ============================================
+
+  /**
+   * 查询待复习词条（统一的核心逻辑）
+   * 查询所有非熟识状态且需要复习的词条（包括已过期的）
+   * @param userId 用户ID
+   * @param options 查询选项
+   * @returns 待复习词条列表
+   */
+  async queryPendingReviewItems(userId: number, options: {
+    limit?: number;
+    includeExpired?: boolean;
+  } = {}): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    const itemsConfig = this.configLoader.getTableConfig('items');
+    const userItemsConfig = this.configLoader.getTableConfig('userItems');
+    const wordbooksConfig = this.configLoader.getTableConfig('wordbooks');
+    const dataSourceId = itemsConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
+
+    const { limit, includeExpired = true } = options;
+
+    // 使用 UTC 时间，确保时区一致性
+    const nowUTC = new Date().toISOString();
+
+    let sql = `SELECT
+        i.id, i.content, i.wordbook_id,
+        w.name as wordbook_name,
+        COALESCE(ui.status, 'unknown') as status,
+        COALESCE(ui.review_count, 0) as review_count,
+        ui.next_review_at,
+        ui.last_review_at
+       FROM ${itemsConfig.name} i
+       JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
+       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
+       WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
+       AND (ui.next_review_at IS NULL OR ui.next_review_at <= ?)`;
+
+    const params: any[] = [userId, userId, nowUTC];
+
+    if (!includeExpired) {
+      // 如果不包含已过期的，只查询未来24小时内的
+      sql += ` AND ui.next_review_at >= DATE_SUB(?, INTERVAL 1 DAY)`;
+      params.push(nowUTC);
+    }
+
+    sql += ` ORDER BY ui.next_review_at ASC, i.created_at ASC`;
+
+    if (limit) {
+      sql += ` LIMIT ?`;
+      params.push(limit);
+    }
+
+    return await this.queryService.executeRawQuery(dataSourceId, sql, params);
+  }
+
+  // ============================================
   // 用户设置相关方法
   // ============================================
 
@@ -711,23 +767,11 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     }
 
     // 2. 没有清单，需要创建
-    // 2.1 获取待复习词条（按艾宾浩斯曲线到期需要复习的）
-    const reviewItemsResult = await this.queryService.executeRawQuery(
-      dataSourceId,
-      `SELECT
-        i.id, i.content, i.wordbook_id,
-        w.name as wordbook_name,
-        COALESCE(ui.status, 'unknown') as status,
-        COALESCE(ui.review_count, 0) as review_count
-       FROM ${itemsConfig.name} i
-       JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
-       LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
-       WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
-       AND (ui.next_review_at IS NULL OR ui.next_review_at <= ?)
-       ORDER BY ui.next_review_at ASC, i.created_at ASC
-       LIMIT ?`,
-      [userId, userId, nowUTC, dailyLimit]
-    );
+    // 2.1 获取待复习词条（使用统一的查询逻辑）
+    const reviewItemsResult = await this.queryPendingReviewItems(userId, {
+      limit: dailyLimit,
+      includeExpired: true, // 包含已过期的词条
+    });
 
     const reviewItems = reviewItemsResult.success && Array.isArray(reviewItemsResult.data) 
       ? reviewItemsResult.data 
@@ -981,8 +1025,13 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
           const dayIndex = Math.floor((currentReviewDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 
           if (dayIndex >= 0 && dayIndex < days) {
+            // 复习日期在未来或今天，计入对应日期
             schedule[dayIndex].reviewItems++;
             schedule[dayIndex].count++;
+          } else if (dayIndex < 0) {
+            // 复习日期已过期（< 今天），计入今天的待复习数量
+            schedule[0].reviewItems++;
+            schedule[0].count++;
           }
 
           // 模拟这次复习后的下一次复习（假设用户点击"懂了"）
