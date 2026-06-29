@@ -52,6 +52,7 @@ interface Wordbook {
 
 interface PracticeItem {
   id: string;
+  item_id?: string;
   content: string;
   status: string;
   review_count: number;

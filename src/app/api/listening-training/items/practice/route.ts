@@ -104,7 +104,7 @@ async function getPracticeItemsHandler(
     );
 
     const completedCount = todayCompleted.success && todayCompleted.data 
-      ? todayCompleted.data[0]?.count || 0 
+      ? Number(todayCompleted.data[0]?.count) || 0 
       : 0;
 
     // 计算待复习和新词条数量
