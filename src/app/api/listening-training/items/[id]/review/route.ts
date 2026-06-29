@@ -19,23 +19,46 @@ const REVIEW_INTERVALS_DAYS = [
   30,  // 第6次复习后 - 30天后
 ];
 
-function calculateNextReview(reviewCount: number, choice: string): Date | null {
+/**
+ * 计算下次复习时间
+ * @param reviewCount 复习次数
+ * @param choice 用户选择（unknown/known/familiar）
+ * @param timezoneOffset 用户时区偏移（分钟），例如东八区为 -480
+ * @returns 下次复习时间（UTC时间）
+ */
+function calculateNextReview(reviewCount: number, choice: string, timezoneOffset: number = 0): Date | null {
+  // 获取当前 UTC 时间戳
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  // 计算用户本地时间戳（毫秒）
+  // timezoneOffset 是本地时间比 UTC 快多少分钟，例如东八区为 -480
+  // 所以本地时间 = UTC时间 - timezoneOffset * 60000
+  const localTimestamp = now.getTime() - timezoneOffset * 60000;
+  const localDate = new Date(localTimestamp);
+  
+  // 获取用户本地时间的年、月、日（使用 UTC 方法获取，因为 localDate 是 UTC 时间戳）
+  const localYear = localDate.getUTCFullYear();
+  const localMonth = localDate.getUTCMonth();
+  const localDay = localDate.getUTCDate();
+  
+  // 设置复习时间为用户本地时间的凌晨4点
+  const reviewHour = 4;
 
   if (choice === 'unknown') {
-    // 没懂 - 第二天凌晨4点复习
-    const nextReview = new Date(today);
-    nextReview.setDate(today.getDate() + 1);
-    nextReview.setHours(4, 0, 0, 0);
-    return nextReview;
+    // 没懂 - 第二天凌晨4点复习（用户本地时间）
+    // 用户本地明天 04:00 对应的 UTC 时间
+    // = Date.UTC(年, 月, 日+1, 4) + timezoneOffset
+    const nextReviewUTC = Date.UTC(localYear, localMonth, localDay + 1, reviewHour, 0, 0) + timezoneOffset * 60000;
+    
+    return new Date(nextReviewUTC);
   } else if (choice === 'known') {
-    // 懂了 - 按照艾宾浩斯曲线复习，最短一天
+    // 懂了 - 按照艾宾浩斯曲线复习
     const intervalDays = REVIEW_INTERVALS_DAYS[Math.min(reviewCount - 1, REVIEW_INTERVALS_DAYS.length - 1)];
-    const nextReview = new Date(today);
-    nextReview.setDate(today.getDate() + intervalDays);
-    nextReview.setHours(4, 0, 0, 0);
-    return nextReview;
+    // 用户本地指定日期 04:00 对应的 UTC 时间
+    // = Date.UTC(年, 月, 日+intervalDays, 4) + timezoneOffset
+    const nextReviewUTC = Date.UTC(localYear, localMonth, localDay + intervalDays, reviewHour, 0, 0) + timezoneOffset * 60000;
+    
+    return new Date(nextReviewUTC);
   }
 
   // 熟识 - 不再复习，返回 null
@@ -51,7 +74,7 @@ async function reviewItemHandler(
   try {
     const { id: itemId } = await params;
     const body = await request.json();
-    const { choice } = body;
+    const { choice, timezoneOffset } = body;
 
     if (!choice || !['unknown', 'known', 'familiar'].includes(choice)) {
       return NextResponse.json(
@@ -59,6 +82,9 @@ async function reviewItemHandler(
         { status: 400 }
       );
     }
+
+    // 获取用户时区偏移，默认为 0（UTC）
+    const userTimezoneOffset = typeof timezoneOffset === 'number' ? timezoneOffset : 0;
 
     // 验证词条是否存在
     const configLoader = getListeningTrainingConfigLoader();
@@ -122,12 +148,12 @@ async function reviewItemHandler(
       // 懂了 - 还需要再次复习
       newStatus = 'known';
       newReviewCount = (userItem?.review_count || 0) + 1;
-      nextReviewAt = calculateNextReview(newReviewCount, choice);
+      nextReviewAt = calculateNextReview(newReviewCount, choice, userTimezoneOffset);
     } else {
       // 没懂 - 进入艾宾浩斯复习队列
       newStatus = 'unknown';
       newReviewCount = (userItem?.review_count || 0) + 1;
-      nextReviewAt = calculateNextReview(newReviewCount, choice);
+      nextReviewAt = calculateNextReview(newReviewCount, choice, userTimezoneOffset);
     }
 
     // 更新用户词条学习状态

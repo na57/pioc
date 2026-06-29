@@ -420,10 +420,12 @@ export default function ListeningTrainingPage() {
     if (practiceItems.length === 0 || currentIndex >= practiceItems.length) return;
     const item = practiceItems[currentIndex];
     try {
+      // 获取用户时区偏移（分钟）
+      const timezoneOffset = new Date().getTimezoneOffset();
       const response = await fetch(`/api/listening-training/items/${item.id}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ choice }),
+        body: JSON.stringify({ choice, timezoneOffset }),
       });
       const data = await response.json();
       if (data.success) {

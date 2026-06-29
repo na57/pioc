@@ -376,6 +376,9 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     const excludeCondition = excludeWordbookId ? 'AND i.wordbook_id != ?' : '';
     const params = excludeWordbookId ? [userId, userId, excludeWordbookId, limit] : [userId, userId, limit];
 
+    // 使用 UTC 时间，确保时区一致性
+    const nowUTC = new Date().toISOString();
+
     const result = await this.queryService.executeRawQuery(
       dataSourceId,
       `SELECT
@@ -387,14 +390,14 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
        JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
        LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
        WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
-       AND (ui.next_review_at IS NULL OR ui.next_review_at <= NOW())
+       AND (ui.next_review_at IS NULL OR ui.next_review_at <= ?)
        ${excludeCondition}
        ORDER BY
          CASE WHEN ui.next_review_at IS NULL THEN 0 ELSE 1 END,
          ui.next_review_at ASC,
          i.created_at ASC
        LIMIT ?`,
-      params
+      excludeWordbookId ? [userId, userId, nowUTC, excludeWordbookId, limit] : [userId, userId, nowUTC, limit]
     );
 
     return result;
@@ -687,6 +690,8 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
 
     const today = new Date().toISOString().split('T')[0];
+    // 使用 UTC 时间，确保时区一致性
+    const nowUTC = new Date().toISOString();
 
     // 1. 检查今日是否已有学习清单
     const existingPlan = await this.queryService.executeRawQuery(
@@ -718,10 +723,10 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
        JOIN ${wordbooksConfig.name} w ON i.wordbook_id = w.id AND w.user_id = ?
        LEFT JOIN ${userItemsConfig.name} ui ON i.id = ui.item_id AND ui.user_id = ?
        WHERE (ui.status IS NULL OR ui.status NOT IN ('familiar'))
-       AND (ui.next_review_at IS NULL OR ui.next_review_at <= NOW())
+       AND (ui.next_review_at IS NULL OR ui.next_review_at <= ?)
        ORDER BY ui.next_review_at ASC, i.created_at ASC
        LIMIT ?`,
-      [userId, userId, dailyLimit]
+      [userId, userId, nowUTC, dailyLimit]
     );
 
     const reviewItems = reviewItemsResult.success && Array.isArray(reviewItemsResult.data) 
@@ -784,13 +789,15 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     const dataSourceId = dailyPlanConfig.dataSourceId || this.configLoader.getDataSourceId() || '1';
 
     const today = new Date().toISOString().split('T')[0];
+    // 使用 UTC 时间，确保时区一致性
+    const nowUTC = new Date().toISOString();
 
     const result = await this.queryService.executeRawQuery(
       dataSourceId,
       `UPDATE ${dailyPlanConfig.name} 
-       SET status = ?, completed_at = NOW()
+       SET status = ?, completed_at = ?
        WHERE user_id = ? AND plan_date = ? AND item_id = ?`,
-      [status, userId, today, itemId]
+      [status, nowUTC, userId, today, itemId]
     );
 
     return result;
@@ -915,13 +922,15 @@ export class ListeningTrainingDataService extends BaseDataService<ListeningTrain
     );
 
     // 2. 查询今日已完成数量
+    // 使用 UTC 时间，确保时区一致性
+    const todayUTC = new Date().toISOString().split('T')[0];
     const todayCompletedResult = await this.queryService.executeRawQuery(
       dataSourceId,
       `SELECT COUNT(*) as count
        FROM ${userItemsConfig.name}
        WHERE user_id = ?
-       AND last_review_at >= CURDATE()`,
-      [userId]
+       AND last_review_at >= ?`,
+      [userId, todayUTC]
     );
 
     if (!allItemsResult.success) {
