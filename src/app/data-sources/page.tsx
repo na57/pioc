@@ -32,6 +32,7 @@ import {
 import Image from 'next/image';
 import type { TableProps } from 'antd';
 import ActionButton from '@/app/tags/components/ActionButton';
+import { copyToClipboard } from '@/lib/utils/clipboard';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -486,9 +487,13 @@ export default function DataSourcesPage() {
                   type="text"
                   size="small"
                   icon={<CopyOutlined />}
-                  onClick={() => {
-                    navigator.clipboard.writeText(selectedDataSource.id);
-                    message.success('ID 已复制到剪贴板');
+                  onClick={async () => {
+                    try {
+                      await copyToClipboard(selectedDataSource.id);
+                      message.success('ID 已复制到剪贴板');
+                    } catch {
+                      message.error('复制失败');
+                    }
                   }}
                 />
               </Space>

@@ -63,7 +63,7 @@ const getHandler = createApiHandler(async (request, auth) => {
 const postHandler = createApiHandler(async (request, auth) => {
   try {
     const body = await request.json();
-    const { configId, content, changeDescription } = body;
+    const { configId, content, versionNumber } = body;
 
     // 验证用户ID必须有效
     if (!auth.userId) {
@@ -80,12 +80,47 @@ const postHandler = createApiHandler(async (request, auth) => {
       );
     }
 
-    // 获取当前最大版本号
-    const maxVersionResult = await query<Array<{ maxVersion: number }>>(
-      'SELECT MAX(version_number) as maxVersion FROM configsys_versions WHERE config_id = ?',
-      [configId]
-    );
-    const newVersionNumber = (maxVersionResult[0]?.maxVersion || 0) + 1;
+    let newVersionNumber: string;
+
+    if (versionNumber !== undefined && versionNumber !== null) {
+      // 用户提供了自定义版本号
+      newVersionNumber = String(versionNumber).trim();
+      if (!newVersionNumber) {
+        return NextResponse.json(
+          { success: false, message: 'versionNumber cannot be empty' },
+          { status: 400 }
+        );
+      }
+
+      // 检查版本号是否已存在
+      const existingVersion = await query<Array<{ count: number }>>(
+        'SELECT COUNT(*) as count FROM configsys_versions WHERE config_id = ? AND version_number = ?',
+        [configId, newVersionNumber]
+      );
+      if (existingVersion[0]?.count > 0) {
+        return NextResponse.json(
+          { success: false, message: `Version number "${newVersionNumber}" already exists for this config` },
+          { status: 409 }
+        );
+      }
+    } else {
+      // 自动生成版本号（格式：v1, v2, ...）
+      const maxVersionResult = await query<Array<{ maxVersion: string }>>(
+        'SELECT MAX(version_number) as maxVersion FROM configsys_versions WHERE config_id = ?',
+        [configId]
+      );
+      const maxVersion = maxVersionResult[0]?.maxVersion;
+      
+      // 尝试从最大版本号中提取数字
+      let nextNum = 1;
+      if (maxVersion) {
+        const match = maxVersion.match(/(\d+)/);
+        if (match) {
+          nextNum = parseInt(match[1], 10) + 1;
+        }
+      }
+      newVersionNumber = `v${nextNum}`;
+    }
 
     // 创建新版本
     const versionId = uuidv4();

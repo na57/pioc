@@ -27,6 +27,7 @@ import {
   CopyOutlined,
 } from '@ant-design/icons';
 import type { TableProps } from 'antd';
+import { copyToClipboard } from '@/lib/utils/clipboard';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -190,12 +191,13 @@ export default function KeyManagementPage() {
     }
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+  const handleCopy = async (text: string, label: string) => {
+    try {
+      await copyToClipboard(text);
       message.success(`${label}已复制到剪贴板`);
-    }).catch(() => {
+    } catch {
       message.error('复制失败');
-    });
+    }
   };
 
   const getKeyTypeTag = (type: string) => {
@@ -458,7 +460,7 @@ export default function KeyManagementPage() {
                 <Button
                   type="link"
                   icon={<CopyOutlined />}
-                  onClick={() => copyToClipboard(viewingKey.public_key, '公钥')}
+                  onClick={() => handleCopy(viewingKey.public_key, '公钥')}
                 >
                   复制
                 </Button>
@@ -486,7 +488,7 @@ export default function KeyManagementPage() {
                     <Button
                       type="link"
                       icon={<CopyOutlined />}
-                      onClick={() => copyToClipboard(viewingKey.private_key, '私钥')}
+                      onClick={() => handleCopy(viewingKey.private_key, '私钥')}
                     >
                       复制
                     </Button>

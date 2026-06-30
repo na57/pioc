@@ -5,6 +5,7 @@ import { Card, Table, Button, Modal, Form, Input, Select, Tag, Space, Tooltip, D
 import { PlusOutlined, CopyOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import FriendlyTime from '@/components/FriendlyTime';
 import ActionButton from '@/app/tags/components/ActionButton';
+import { copyToClipboard } from '@/lib/utils/clipboard';
 import dayjs from 'dayjs';
 
 const { Option } = Select;
@@ -130,9 +131,13 @@ export default function ApiKeysPage() {
     setShowSecrets(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    message.success('已复制到剪贴板');
+  const handleCopy = async (text: string) => {
+    try {
+      await copyToClipboard(text);
+      message.success('已复制到剪贴板');
+    } catch {
+      message.error('复制失败');
+    }
   };
 
   const columns = [
@@ -153,7 +158,7 @@ export default function ApiKeysPage() {
           <Tooltip title="复制">
             <CopyOutlined
               style={{ cursor: 'pointer', color: '#1890ff' }}
-              onClick={() => copyToClipboard(text)}
+              onClick={() => handleCopy(text)}
             />
           </Tooltip>
         </Space>
@@ -180,7 +185,7 @@ export default function ApiKeysPage() {
           <ActionButton
             icon={<CopyOutlined />}
             tooltip="复制"
-            onClick={() => copyToClipboard(text)}
+            onClick={() => handleCopy(text)}
           />
         </Space>
       ),
@@ -387,7 +392,7 @@ export default function ApiKeysPage() {
               suffix={
                 <CopyOutlined
                   style={{ cursor: 'pointer', color: '#1890ff' }}
-                  onClick={() => copyToClipboard(newKeyInfo?.key || '')}
+                  onClick={() => handleCopy(newKeyInfo?.key || '')}
                 />
               }
             />
@@ -401,7 +406,7 @@ export default function ApiKeysPage() {
               suffix={
                 <CopyOutlined
                   style={{ cursor: 'pointer', color: '#1890ff' }}
-                  onClick={() => copyToClipboard(newKeyInfo?.secret || '')}
+                  onClick={() => handleCopy(newKeyInfo?.secret || '')}
                 />
               }
             />

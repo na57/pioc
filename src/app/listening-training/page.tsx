@@ -868,7 +868,35 @@ export default function ListeningTrainingPage() {
               </div>
             )}
           </div>
+        ) : completedToday > 0 ? (
+          // 今日任务已完成（practiceItems 为空但有完成记录）
+          <div style={{ textAlign: 'center', padding: '80px 0' }}>
+            <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
+            <Title level={4}>
+              今日任务已完成！
+            </Title>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
+              已完成 {completedToday} / {dailyLimit} 个词条
+            </Text>
+            <Space size="large">
+              <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined />}
+                onClick={() => fetchSelectableItems()}
+              >
+                自选词条加练
+              </Button>
+              <Button
+                size="large"
+                onClick={() => setActiveTab('vocabulary')}
+              >
+                查看词本
+              </Button>
+            </Space>
+          </div>
         ) : (
+          // 真的没有学习清单（没有词书或词条）
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a', marginBottom: 16 }} />
             <Title level={4}>

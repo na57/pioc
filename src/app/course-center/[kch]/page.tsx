@@ -25,6 +25,7 @@ import {
 import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined, DownOutlined, CopyOutlined, FileTextOutlined, BulbOutlined, RobotOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
+import { copyToClipboard } from '@/lib/utils/clipboard';
 import * as echarts from 'echarts';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1852,9 +1853,9 @@ export default function CourseDetailPage() {
                       const textToCopy = aiSummaryParsed.formalContent || aiSummary || displayedSummary;
                       if (textToCopy) {
                         try {
-                          await navigator.clipboard.writeText(textToCopy);
+                          await copyToClipboard(textToCopy);
                           message.success('内容已复制到剪贴板');
-                        } catch (err) {
+                        } catch {
                           message.error('复制失败，请手动复制');
                         }
                       }
