@@ -140,6 +140,8 @@ export interface CourseIdeologyFieldMapping extends Record<string, string> {
 // ============================================
 
 export interface CourseCenterConfig extends AppBaseConfig {
+  /** 数据提供者名称，用于确定使用哪个数据提供者实现 */
+  provider?: string;
   tables: {
     undergraduateCourse: TableConfig<CourseFieldMapping>;
     graduateCourse: TableConfig<CourseFieldMapping>;
@@ -159,6 +161,7 @@ export interface CourseCenterConfig extends AppBaseConfig {
 // ============================================
 
 const defaultConfig: CourseCenterConfig = {
+  provider: 'ynu',
   tables: {
     undergraduateCourse: {
       name: 't_dws_gxjx_bzkskcjbxxmx',

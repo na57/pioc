@@ -5,12 +5,8 @@
 
 import { getConfig } from '@/lib/config';
 import { loadTeacherCenterConfig } from '@/lib/config/teacher-center';
-import {
-  queryTeacherBasic,
-  queryTeacherExtendedInfo,
-  queryCareerTimeline,
-  queryResearchData,
-  queryTeachingData,
+import { createTeacherDataProvider } from '@/lib/services/teacher-center';
+import type {
   Teacher,
   TeacherExtendedInfo,
   CareerTimelineItem,
@@ -23,7 +19,7 @@ import {
   Teaching,
   Workload,
   TeachingAward,
-} from './teacherCenterData';
+} from '@/lib/services/teacher-center/types';
 
 // 问答历史记录
 export interface ChatMessage {
@@ -604,16 +600,19 @@ export async function processTeacherChat(
   const { gh, message, history } = request;
 
   try {
+    // 创建数据提供者
+    const provider = await createTeacherDataProvider();
+
     // 分析问题类型
     const questionType = analyzeQuestionType(message);
 
     // 并行获取相关数据
     const [teacher, extendedInfo, career, research, teaching] = await Promise.all([
-      queryTeacherBasic(gh),
-      queryTeacherExtendedInfo(gh),
-      queryCareerTimeline(gh),
-      queryResearchData(gh),
-      queryTeachingData(gh),
+      provider.queryTeacherBasic(gh),
+      provider.queryTeacherExtendedInfo(gh),
+      provider.queryCareerTimeline(gh),
+      provider.queryResearchData(gh),
+      provider.queryTeachingData(gh),
     ]);
 
     if (!teacher) {

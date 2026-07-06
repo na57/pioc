@@ -117,8 +117,8 @@ function DetailContent({ item }: { item: CareerTimelineItem }) {
       // 部门调动详情
       items.push(
         { key: '1', label: '调动日期', children: details.ddrq as string || '-' },
-        { key: '2', label: '原部门', children: details.ydwmc as string || '-' },
-        { key: '3', label: '新部门', children: details.xdwmc as string || '-' },
+        { key: '2', label: '原部门号', children: details.ydwh as string || '-' },
+        { key: '3', label: '新部门号', children: details.xdwh as string || '-' },
       );
       break;
 

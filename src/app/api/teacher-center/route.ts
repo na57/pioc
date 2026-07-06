@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  queryTeachers,
-  queryTeacherBasic,
-  queryTeacherExtendedInfo,
-  queryDepartments,
-  queryStatuses,
-  queryCareerTimeline,
-  queryResearchData,
-  queryTeachingData,
-  generateAISummary,
+  createTeacherDataProvider,
   Teacher,
   TeacherExtendedInfo,
   CareerTimelineItem,
   ResearchStats,
   TeachingStats,
-} from '@/lib/services/teacherCenterData';
+} from '@/lib/services/teacher-center';
 import { getConfig } from '@/lib/config';
 
 // 定义API响应类型
@@ -100,26 +92,29 @@ interface AISummaryResponse {
  */
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<unknown>>> {
   try {
+    // 动态创建数据提供者实例（从配置文件中读取 provider 名称）
+    const provider = await createTeacherDataProvider();
+    
     const searchParams = request.nextUrl.searchParams;
     const action = searchParams.get('action');
 
     switch (action) {
       case 'list':
-        return await handleTeacherList(searchParams);
+        return await handleTeacherList(searchParams, provider);
       case 'detail':
-        return await handleTeacherDetail(searchParams);
+        return await handleTeacherDetail(searchParams, provider);
       case 'departments':
-        return await handleDepartments();
+        return await handleDepartments(provider);
       case 'statuses':
-        return await handleStatuses();
+        return await handleStatuses(provider);
       case 'career':
-        return await handleCareer(searchParams);
+        return await handleCareer(searchParams, provider);
       case 'research':
-        return await handleResearch(searchParams);
+        return await handleResearch(searchParams, provider);
       case 'teaching':
-        return await handleTeaching(searchParams);
+        return await handleTeaching(searchParams, provider);
       case 'ai-summary':
-        return await handleAISummary(searchParams);
+        return await handleAISummary(searchParams, provider);
       default:
         return NextResponse.json(
           { success: false, error: '未知的action参数' },
@@ -138,14 +133,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 /**
  * 处理教师列表请求
  */
-async function handleTeacherList(searchParams: URLSearchParams): Promise<NextResponse<ApiResponse<TeacherListResponse>>> {
+async function handleTeacherList(
+  searchParams: URLSearchParams, 
+  provider: any
+): Promise<NextResponse<ApiResponse<TeacherListResponse>>> {
   const keyword = searchParams.get('keyword') || undefined;
   const department = searchParams.get('department') || undefined;
   const status = searchParams.get('status') || undefined;
   const page = parseInt(searchParams.get('page') || '1', 10);
   const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
 
-  const result = await queryTeachers({
+  const result = await provider.queryTeachers({
     keyword,
     department,
     status,
@@ -162,7 +160,10 @@ async function handleTeacherList(searchParams: URLSearchParams): Promise<NextRes
 /**
  * 处理教师详情请求
  */
-async function handleTeacherDetail(searchParams: URLSearchParams): Promise<NextResponse<ApiResponse<TeacherDetailResponse>>> {
+async function handleTeacherDetail(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<TeacherDetailResponse>>> {
   const gh = searchParams.get('gh');
 
   if (!gh) {
@@ -173,21 +174,23 @@ async function handleTeacherDetail(searchParams: URLSearchParams): Promise<NextR
   }
 
   const [basic, extended] = await Promise.all([
-    queryTeacherBasic(gh),
-    queryTeacherExtendedInfo(gh),
+    provider.queryTeacherBasic(gh),
+    provider.queryTeacherExtendedInfo(gh),
   ]);
 
   return NextResponse.json({
     success: true,
-    data: { basic, extended },
+    data: { basic, extended: extended || null },
   });
 }
 
 /**
  * 处理部门列表请求
  */
-async function handleDepartments(): Promise<NextResponse<ApiResponse<DepartmentListResponse>>> {
-  const departments = await queryDepartments();
+async function handleDepartments(
+  provider: any
+): Promise<NextResponse<ApiResponse<DepartmentListResponse>>> {
+  const departments = await provider.queryDepartments();
 
   return NextResponse.json({
     success: true,
@@ -198,8 +201,10 @@ async function handleDepartments(): Promise<NextResponse<ApiResponse<DepartmentL
 /**
  * 处理状态列表请求
  */
-async function handleStatuses(): Promise<NextResponse<ApiResponse<StatusListResponse>>> {
-  const statuses = await queryStatuses();
+async function handleStatuses(
+  provider: any
+): Promise<NextResponse<ApiResponse<StatusListResponse>>> {
+  const statuses = await provider.queryStatuses();
 
   return NextResponse.json({
     success: true,
@@ -210,7 +215,10 @@ async function handleStatuses(): Promise<NextResponse<ApiResponse<StatusListResp
 /**
  * 处理教职生涯请求
  */
-async function handleCareer(searchParams: URLSearchParams): Promise<NextResponse<ApiResponse<CareerResponse>>> {
+async function handleCareer(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<CareerResponse>>> {
   const gh = searchParams.get('gh');
 
   if (!gh) {
@@ -220,7 +228,7 @@ async function handleCareer(searchParams: URLSearchParams): Promise<NextResponse
     );
   }
 
-  const timeline = await queryCareerTimeline(gh);
+  const timeline = await provider.queryCareerTimeline(gh);
 
   return NextResponse.json({
     success: true,
@@ -231,7 +239,10 @@ async function handleCareer(searchParams: URLSearchParams): Promise<NextResponse
 /**
  * 处理科研数据请求
  */
-async function handleResearch(searchParams: URLSearchParams): Promise<NextResponse<ApiResponse<ResearchResponse>>> {
+async function handleResearch(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<ResearchResponse>>> {
   const gh = searchParams.get('gh');
 
   if (!gh) {
@@ -241,7 +252,7 @@ async function handleResearch(searchParams: URLSearchParams): Promise<NextRespon
     );
   }
 
-  const { papers, books, patents, awards, appraisals, transfers, reports, artworks, stats } = await queryResearchData(gh);
+  const { papers, books, patents, awards, appraisals, transfers, reports, artworks, stats } = await provider.queryResearchData(gh);
 
   return NextResponse.json({
     success: true,
@@ -262,7 +273,10 @@ async function handleResearch(searchParams: URLSearchParams): Promise<NextRespon
 /**
  * 处理教学数据请求
  */
-async function handleTeaching(searchParams: URLSearchParams): Promise<NextResponse<ApiResponse<TeachingResponse>>> {
+async function handleTeaching(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<TeachingResponse>>> {
   const gh = searchParams.get('gh');
 
   if (!gh) {
@@ -293,7 +307,7 @@ async function handleTeaching(searchParams: URLSearchParams): Promise<NextRespon
     courseTeams,
     textbookAwards,
     stats,
-  } = await queryTeachingData(gh);
+  } = await provider.queryTeachingData(gh);
 
   return NextResponse.json({
     success: true,
@@ -325,7 +339,10 @@ async function handleTeaching(searchParams: URLSearchParams): Promise<NextRespon
 /**
  * 处理AI总结请求
  */
-async function handleAISummary(searchParams: URLSearchParams): Promise<NextResponse<ApiResponse<AISummaryResponse>>> {
+async function handleAISummary(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<AISummaryResponse>>> {
   const gh = searchParams.get('gh');
 
   if (!gh) {
@@ -341,11 +358,11 @@ async function handleAISummary(searchParams: URLSearchParams): Promise<NextRespo
 
   // 并行获取所有需要的数据
   const [basic, extended, career, research, teaching] = await Promise.all([
-    queryTeacherBasic(gh),
-    queryTeacherExtendedInfo(gh),
-    queryCareerTimeline(gh),
-    queryResearchData(gh),
-    queryTeachingData(gh),
+    provider.queryTeacherBasic(gh),
+    provider.queryTeacherExtendedInfo(gh),
+    provider.queryCareerTimeline(gh),
+    provider.queryResearchData(gh),
+    provider.queryTeachingData(gh),
   ]);
 
   if (!basic) {
@@ -355,13 +372,13 @@ async function handleAISummary(searchParams: URLSearchParams): Promise<NextRespo
     );
   }
 
-  const summary = await generateAISummary(
-    basic,
-    extended,
+  const summary = await provider.generateAISummary({
+    teacher: basic,
+    extendedInfo: extended,
     career,
-    research.stats,
-    teaching.stats
-  );
+    research: research.stats,
+    teaching: teaching.stats,
+  });
 
   return NextResponse.json({
     success: true,

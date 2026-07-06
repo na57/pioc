@@ -68,8 +68,8 @@ export interface AppBaseConfig {
   dataSourceId?: string;
   /** AI配置（可选） */
   ai?: AIConfig;
-  /** 表配置 - 使用更宽松的类型 */
-  tables: Record<string, TableConfig>;
+  /** 表配置 - 使用更宽松的类型（API-only 应用可省略） */
+  tables?: Record<string, TableConfig>;
 }
 
 /**

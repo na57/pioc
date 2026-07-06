@@ -138,6 +138,11 @@ export class ConfigLoader<T extends AppBaseConfig> {
     tableName: keyof T['tables']
   ): { dataObjectId?: number; name?: string; dataSourceId?: string; fields: K } {
     const tables = this.getConfig().tables;
+
+    if (!tables) {
+      throw new Error(`当前应用未配置 tables`);
+    }
+
     const tableConfig = tables[tableName as string];
 
     if (!tableConfig) {
@@ -151,14 +156,15 @@ export class ConfigLoader<T extends AppBaseConfig> {
    * 获取所有表名
    */
   getTableNames(): string[] {
-    return Object.keys(this.getConfig().tables);
+    return Object.keys(this.getConfig().tables ?? {});
   }
 
   /**
    * 检查表配置是否存在
    */
   hasTableConfig(tableName: string): boolean {
-    return tableName in this.getConfig().tables;
+    const tables = this.getConfig().tables;
+    return !!tables && tableName in tables;
   }
 
   /**

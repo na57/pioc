@@ -121,7 +121,7 @@ export default function TeacherDetailPage() {
       {/* 头部信息 */}
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-start', gap: isMobile ? 16 : 0 }}>
-          <Space size={isMobile ? 'middle' : 'large'} direction={isMobile ? 'vertical' : 'horizontal'}>
+          <Space size={isMobile ? 'middle' : 'large'} orientation={isMobile ? 'vertical' : 'horizontal'}>
             <Avatar
               src={teacher.zp || null}
               icon={<UserOutlined />}

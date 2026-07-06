@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, Button, Input, Table, Tag, Space, App, Modal, Form, Select } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
@@ -51,7 +51,6 @@ export default function ConfigSysPage() {
   const [accessibleRules, setAccessibleRules] = useState<Rule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
   const { message } = App.useApp();
-  const fetchedRef = useRef(false);
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
 
@@ -81,8 +80,6 @@ export default function ConfigSysPage() {
   }, [page, pageSize, keyword, message]);
 
   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
     fetchConfigs();
   }, [fetchConfigs]);
 
