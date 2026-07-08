@@ -90,9 +90,9 @@ export default function TeacherDetailPage() {
     }
   }, [gh]);
 
-  // 返回列表
+  // 返回列表（保留上一页的筛选条件）
   const handleBack = () => {
-    router.push('/teacher-center');
+    router.back();
   };
 
   if (loading) {

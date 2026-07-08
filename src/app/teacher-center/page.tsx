@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Table,
   Input,
@@ -52,18 +52,47 @@ interface Status {
 
 export default function TeacherCenterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { message } = App.useApp();
-  
+
   const [loading, setLoading] = useState(false);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [keyword, setKeyword] = useState('');
+  const [inputKeyword, setInputKeyword] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [department, setDepartment] = useState('');
   const [status, setStatus] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [statuses, setStatuses] = useState<Status[]>([]);
+  const isMountedRef = useRef(false);
+
+  // 从 URL 初始化筛选与分页状态，并使用 URL 参数获取第一次数据
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const page = parseInt(urlParams.get('page') || '1', 10);
+    const size = parseInt(urlParams.get('pageSize') || '10', 10);
+    const keywordFromUrl = urlParams.get('keyword') || '';
+    const departmentFromUrl = urlParams.get('department') || '';
+    const statusFromUrl = urlParams.get('status') || '';
+
+    setCurrentPage(Number.isNaN(page) ? 1 : page);
+    setPageSize(Number.isNaN(size) ? 10 : size);
+    setInputKeyword(keywordFromUrl);
+    setSearchKeyword(keywordFromUrl);
+    setDepartment(departmentFromUrl);
+    setStatus(statusFromUrl);
+
+    fetchTeachers({
+      page: Number.isNaN(page) ? 1 : page,
+      pageSize: Number.isNaN(size) ? 10 : size,
+      keyword: keywordFromUrl,
+      department: departmentFromUrl,
+      status: statusFromUrl,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 获取部门列表
   const fetchDepartments = async () => {
@@ -92,22 +121,34 @@ export default function TeacherCenterPage() {
   };
 
   // 获取教师列表
-  const fetchTeachers = async () => {
+  const fetchTeachers = async (options?: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+    department?: string;
+    status?: string;
+  }) => {
     setLoading(true);
     try {
+      const page = options?.page ?? currentPage;
+      const size = options?.pageSize ?? pageSize;
+      const keyword = options?.keyword ?? searchKeyword;
+      const dept = options?.department ?? department;
+      const stat = options?.status ?? status;
+
       const params = new URLSearchParams({
         action: 'list',
-        page: currentPage.toString(),
-        pageSize: pageSize.toString(),
+        page: page.toString(),
+        pageSize: size.toString(),
       });
-      
+
       if (keyword) params.append('keyword', keyword);
-      if (department) params.append('department', department);
-      if (status) params.append('status', status);
+      if (dept) params.append('department', dept);
+      if (stat) params.append('status', stat);
 
       const response = await fetch(`/api/teacher-center?${params.toString()}`);
       const result = await response.json();
-      
+
       if (result.success) {
         setTeachers(result.data.data);
         setTotal(result.data.total);
@@ -122,21 +163,40 @@ export default function TeacherCenterPage() {
     }
   };
 
+  // 将当前筛选与分页状态同步到 URL
+  const updateUrlParams = (page = currentPage, size = pageSize) => {
+    const params = new URLSearchParams();
+    if (page > 1) params.set('page', page.toString());
+    if (size !== 10) params.set('pageSize', size.toString());
+    if (searchKeyword) params.set('keyword', searchKeyword);
+    if (department) params.set('department', department);
+    if (status) params.set('status', status);
+
+    const query = params.toString();
+    router.replace(query ? `?${query}` : '/teacher-center', { scroll: false });
+  };
+
   // 初始化
   useEffect(() => {
     fetchDepartments();
     fetchStatuses();
   }, []);
 
-  // 当筛选条件变化时重新获取数据
+  // 当筛选条件或分页变化时重新获取数据并同步 URL（跳过首次挂载，由初始化 useEffect 负责读取 URL 后的第一次请求）
   useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
     fetchTeachers();
-  }, [currentPage, pageSize, department, status]);
+    updateUrlParams();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, department, status, searchKeyword]);
 
   // 搜索按钮点击
   const handleSearch = () => {
+    setSearchKeyword(inputKeyword);
     setCurrentPage(1);
-    fetchTeachers();
   };
 
   // 查看详情
@@ -196,8 +256,8 @@ export default function TeacherCenterPage() {
         <Space orientation="horizontal" size="middle" wrap>
           <Input
             placeholder="搜索姓名或工号"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            value={inputKeyword}
+            onChange={(e) => setInputKeyword(e.target.value)}
             onPressEnter={handleSearch}
             style={{ width: 200 }}
             prefix={<SearchOutlined />}

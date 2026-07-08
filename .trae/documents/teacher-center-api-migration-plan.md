@@ -163,7 +163,7 @@
    - 移除不再使用的 `TableConfig` 字段映射类型。
 3. 为支持 API-only 应用，将 `src/lib/data-framework/types.ts` 中的 `AppBaseConfig.tables` 改为可选，并在 `config-loader.ts` 中增加 `tables` 为 `undefined` 时的保护。
 
-### 阶段五：构建与验证（P1）
+### 阶段五：构建与验证（P1）✅ 已完成
 
 1. 安装/检查依赖：
    ```bash
@@ -173,6 +173,7 @@
    ```bash
    npx tsc --noEmit
    ```
+   ✅ 已通过。
 3. 构建：
    ```bash
    npm run build
@@ -196,6 +197,11 @@
    - 访问 `/teacher-center/{gh}` 教师详情页。
    - 检查所有标签页数据是否正确加载。
    - 在 AI 问答标签页发送问题，确认回答基于 API 数据。
+   - ✅ 筛选条件与 URL 参数同步已验证：
+     - 列表页输入关键词并搜索后，URL 自动更新为 `?keyword=...`。
+     - 从详情页点击“返回列表”后，URL 中的筛选参数保留，输入框和列表结果恢复为筛选后的状态。
+     - 直接访问带参数的 URL（如 `?keyword=20080081`）时，页面能正确初始化筛选条件并显示对应结果。
+     - 实现位置：`src/app/teacher-center/page.tsx`（URL 参数同步与初始化）、`src/app/teacher-center/[gh]/page.tsx`（返回时使用 `router.back()`）。
 
 ## Assumptions & Decisions
 

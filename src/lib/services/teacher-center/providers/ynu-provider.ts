@@ -217,33 +217,68 @@ export class YnuDataProvider implements ITeacherDataProvider {
     const { keyword, department, status, page = 1, pageSize = 10 } = params;
 
     try {
-      // 调用数据中台 API 获取教职工基本信息
-      const result = await this.callApi('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
-        page: page,
-        per_page: pageSize,
-        // API 支持模糊查询，可以通过姓名或工号筛选
-        XM: keyword || undefined,  // 姓名
-        GH: keyword || undefined,  // 工号
-        DWH: department || undefined,  // 单位号
-        DQZTM: status || undefined,    // 当前状态码
-      });
+      const trimmedKeyword = keyword?.trim();
+      const commonParams: Record<string, unknown> = {
+        DWH: department || undefined,
+        DQZTM: status || undefined,
+      };
 
-      // 转换数据格式
-      const teachers = (result.data || []).map(this.transformTeacher);
+      let teachers: Teacher[] = [];
 
-      // 如果有关键词筛选，在返回前进行本地过滤
+      if (trimmedKeyword) {
+        // 分别按工号和姓名查询，合并结果（单个查询无结果属于正常情况，使用 fetchList 吞掉异常）
+        const byGhTeachersRaw = await this.fetchList('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
+          ...commonParams,
+          GH: trimmedKeyword,
+          page: 1,
+          per_page: 100,
+        });
+        const byXmTeachersRaw = await this.fetchList('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
+          ...commonParams,
+          XM: trimmedKeyword,
+          page: 1,
+          per_page: 100,
+        });
+
+        const byGhTeachers = byGhTeachersRaw.map(this.transformTeacher);
+        const byXmTeachers = byXmTeachersRaw.map(this.transformTeacher);
+
+        // 按工号去重合并
+        const teacherMap = new Map<string, Teacher>();
+        [...byGhTeachers, ...byXmTeachers].forEach((t) => {
+          if (t.gh) {
+            teacherMap.set(t.gh, t);
+          }
+        });
+        teachers = Array.from(teacherMap.values());
+      } else {
+        // 无关键词时正常分页查询
+        const result = await this.callApi('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
+          ...commonParams,
+          page,
+          per_page: pageSize,
+        });
+        teachers = (result.data || []).map(this.transformTeacher);
+      }
+
+      // 本地过滤（确保包含 keyword）
       let filteredTeachers = teachers;
-      if (keyword) {
-        const lowerKeyword = keyword.toLowerCase();
+      if (trimmedKeyword) {
+        const lowerKeyword = trimmedKeyword.toLowerCase();
         filteredTeachers = teachers.filter((t: Teacher) =>
           t.xm?.toLowerCase().includes(lowerKeyword) ||
           t.gh?.toLowerCase().includes(lowerKeyword)
         );
       }
 
+      // 有关键词时在合并结果上重新分页
+      const finalTeachers = trimmedKeyword
+        ? filteredTeachers.slice((page - 1) * pageSize, page * pageSize)
+        : filteredTeachers;
+
       return {
-        data: filteredTeachers,
-        total: parseInt(result.total) || filteredTeachers.length,
+        data: finalTeachers,
+        total: filteredTeachers.length,
       };
     } catch (error) {
       console.error('查询教师列表失败:', error);
