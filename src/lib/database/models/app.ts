@@ -23,6 +23,7 @@ export const BUILTIN_APPS = {
   RULE_MANAGEMENT: 19,   // 规则管理
   API_KEY_MANAGEMENT: 20, // API密钥管理
   LISTENING_TRAINING: 21, // 听力训练
+  IT_ASSET_CENTER: 22,    // IT资产中心
 } as const;
 
 // 内置应用URL映射
@@ -48,6 +49,7 @@ export const BUILTIN_APP_URLS = {
   '/rules': BUILTIN_APPS.RULE_MANAGEMENT,
   '/api-keys': BUILTIN_APPS.API_KEY_MANAGEMENT,
   '/listening-training': BUILTIN_APPS.LISTENING_TRAINING,
+  '/it-asset-center': BUILTIN_APPS.IT_ASSET_CENTER,
 } as const;
 
 export interface App {

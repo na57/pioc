@@ -29,7 +29,7 @@ export const DEVICE_TYPES: Record<number, DeviceTypeConfig> = {
     selectable: true,
     bgColor: '#e6f4ff',
     borderColor: '#91caff',
-    description: '计算服务器、存储服务器等',
+    description: '计算服务器、应用服务器等',
   },
   2: {
     value: 2,
@@ -57,6 +57,15 @@ export const DEVICE_TYPES: Record<number, DeviceTypeConfig> = {
     bgColor: '#f5f5f5',
     borderColor: '#d9d9d9',
     description: '其他类型设备',
+  },
+  6: {
+    value: 6,
+    label: '存储设备',
+    color: 'purple',
+    selectable: true,
+    bgColor: '#f9f0ff',
+    borderColor: '#d3adf7',
+    description: '磁盘阵列、存储阵列、NAS/SAN等',
   },
   5: {
     value: 5,
@@ -113,6 +122,7 @@ export const deviceTypeMap: Record<number, { label: string; color: string }> = {
   3: { label: '安全设备', color: 'orange' },
   4: { label: '其他', color: 'default' },
   5: { label: '预留空间', color: 'gold' },
+  6: { label: '存储设备', color: 'purple' },
 };
 
 /**
@@ -122,6 +132,7 @@ export const RESERVED_REASONS = [
   { value: 'cooling', label: '散热预留' },
   { value: 'maintenance', label: '维护预留' },
   { value: 'expansion', label: '扩容预留' },
+  { value: 'infrastructure', label: '基础设施' },
   { value: 'other', label: '其他' },
 ] as const;
 
