@@ -7,6 +7,7 @@ import {
   IItAssetDataProvider,
   InformationSystem,
   ITAsset,
+  ITAssetBase,
   AssetRelationship,
   SystemAssetStats,
   AssetType,
@@ -122,7 +123,7 @@ class MockDataGenerator {
   ): ITAsset {
     const meta = ASSET_TYPE_META[type];
     const id = `asset-${systemId}-${type}-${sequence}`;
-    const base: ITAsset = {
+    const base: ITAssetBase = {
       id,
       system_id: systemId,
       asset_type: type,
@@ -141,7 +142,7 @@ class MockDataGenerator {
     return { ...typedAsset, ...overrides } as ITAsset;
   }
 
-  private fillAssetDetails(base: ITAsset, type: AssetType, sequence: number): ITAsset {
+  private fillAssetDetails(base: ITAssetBase, type: AssetType, sequence: number): ITAsset {
     switch (type) {
       case 'physical_device':
         return {
@@ -310,7 +311,7 @@ class MockDataGenerator {
           endpoint: `https://api-vendor-${sequence}.example.com`,
         };
       default:
-        return base;
+        return base as ITAsset;
     }
   }
 

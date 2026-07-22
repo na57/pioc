@@ -63,7 +63,7 @@ export class ConfigLoader<T extends AppBaseConfig> {
     }
 
     const configPath = path.join(
-      process.cwd(),
+      /*turbopackIgnore: true*/ process.cwd(),
       this.options.configDir!,
       configFileName
     );
@@ -208,7 +208,7 @@ export class ConfigLoader<T extends AppBaseConfig> {
    */
   getConfigPath(): string {
     return path.join(
-      process.cwd(),
+      /*turbopackIgnore: true*/ process.cwd(),
       this.options.configDir!,
       this.options.configFileName
     );

@@ -2,13 +2,13 @@
  * IT资产中心配置
  */
 
-import { createAppConfigBundle } from '@/lib/data-framework';
+import { AppBaseConfig, createAppConfigBundle } from '@/lib/data-framework';
 
 // ============================================
 // IT资产中心配置类型
 // ============================================
 
-export interface ItAssetCenterConfig {
+export interface ItAssetCenterConfig extends AppBaseConfig {
   /** 数据提供者名称，用于确定使用哪个数据提供者实现 */
   provider?: string;
 }
