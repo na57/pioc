@@ -7,8 +7,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 const { Title } = Typography;
 
+interface SystemConfig {
+  auth?: {
+    enableCasLogin?: boolean;
+    directCasLogin?: boolean;
+  };
+}
+
 function LoginForm() {
   const [loading, setLoading] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { message } = App.useApp();
@@ -25,6 +34,32 @@ function LoginForm() {
       }
     }
   }, [searchParams, message]);
+
+  useEffect(() => {
+    fetch('/api/system/config')
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.success) {
+          setSystemConfig(result.data);
+        }
+      })
+      .catch(() => {
+        // 配置获取失败时不影响正常登录
+      });
+  }, []);
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    const auth = systemConfig?.auth;
+    if (auth?.directCasLogin && auth?.enableCasLogin !== false && !error) {
+      setRedirecting(true);
+      const redirect = searchParams.get('redirect');
+      const casLoginUrl = redirect
+        ? `/api/auth/cas/login?redirect=${encodeURIComponent(redirect)}`
+        : '/api/auth/cas/login';
+      window.location.href = casLoginUrl;
+    }
+  }, [systemConfig, searchParams]);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -59,6 +94,14 @@ function LoginForm() {
     window.location.href = casLoginUrl;
   };
 
+  if (redirecting) {
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <Spin description="正在跳转 CAS 登录页..." />
+      </div>
+    );
+  }
+
   return (
     <>
       <Form
@@ -85,16 +128,20 @@ function LoginForm() {
           </Button>
         </Form.Item>
       </Form>
-      <Divider plain>或</Divider>
-      <Button
-        block
-        size="large"
-        icon={<SafetyCertificateOutlined />}
-        onClick={handleCasLogin}
-        style={{ marginTop: 8 }}
-      >
-        CAS/OAuth 登录
-      </Button>
+      {systemConfig?.auth?.enableCasLogin !== false && (
+        <>
+          <Divider plain>或</Divider>
+          <Button
+            block
+            size="large"
+            icon={<SafetyCertificateOutlined />}
+            onClick={handleCasLogin}
+            style={{ marginTop: 8 }}
+          >
+            CAS/OAuth 登录
+          </Button>
+        </>
+      )}
     </>
   );
 }

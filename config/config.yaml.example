@@ -72,6 +72,8 @@ cas:
     email: "email"
     name: "name"
   defaultRoleId: 2
+  # 是否进入登录页后自动跳转到 CAS 登录页
+  directLogin: false
 
 #------------------------------------------
 # 企业微信配置 (可选)

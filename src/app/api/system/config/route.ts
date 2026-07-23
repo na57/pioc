@@ -25,6 +25,10 @@ export async function GET() {
       description: config.app.description,
       version: packageVersion,
       copyright: `©${new Date().getFullYear()} PIOC`,
+      auth: {
+        enableCasLogin: config.features.enableCasLogin && config.cas.enabled,
+        directCasLogin: config.cas.directLogin,
+      },
     };
 
     return NextResponse.json({
@@ -40,6 +44,10 @@ export async function GET() {
         description: 'Personal Intelligence Operation Center',
         version: getPackageVersion(),
         copyright: `©${new Date().getFullYear()} PIOC`,
+        auth: {
+          enableCasLogin: false,
+          directCasLogin: false,
+        },
       },
     });
   }

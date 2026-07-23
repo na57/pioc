@@ -77,6 +77,7 @@ export interface AppConfig {
       name: string;
     };
     defaultRoleId: number;
+    directLogin: boolean;
   };
   wechat: {
     enabled: boolean;
