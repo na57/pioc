@@ -3,3 +3,9 @@
 # 数据提供者名称，用于确定使用哪个数据提供者实现
 # 当前可选：mock（模拟数据）、ynu（云南大学数据中台）、cmdb（后续接入CMDB等第三方系统）
 provider: "ynu"
+
+# AI配置（可选）
+# 用于AI智能问答功能，指定使用哪个AI provider
+# providerId对应config.yaml中ai.providers[].providerId
+ai:
+  providerId: local-minimax  # 可选，默认为openai

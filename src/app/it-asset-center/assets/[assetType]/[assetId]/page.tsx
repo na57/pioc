@@ -10,178 +10,168 @@ import {
   Spin,
   Empty,
   Tag,
-  Badge,
-  Table,
-  Row,
-  Col,
 } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import FriendlyTime from '@/components/FriendlyTime';
 import ActionButton from '@/app/tags/components/ActionButton';
-import type { ITAsset, AssetRelationship, AssetCategory } from '@/lib/services/it-asset-center';
-import { ASSET_TYPE_META, CATEGORY_LABELS } from '@/lib/services/it-asset-center';
+import type { ITAsset, DNSRecordDetail } from '@/lib/services/it-asset-center';
+import { AssetDetailView } from '@/app/it-asset-center/components/AssetDetailView';
 
 const { Title } = Typography;
 
-const CATEGORY_COLORS: Record<AssetCategory, string> = {
-  infrastructure: 'geekblue',
-  network: 'cyan',
-  data: 'green',
-  application: 'purple',
-  software: 'magenta',
-  operations: 'gold',
-  external: 'lime',
-};
-
 export default function AssetDetailPage() {
   const params = useParams();
-  const assetId = params.assetId as string;
+  const assetId = decodeURIComponent(params.assetId as string);
+  const assetType = params.assetType as string;
   const { message } = App.useApp();
 
   const [loading, setLoading] = useState(true);
   const [asset, setAsset] = useState<ITAsset | null>(null);
-  const [relationships, setRelationships] = useState<AssetRelationship[]>([]);
+  const [dnsRecord, setDnsRecord] = useState<DNSRecordDetail | null>(null);
+  const [systemInfo, setSystemInfo] = useState<{ id: string; name: string; code?: string } | null>(null);
+
+  const isDNSRecord = assetType === 'dns_record';
 
   const fetchAsset = useCallback(async () => {
     try {
-      const response = await fetch(`/api/it-asset-center?action=asset-detail&id=${assetId}`);
+      const queryParams = new URLSearchParams({ action: 'asset-detail', id: assetId });
+      queryParams.set('asset_type', assetType);
+      const response = await fetch(`/api/it-asset-center?${queryParams.toString()}`);
       const result = await response.json();
       if (result.success) {
-        setAsset(result.data.asset);
+        if (isDNSRecord) {
+          setDnsRecord(result.data.asset as DNSRecordDetail);
+        } else {
+          setAsset(result.data.asset as ITAsset);
+        }
       } else {
         message.error(result.error || '获取资产详情失败');
       }
     } catch {
       message.error('获取资产详情失败');
     }
-  }, [assetId, message]);
+  }, [assetId, assetType, isDNSRecord, message]);
 
-  const fetchRelationships = useCallback(async () => {
+  const fetchSystemInfo = useCallback(async (systemId: string) => {
     try {
-      const response = await fetch(`/api/it-asset-center?action=asset-relationships&id=${assetId}`);
+      const response = await fetch(`/api/it-asset-center?action=system-detail&id=${systemId}`);
       const result = await response.json();
-      if (result.success) {
-        setRelationships(result.data.relationships);
+      if (result.success && result.data.system) {
+        setSystemInfo({
+          id: result.data.system.id,
+          name: result.data.system.name,
+          code: result.data.system.code,
+        });
       }
     } catch {
       // 静默失败
     }
-  }, [assetId]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchAsset(), fetchRelationships()]).finally(() => {
+    fetchAsset().finally(() => {
       setLoading(false);
     });
-  }, [fetchAsset, fetchRelationships]);
+  }, [fetchAsset]);
 
-  const relationshipColumns = [
-    {
-      title: '关系类型',
-      dataIndex: 'relation_type',
-      key: 'relation_type',
-      render: (type: string) => {
-        const labels: Record<string, string> = {
-          depends_on: '依赖',
-          serves: '服务',
-          runs_on: '运行于',
-          belongs_to: '属于',
-        };
-        return labels[type] || type;
-      },
-    },
-    {
-      title: '目标资产类型',
-      dataIndex: 'target_type',
-      key: 'target_type',
-      render: (type: string) => <Tag>{ASSET_TYPE_META[type as keyof typeof ASSET_TYPE_META]?.label || type}</Tag>,
-    },
-    {
-      title: '目标资产ID',
-      dataIndex: 'target_id',
-      key: 'target_id',
-      render: (id: string, record: AssetRelationship) => (
-        <Link href={`/it-asset-center/assets/${record.target_type}/${id}`}>{id}</Link>
-      ),
-    },
-  ];
+  useEffect(() => {
+    if (asset?.system_id && !isDNSRecord) {
+      fetchSystemInfo(asset.system_id);
+    }
+  }, [asset, fetchSystemInfo, isDNSRecord]);
 
-  const renderAssetDetails = () => {
-    if (!asset) return null;
+  const renderDNSRecordDetails = () => {
+    if (!dnsRecord) return null;
 
-    const entries = Object.entries(asset).filter(
-      ([key]) => !['id', 'system_id', 'asset_type', 'category', 'name', 'status', 'metadata', 'tags'].includes(key)
-    );
+    const column = isMobile() ? 1 : 2;
+
+    const items: Array<{ label: string; value: React.ReactNode; span?: number }> = [
+      { label: '记录域名', value: dnsRecord.domain || '-' },
+      { label: '记录类型', value: <Tag>{dnsRecord.record_type || '-'}</Tag> },
+      { label: '记录值', value: dnsRecord.record_value || '-' },
+      { label: 'TTL', value: dnsRecord.ttl || '-' },
+      { label: '网络类别', value: dnsRecord.network_category || '-' },
+      { label: '域名状态', value: dnsRecord.domain_status || '-' },
+      { label: '审核状态', value: dnsRecord.audit_status || '-' },
+      { label: '反向解析域名', value: dnsRecord.reverse_domain || '-' },
+      { label: '到期策略', value: dnsRecord.expiry_policy || '-' },
+      { label: '是否启用有效期', value: dnsRecord.enable_validity || '-' },
+      { label: '过期时间', value: dnsRecord.expiry_date ? <FriendlyTime date={dnsRecord.expiry_date} /> : '-' },
+      { label: '创建时间', value: dnsRecord.created_at ? <FriendlyTime date={dnsRecord.created_at} /> : '-' },
+      { label: '更新时间', value: dnsRecord.updated_at ? <FriendlyTime date={dnsRecord.updated_at} /> : '-' },
+      { label: '备注', value: dnsRecord.remark || '-' },
+    ];
+
+    fixSpan(items, column);
 
     return (
-      <Descriptions bordered column={isMobile() ? 1 : 2}>
-        <Descriptions.Item label="资产编码">{asset.code || '-'}</Descriptions.Item>
-        <Descriptions.Item label="资产类型">
-          <Tag>{ASSET_TYPE_META[asset.asset_type]?.label || asset.asset_type}</Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="所属分层">
-          <Tag color={CATEGORY_COLORS[asset.category]}>{CATEGORY_LABELS[asset.category]}</Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="运行状态">
-          <Badge status={asset.status === 'active' ? 'success' : 'default'} text={asset.status === 'active' ? '活跃' : '停用'} />
-        </Descriptions.Item>
-        {entries.map(([key, value]) => (
-          <Descriptions.Item key={key} label={key}>
-            {formatValue(value)}
+      <Descriptions bordered column={column}>
+        {items.map((it, idx) => (
+          <Descriptions.Item key={`${it.label}-${idx}`} label={it.label} span={it.span}>
+            {it.value}
           </Descriptions.Item>
         ))}
-        <Descriptions.Item label="创建时间">
-          <FriendlyTime date={asset.created_at} />
-        </Descriptions.Item>
-        <Descriptions.Item label="更新时间">
-          <FriendlyTime date={asset.updated_at} />
-        </Descriptions.Item>
       </Descriptions>
     );
   };
 
+  const pageTitle = isDNSRecord
+    ? dnsRecord
+      ? `${dnsRecord.record_type} - ${dnsRecord.domain}`
+      : 'DNS 记录详情'
+    : asset?.name || '资产详情';
+  const notFound = !loading && (isDNSRecord ? !dnsRecord : !asset);
+
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Link href="/it-asset-center/assets">
+        <Link href="/it-asset-center?tab=assets">
           <ActionButton icon={<ArrowLeftOutlined />} tooltip="返回资产列表" />
         </Link>
         <Title level={3} style={{ margin: 0 }}>
-          {asset?.name || '资产详情'}
+          {pageTitle}
         </Title>
       </div>
 
       <Spin spinning={loading} description="加载中...">
-        {!loading && !asset ? (
+        {notFound ? (
           <Empty description="资产不存在" />
-        ) : (
-          <div>
-            <Card title="基本信息" style={{ marginBottom: 16 }}>
-              {renderAssetDetails()}
-            </Card>
-
-            <Card title="关联关系">
-              <Table
-                columns={relationshipColumns}
-                dataSource={relationships}
-                rowKey="id"
-                pagination={false}
-                locale={{ emptyText: <Empty description="暂无关联关系" /> }}
-              />
-            </Card>
-          </div>
-        )}
+        ) : isDNSRecord ? (
+          <Card title="基本信息">
+            {renderDNSRecordDetails()}
+          </Card>
+        ) : asset ? (
+          <AssetDetailView asset={asset} systemInfo={systemInfo} />
+        ) : null}
       </Spin>
     </div>
   );
 }
 
-function formatValue(value: unknown): React.ReactNode {
-  if (value === undefined || value === null) return '-';
-  if (Array.isArray(value)) return value.join(', ');
-  if (typeof value === 'object') return JSON.stringify(value);
-  return String(value);
+function fixSpan(items: Array<{ label: string; value: React.ReactNode; span?: number }>, column: number) {
+  let rowSpan = 0;
+  for (let i = 0; i < items.length; i++) {
+    const span = items[i].span ?? 1;
+    if (rowSpan + span > column && rowSpan > 0) {
+      if (rowSpan < column) {
+        const lastIdxOfPrevRow = i - 1;
+        const cur = items[lastIdxOfPrevRow].span ?? 1;
+        items[lastIdxOfPrevRow].span = cur + (column - rowSpan);
+      }
+      rowSpan = span;
+    } else if (rowSpan + span === column) {
+      rowSpan = 0;
+    } else {
+      rowSpan += span;
+    }
+  }
+  if (rowSpan > 0 && rowSpan < column) {
+    const lastIdx = items.length - 1;
+    const cur = items[lastIdx].span ?? 1;
+    items[lastIdx].span = cur + (column - rowSpan);
+  }
 }
 
 function isMobile() {

@@ -6,58 +6,40 @@ import {
   Card,
   Descriptions,
   Table,
-  Tabs,
   Typography,
   App,
   Spin,
   Empty,
   Tag,
   Badge,
-  Row,
-  Col,
-  Statistic,
-  Select,
   Space,
-  Input,
 } from 'antd';
 import {
-  ArrowLeftOutlined,
   DatabaseOutlined,
-  AppstoreOutlined,
-  ReloadOutlined,
 } from '@ant-design/icons';
 import Link from 'next/link';
 import FriendlyTime from '@/components/FriendlyTime';
-import ActionButton from '@/app/tags/components/ActionButton';
 import type { InformationSystem, ITAsset, SystemAssetStats, AssetType, AssetCategory } from '@/lib/services/it-asset-center';
 import { ASSET_TYPE_META, CATEGORY_LABELS } from '@/lib/services/it-asset-center';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 const STATUS_LABELS: Record<string, string> = {
-  running: '运行中',
-  stopped: '已停止',
-  deprecated: '已下线',
+  active: '活跃',
+  inactive: '停用',
+  faulty: '故障',
+  idle: '闲置',
   planning: '规划中',
-};
-
-const LEVEL_LABELS: Record<string, string> = {
-  core: '核心',
-  important: '重要',
-  general: '一般',
+  unknown: '未知',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  running: 'success',
-  stopped: 'default',
-  deprecated: 'error',
+  active: 'success',
+  inactive: 'default',
+  faulty: 'error',
+  idle: 'warning',
   planning: 'processing',
-};
-
-const LEVEL_COLORS: Record<string, string> = {
-  core: 'red',
-  important: 'orange',
-  general: 'blue',
+  unknown: 'default',
 };
 
 const CATEGORY_COLORS: Record<AssetCategory, string> = {
@@ -83,13 +65,6 @@ export default function SystemDetailPage() {
   const [assetsPage, setAssetsPage] = useState(1);
   const [assetsPageSize, setAssetsPageSize] = useState(10);
   const [assetsLoading, setAssetsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
-
-  const [assetKeyword, setAssetKeyword] = useState('');
-  const [selectedAssetType, setSelectedAssetType] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedAssetStatus, setSelectedAssetStatus] = useState<string>('');
-  const [assetTypes, setAssetTypes] = useState<{ type: AssetType; category: AssetCategory; label: string }[]>([]);
 
   const fetchSystem = useCallback(async () => {
     try {
@@ -125,32 +100,20 @@ export default function SystemDetailPage() {
       params.append('system_id', systemId);
       params.append('page', assetsPage.toString());
       params.append('per_page', assetsPageSize.toString());
-      if (assetKeyword) params.append('keyword', assetKeyword);
-      if (selectedAssetType) params.append('asset_type', selectedAssetType);
-      if (selectedCategory) params.append('category', selectedCategory);
-      if (selectedAssetStatus) params.append('status', selectedAssetStatus);
 
       const response = await fetch(`/api/it-asset-center?${params.toString()}`);
       const result = await response.json();
       if (result.success) {
-        setAssets(result.data.data);
-        setAssetsTotal(result.data.total);
+        const filtered = (result.data.data || []).filter((a: ITAsset) => a.asset_type !== 'dns_record');
+        setAssets(filtered);
+        setAssetsTotal(filtered.length);
       }
     } catch {
-      message.error('获取资产列表失败');
+      message.error('获取关联资产列表失败');
     } finally {
       setAssetsLoading(false);
     }
-  }, [
-    systemId,
-    assetsPage,
-    assetsPageSize,
-    assetKeyword,
-    selectedAssetType,
-    selectedCategory,
-    selectedAssetStatus,
-    message,
-  ]);
+  }, [systemId, assetsPage, assetsPageSize, message]);
 
   useEffect(() => {
     setLoading(true);
@@ -163,52 +126,16 @@ export default function SystemDetailPage() {
     fetchAssets();
   }, [fetchAssets]);
 
-  const fetchAssetTypes = useCallback(async () => {
-    try {
-      const response = await fetch('/api/it-asset-center?action=asset-types');
-      const result = await response.json();
-      if (result.success) {
-        setAssetTypes(result.data.types || []);
-      }
-    } catch {
-      // 静默失败
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAssetTypes();
-  }, [fetchAssetTypes]);
-
-  const handleOpenAssetsTab = (assetType?: string) => {
-    if (assetType) {
-      setSelectedAssetType(assetType);
-      setSelectedCategory('');
-      setAssetKeyword('');
-    } else {
-      setSelectedAssetType('');
-      setSelectedCategory('');
-      setSelectedAssetStatus('');
-      setAssetKeyword('');
-    }
-    setAssetsPage(1);
-    setActiveTab('assets');
-  };
-
-  const handleResetAssetFilters = () => {
-    setAssetKeyword('');
-    setSelectedAssetType('');
-    setSelectedCategory('');
-    setSelectedAssetStatus('');
-    setAssetsPage(1);
-  };
-
   const assetColumns = [
     {
       title: '资产名称',
       dataIndex: 'name',
       key: 'name',
       render: (text: string, record: ITAsset) => (
-        <Link href={`/it-asset-center/assets/${record.asset_type}/${record.id}`}>{text}</Link>
+        <Space orientation="horizontal" size={4}>
+          <Badge status={(STATUS_COLORS[record.status] as any) || 'default'} />
+          <Link href={`/it-asset-center/assets/${record.asset_type}/${encodeURIComponent(record.id)}`}>{text}</Link>
+        </Space>
       ),
     },
     {
@@ -227,168 +154,11 @@ export default function SystemDetailPage() {
         <Tag color={CATEGORY_COLORS[category]}>{CATEGORY_LABELS[category]}</Tag>
       ),
     },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status: string) => <Badge status={status === 'active' ? 'success' : 'default'} text={status === 'active' ? '活跃' : '停用'} />,
-    },
-  ];
-
-  const tabItems = [
-    {
-      key: 'overview',
-      label: '概览',
-      children: (
-        <div>
-          <Card title="基本信息" style={{ marginBottom: 16 }}>
-            {system && (
-              <Descriptions bordered column={isMobile() ? 1 : 2}>
-                <Descriptions.Item label="系统编码">{system.code}</Descriptions.Item>
-                <Descriptions.Item label="系统名称">{system.name}</Descriptions.Item>
-                <Descriptions.Item label="系统等级">
-                  <Tag color={LEVEL_COLORS[system.level || 'general']}>{LEVEL_LABELS[system.level || 'general']}</Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="运行状态">
-                  <Badge status={STATUS_COLORS[system.status] as any} text={STATUS_LABELS[system.status]} />
-                </Descriptions.Item>
-                <Descriptions.Item label="负责人">{system.owner || '-'}</Descriptions.Item>
-                <Descriptions.Item label="负责部门">{system.owner_department || '-'}</Descriptions.Item>
-                <Descriptions.Item label="创建时间">
-                  <FriendlyTime date={system.created_at} />
-                </Descriptions.Item>
-                <Descriptions.Item label="更新时间">
-                  <FriendlyTime date={system.updated_at} />
-                </Descriptions.Item>
-                <Descriptions.Item label="系统描述" span={isMobile() ? 1 : 2}>
-                  {system.description || '-'}
-                </Descriptions.Item>
-              </Descriptions>
-            )}
-          </Card>
-
-          <Card title="资产统计">
-            <Row gutter={[16, 16]}>
-              <Col xs={12} md={6}>
-                <Card
-                  size="small"
-                  hoverable
-                  onClick={() => handleOpenAssetsTab()}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <Statistic title="资产总数" value={stats?.total || 0} prefix={<AppstoreOutlined />} />
-                </Card>
-              </Col>
-              {stats?.by_type.map((stat) => (
-                <Col xs={12} md={6} key={stat.asset_type}>
-                  <Card
-                    size="small"
-                    hoverable
-                    onClick={() => handleOpenAssetsTab(stat.asset_type)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Statistic title={stat.label} value={stat.count} prefix={<DatabaseOutlined />} />
-                  </Card>
-                </Col>
-              ))}
-            </Row>
-          </Card>
-        </div>
-      ),
-    },
-    {
-      key: 'assets',
-      label: `资产清单 (${assetsTotal})`,
-      children: (
-        <Card>
-          <Space
-            orientation="horizontal"
-            wrap
-            style={{ marginBottom: 16 }}
-            size="middle"
-          >
-            <Input.Search
-              placeholder="搜索资产名称"
-              allowClear
-              value={assetKeyword}
-              onChange={(e) => setAssetKeyword(e.target.value)}
-              onSearch={(value) => {
-                setAssetKeyword(value);
-                setAssetsPage(1);
-              }}
-              style={{ width: 220 }}
-            />
-            <Select
-              placeholder="资产类型"
-              allowClear
-              value={selectedAssetType || undefined}
-              onChange={(value) => {
-                setSelectedAssetType(value || '');
-                setAssetsPage(1);
-              }}
-              options={assetTypes.map((t) => ({ label: t.label, value: t.type }))}
-              style={{ width: 160 }}
-            />
-            <Select
-              placeholder="分层"
-              allowClear
-              value={selectedCategory || undefined}
-              onChange={(value) => {
-                setSelectedCategory(value || '');
-                setAssetsPage(1);
-              }}
-              options={Object.entries(CATEGORY_LABELS).map(([key, label]) => ({ label, value: key }))}
-              style={{ width: 160 }}
-            />
-            <Select
-              placeholder="状态"
-              allowClear
-              value={selectedAssetStatus || undefined}
-              onChange={(value) => {
-                setSelectedAssetStatus(value || '');
-                setAssetsPage(1);
-              }}
-              options={[
-                { label: '活跃', value: 'active' },
-                { label: '停用', value: 'inactive' },
-                { label: '未知', value: 'unknown' },
-              ]}
-              style={{ width: 140 }}
-            />
-            <ActionButton icon={<ReloadOutlined />} tooltip="重置筛选" onClick={handleResetAssetFilters}>
-              重置
-            </ActionButton>
-          </Space>
-
-          <Table
-            columns={assetColumns}
-            dataSource={assets}
-            rowKey="id"
-            loading={assetsLoading}
-            pagination={{
-              current: assetsPage,
-              pageSize: assetsPageSize,
-              total: assetsTotal,
-              showTotal: (total) => `共 ${total} 个资产`,
-              onChange: (page, pageSize) => {
-                setAssetsPage(page);
-                setAssetsPageSize(pageSize || 10);
-              },
-            }}
-            locale={{ emptyText: <Empty description="暂无资产" /> }}
-          />
-        </Card>
-      ),
-    },
   ];
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Link href="/it-asset-center">
-          <ActionButton icon={<ArrowLeftOutlined />} tooltip="返回列表" />
-        </Link>
+      <div style={{ marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>
           {system?.name || '系统详情'}
         </Title>
@@ -398,7 +168,71 @@ export default function SystemDetailPage() {
         {!loading && !system ? (
           <Empty description="系统不存在" />
         ) : (
-          <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+          <div>
+            <Card title="基本信息" style={{ marginBottom: 16 }}>
+              {system && (
+                <Descriptions bordered column={isMobile() ? 1 : 2}>
+                  <Descriptions.Item label="系统编码">{system.code}</Descriptions.Item>
+                  <Descriptions.Item label="系统名称">{system.name}</Descriptions.Item>
+                  <Descriptions.Item label="运行状态">
+                    <Badge status={STATUS_COLORS[system.status] as any} text={STATUS_LABELS[system.status]} />
+                  </Descriptions.Item>
+                  <Descriptions.Item label="负责人">{system.owner || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="负责部门">{system.owner_department || '-'}</Descriptions.Item>
+                  <Descriptions.Item label="上级系统">
+                    {system.parent_id ? (
+                      <Link href={`/it-asset-center/${system.parent_id}`}>{system.parent_name || system.parent_id}</Link>
+                    ) : (
+                      '-'
+                    )}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="创建时间">
+                    {system.created_at ? <FriendlyTime date={system.created_at} /> : '-'}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="更新时间">
+                    {system.updated_at ? <FriendlyTime date={system.updated_at} /> : '-'}
+                  </Descriptions.Item>
+                  {system.description && (
+                    <Descriptions.Item label="系统描述" span={isMobile() ? 1 : 2}>
+                      {system.description}
+                    </Descriptions.Item>
+                  )}
+                </Descriptions>
+              )}
+            </Card>
+
+            {system?.custom_fields && Object.keys(system.custom_fields).length > 0 && (
+              <Card title="扩展信息" style={{ marginBottom: 16 }}>
+                <Descriptions bordered column={isMobile() ? 1 : 2}>
+                  {Object.entries(system.custom_fields).map(([label, value]) => (
+                    <Descriptions.Item key={label} label={label}>
+                      {value || '-'}
+                    </Descriptions.Item>
+                  ))}
+                </Descriptions>
+              </Card>
+            )}
+
+            <Card title="关联资产" style={{ marginBottom: 16 }}>
+              <Table
+                columns={assetColumns}
+                dataSource={assets}
+                rowKey="id"
+                loading={assetsLoading}
+                pagination={{
+                  current: assetsPage,
+                  pageSize: assetsPageSize,
+                  total: assetsTotal,
+                  showTotal: (total) => `共 ${total} 个关联资产`,
+                  onChange: (page, pageSize) => {
+                    setAssetsPage(page);
+                    setAssetsPageSize(pageSize || 10);
+                  },
+                }}
+                locale={{ emptyText: <Empty description="暂无关联资产" /> }}
+              />
+            </Card>
+          </div>
         )}
       </Spin>
     </div>

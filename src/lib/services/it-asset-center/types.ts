@@ -10,17 +10,12 @@
 /**
  * 系统状态
  */
-export type InformationSystemStatus = 'running' | 'stopped' | 'deprecated' | 'planning';
-
-/**
- * 系统等级
- */
-export type InformationSystemLevel = 'core' | 'important' | 'general';
+export type InformationSystemStatus = 'active' | 'inactive' | 'planning';
 
 /**
  * 资产状态
  */
-export type AssetStatus = 'active' | 'inactive' | 'unknown';
+export type AssetStatus = 'active' | 'inactive' | 'unknown' | 'faulty' | 'idle';
 
 /**
  * 资产类型
@@ -30,7 +25,6 @@ export type AssetType =
   | 'virtual_machine'
   | 'container'
   | 'cluster'
-  | 'network_device'
   | 'ip_address'
   | 'domain'
   | 'dns_record'
@@ -40,6 +34,7 @@ export type AssetType =
   | 'storage'
   | 'backup'
   | 'web_server'
+  | 'web_app'
   | 'middleware'
   | 'api_gateway'
   | 'load_balancer'
@@ -51,6 +46,7 @@ export type AssetType =
   | 'logging'
   | 'pipeline'
   | 'code_repository'
+  | 'ops_access_control'
   | 'third_party_service'
   | 'external_api';
 
@@ -103,7 +99,9 @@ export interface InformationSystem {
   owner?: string;
   owner_department?: string;
   status: InformationSystemStatus;
-  level?: InformationSystemLevel;
+  parent_id?: string;
+  parent_name?: string;
+  custom_fields?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
@@ -135,14 +133,19 @@ export interface ITAssetBase {
  */
 export interface PhysicalDevice extends ITAssetBase {
   asset_type: 'physical_device';
+  device_type?: string;
   brand?: string;
   model?: string;
   sn?: string;
-  room?: string;
-  cabinet?: string;
-  cpu?: string;
-  memory?: string;
-  disk?: string;
+  ip_address?: string;
+  management_ip?: string;
+  manufacturer?: string;
+  warranty_expiry?: string;
+  department?: string;
+  owner?: string;
+  owner_employee_id?: string;
+  system_name?: string;
+  remark?: string;
 }
 
 export interface VirtualMachine extends ITAssetBase {
@@ -172,14 +175,6 @@ export interface Cluster extends ITAssetBase {
   version?: string;
 }
 
-export interface NetworkDevice extends ITAssetBase {
-  asset_type: 'network_device';
-  device_type?: string;
-  management_ip?: string;
-  brand?: string;
-  location?: string;
-}
-
 // ============================================
 // 网络层资产
 // ============================================
@@ -196,8 +191,9 @@ export interface Domain extends ITAssetBase {
   asset_type: 'domain';
   domain: string;
   record_count?: number;
-  ssl_certificate_id?: string;
   ip_address_id?: string;
+  department?: string;
+  owner?: string;
 }
 
 export interface DNSRecord extends ITAssetBase {
@@ -207,6 +203,27 @@ export interface DNSRecord extends ITAssetBase {
   host_record?: string;
   record_value?: string;
   ttl?: number;
+}
+
+/**
+ * DNS 记录详情（从中台 DNS 记录 API 返回）
+ */
+export interface DNSRecordDetail {
+  id: string;
+  domain: string;
+  record_type: string;
+  network_category?: string;
+  ttl?: string;
+  record_value?: string;
+  reverse_domain?: string;
+  domain_status?: string;
+  audit_status?: string;
+  expiry_date?: string;
+  expiry_policy?: string;
+  created_at?: string;
+  enable_validity?: string;
+  remark?: string;
+  updated_at?: string;
 }
 
 export interface SSLCertificate extends ITAssetBase {
@@ -263,10 +280,24 @@ export interface Backup extends ITAssetBase {
 
 export interface WebServer extends ITAssetBase {
   asset_type: 'web_server';
+  // 抽象业务字段
   server_type?: string;
-  version?: string;
-  listen_ports?: number[];
-  config_file?: string;
+  ip_address?: string;
+  purpose?: string;
+}
+
+/**
+ * Web 应用
+ * 从数据中台 "EDR系统WEB应用信息" 接口获取
+ * 抽象业务字段：IP地址、Web服务器类型、应用名称、应用版本
+ */
+export interface WebApp extends ITAssetBase {
+  asset_type: 'web_app';
+  // 抽象业务字段
+  ip_address?: string;
+  server_type?: string;
+  app_name?: string;
+  app_version?: string;
 }
 
 export interface Middleware extends ITAssetBase {
@@ -363,12 +394,40 @@ export interface CodeRepository extends ITAssetBase {
   maintainer?: string;
 }
 
+/**
+ * 运维访问控制
+ * 记录被访问控制系统（堡垒机、数据库访问网关等）纳管的资源
+ * 本质是"受控的访问目标"，而非管控系统本身
+ */
+export interface OpsAccessControl extends ITAssetBase {
+  asset_type: 'ops_access_control';
+  /** 数据来源系统：堡垒机 / 数据库访问网关 / 其他 */
+  source?: 'bastion' | 'database_gateway' | 'other';
+  /** 管控系统类型：堡垒机 / 数据库访问网关 / 其他 */
+  controller_type?: 'bastion' | 'database_gateway' | 'other';
+  /** 被管控目标类型 */
+  target_type?:
+    | 'virtual_machine'
+    | 'physical_device'
+    | 'network_device'
+    | 'database'
+    | 'application'
+    | 'other';
+  /** 被管控目标 IP 地址（用于关联到现有资产） */
+  ip_address?: string;
+  /** 被管控目标主机名 */
+  hostname?: string;
+  /** 访问协议：SSH / RDP / Telnet / VNC / MySQL / Oracle 等 */
+  access_protocol?: string;
+}
+
 // ============================================
 // 外部依赖层资产
 // ============================================
 
 export interface ThirdPartyService extends ITAssetBase {
   asset_type: 'third_party_service';
+  service_type?: string;
   provider?: string;
   endpoint?: string;
   expiry_date?: string;
@@ -391,7 +450,6 @@ export type ITAsset =
   | VirtualMachine
   | Container
   | Cluster
-  | NetworkDevice
   | IPAddress
   | Domain
   | DNSRecord
@@ -401,6 +459,7 @@ export type ITAsset =
   | Storage
   | Backup
   | WebServer
+  | WebApp
   | Middleware
   | APIGateway
   | LoadBalancer
@@ -412,6 +471,7 @@ export type ITAsset =
   | Logging
   | Pipeline
   | CodeRepository
+  | OpsAccessControl
   | ThirdPartyService
   | ExternalAPI;
 
@@ -439,6 +499,7 @@ export interface AssetTypeStat {
   category: AssetCategory;
   label: string;
   count: number;
+  active_count: number;
 }
 
 /**
@@ -446,8 +507,10 @@ export interface AssetTypeStat {
  */
 export interface SystemAssetStats {
   total: number;
+  active_total: number;
   by_type: AssetTypeStat[];
   by_category: Record<AssetCategory, number>;
+  by_category_active: Record<AssetCategory, number>;
 }
 
 // ============================================
@@ -460,8 +523,8 @@ export interface SystemAssetStats {
 export interface QuerySystemsParams {
   keyword?: string;
   status?: InformationSystemStatus;
-  level?: InformationSystemLevel;
   department?: string;
+  parent?: string;
   page?: number;
   pageSize?: number;
 }
@@ -514,7 +577,7 @@ export interface IItAssetDataProvider {
   /**
    * 根据 ID 查询资产
    */
-  queryAssetById(id: string): Promise<ITAsset | null>;
+  queryAssetById(id: string, assetType?: AssetType): Promise<ITAsset | null>;
 
   /**
    * 查询指定系统下的资产
@@ -543,4 +606,20 @@ export interface IItAssetDataProvider {
    * 查询所属部门列表（用于筛选）
    */
   queryDepartments(): Promise<string[]>;
+
+  /**
+   * 查询 DNS 记录列表
+   */
+  queryDNSRecords(domain?: string): Promise<PaginatedResult<DNSRecordDetail>>;
+
+  /**
+   * 根据 ID 查询 DNS 记录详情
+   */
+  queryDNSRecordById(id: string): Promise<DNSRecordDetail | null>;
+
+  /**
+   * 查询指定 Web 服务器关联的 Web 应用列表
+   * 通过 IP 地址和服务器类型关联
+   */
+  queryWebAppsByServer(ipAddress: string, serverType: string): Promise<PaginatedResult<WebApp>>;
 }

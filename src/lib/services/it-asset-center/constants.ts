@@ -13,7 +13,6 @@ export const ASSET_TYPE_META: Record<
   virtual_machine: { label: '虚拟机', category: 'infrastructure', icon: 'CloudServerOutlined' },
   container: { label: '容器 / Pod', category: 'infrastructure', icon: 'CodeSandboxOutlined' },
   cluster: { label: '集群', category: 'infrastructure', icon: 'ClusterOutlined' },
-  network_device: { label: '网络设备', category: 'infrastructure', icon: 'ApartmentOutlined' },
   ip_address: { label: 'IP 地址', category: 'network', icon: 'GlobalOutlined' },
   domain: { label: '域名', category: 'network', icon: 'ChromeOutlined' },
   dns_record: { label: 'DNS 记录', category: 'network', icon: 'FileTextOutlined' },
@@ -23,6 +22,7 @@ export const ASSET_TYPE_META: Record<
   storage: { label: '存储系统', category: 'data', icon: 'FolderOpenOutlined' },
   backup: { label: '备份系统', category: 'data', icon: 'CloudUploadOutlined' },
   web_server: { label: 'Web 服务器', category: 'application', icon: 'DeploymentUnitOutlined' },
+  web_app: { label: 'Web 应用', category: 'application', icon: 'AppstoreOutlined' },
   middleware: { label: '中间件', category: 'application', icon: 'ToolOutlined' },
   api_gateway: { label: 'API 网关', category: 'application', icon: 'GatewayOutlined' },
   load_balancer: { label: '负载均衡', category: 'application', icon: 'BlockOutlined' },
@@ -34,6 +34,7 @@ export const ASSET_TYPE_META: Record<
   logging: { label: '日志系统', category: 'operations', icon: 'ProfileOutlined' },
   pipeline: { label: 'CI/CD 流水线', category: 'operations', icon: 'BranchesOutlined' },
   code_repository: { label: '代码仓库', category: 'operations', icon: 'GitlabOutlined' },
+  ops_access_control: { label: '运维访问控制', category: 'operations', icon: 'SafetyOutlined' },
   third_party_service: { label: '第三方服务', category: 'external', icon: 'CloudOutlined' },
   external_api: { label: '外部接口', category: 'external', icon: 'ApiOutlined' },
 };
@@ -67,4 +68,178 @@ export const CATEGORY_LABELS: Record<AssetCategory, string> = {
   software: '软件层',
   operations: '运维支撑层',
   external: '外部依赖层',
+};
+
+/**
+ * 资产状态标签
+ */
+export const STATUS_LABELS: Record<string, string> = {
+  active: '活跃',
+  inactive: '停用',
+  unknown: '未知',
+  faulty: '故障',
+  idle: '闲置',
+  planning: '规划中',
+};
+
+/**
+ * 物理设备字段中文标签映射（对应中台API字段）
+ */
+export const PHYSICAL_DEVICE_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '设备名称',
+  code: '设备唯一标识',
+  status: '运行状态',
+  device_type: '设备类型',
+  brand: '品牌',
+  model: '规格型号',
+  sn: '设备序列号',
+  ip_address: 'IP地址',
+  management_ip: '带外管理地址',
+  manufacturer: '生产厂家',
+  warranty_expiry: '维保到期时间',
+  department: '所属单位',
+  owner: '负责人',
+  owner_employee_id: '负责人工号',
+  system_name: '信息系统名称',
+  description: '备注',
+  remark: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * Web 服务器抽象字段中文标签映射
+ */
+export const WEB_SERVER_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '服务器名称',
+  code: '服务器编码',
+  status: '运行状态',
+  server_type: 'Web服务器类型',
+  ip_address: 'IP地址',
+  purpose: '用途',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * Web 服务器 provider 扩展字段中文标签映射（存放在 metadata 中）
+ */
+export const WEB_SERVER_METADATA_LABELS: Record<string, string> = {
+  version: '版本',
+  listen_ports: '监听端口',
+  source: '来源',
+  config_file: '配置文件',
+};
+
+/**
+ * Web 应用抽象字段中文标签映射
+ */
+export const WEB_APP_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '应用名称',
+  code: '应用编码',
+  status: '运行状态',
+  ip_address: 'IP地址',
+  server_type: 'Web服务器类型',
+  app_name: '应用名称',
+  app_version: '应用版本',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * Web 应用 provider 扩展字段中文标签映射（存放在 metadata 中）
+ */
+export const WEB_APP_METADATA_LABELS: Record<string, string> = {
+  agent_id: 'AgentID',
+  source: '来源',
+  timestamp: '时间戳',
+};
+
+/**
+ * 第三方服务抽象字段中文标签映射
+ */
+export const THIRD_PARTY_SERVICE_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '服务名称',
+  code: '服务编码',
+  status: '运行状态',
+  service_type: '服务类型',
+  provider: '提供方',
+  endpoint: '接口地址',
+  expiry_date: '到期时间',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * 第三方服务 provider 扩展字段中文标签映射（存放在 metadata 中）
+ */
+export const THIRD_PARTY_SERVICE_METADATA_LABELS: Record<string, string> = {
+  mbid: '模板ID',
+  mbmc: '模板名称',
+  mbnr: '模板内容',
+  lx: '类型',
+  tjsj: '提交时间',
+};
+
+/**
+ * 运维访问控制抽象字段中文标签映射
+ */
+export const OPS_ACCESS_CONTROL_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '名称',
+  code: '编码',
+  status: '运行状态',
+  source: '数据来源',
+  controller_type: '管控系统类型',
+  target_type: '被管控目标类型',
+  ip_address: '被管控目标IP地址',
+  hostname: '被管控目标主机名',
+  access_protocol: '访问协议',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * 运维访问控制 provider 扩展字段中文标签映射（存放在 metadata 中）
+ */
+export const OPS_ACCESS_CONTROL_METADATA_LABELS: Record<string, string> = {
+  account: '纳管账号',
+  policy_group: '策略组',
+  last_login_time: '最近登录时间',
+  password_rotate_days: '改密周期(天)',
+  sql_audit: 'SQL审计',
+};
+
+/**
+ * 虚拟机 provider 扩展字段中文标签映射（存放在 metadata 中）
+ */
+export const VIRTUAL_MACHINE_METADATA_LABELS: Record<string, string> = {
+  system_name: '信息系统名称',
+  department: '所属单位',
+  department_code: '单位号',
+  owner: '负责人',
+  owner_employee_id: '负责人工号',
 };

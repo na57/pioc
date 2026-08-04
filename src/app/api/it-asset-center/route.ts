@@ -8,6 +8,8 @@ import {
   SystemAssetStats,
   AssetType,
   AssetCategory,
+  DNSRecordDetail,
+  WebApp,
 } from '@/lib/services/it-asset-center';
 
 const appUrl = '/it-asset-center';
@@ -47,6 +49,10 @@ async function getHandler(request: NextRequest): Promise<NextResponse<ApiRespons
         return await handleAssetTypes(provider);
       case 'departments':
         return await handleDepartments(provider);
+      case 'dns-records':
+        return await handleDNSRecords(searchParams, provider);
+      case 'web-apps-by-server':
+        return await handleWebAppsByServer(searchParams, provider);
       default:
         return NextResponse.json(
           { success: false, error: '未知的 action 参数' },
@@ -75,12 +81,12 @@ async function handleSystems(
 ): Promise<NextResponse<ApiResponse<SystemListResponse>>> {
   const keyword = searchParams.get('keyword') || undefined;
   const status = (searchParams.get('status') as InformationSystem['status']) || undefined;
-  const level = (searchParams.get('level') as InformationSystem['level']) || undefined;
   const department = searchParams.get('department') || undefined;
+  const parent = searchParams.get('parent') || undefined;
   const page = parseInt(searchParams.get('page') || '1', 10);
   const per_page = parseInt(searchParams.get('per_page') || '10', 10);
 
-  const result = await provider.querySystems({ keyword, status, level, department, page, pageSize: per_page });
+  const result = await provider.querySystems({ keyword, status, department, parent, page, pageSize: per_page });
 
   return NextResponse.json({
     success: true,
@@ -155,8 +161,9 @@ async function handleAssets(
 async function handleAssetDetail(
   searchParams: URLSearchParams,
   provider: any
-): Promise<NextResponse<ApiResponse<{ asset: ITAsset | null }>>> {
+): Promise<NextResponse<ApiResponse<{ asset: ITAsset | DNSRecordDetail | null }>>> {
   const id = searchParams.get('id');
+  const assetType = searchParams.get('asset_type');
   if (!id) {
     return NextResponse.json(
       { success: false, error: '缺少 id 参数' },
@@ -164,7 +171,15 @@ async function handleAssetDetail(
     );
   }
 
-  const asset = await provider.queryAssetById(id);
+  if (assetType === 'dns_record') {
+    const dnsRecord = await provider.queryDNSRecordById(id);
+    return NextResponse.json({
+      success: true,
+      data: { asset: dnsRecord },
+    });
+  }
+
+  const asset = await provider.queryAssetById(id, assetType as AssetType);
   return NextResponse.json({
     success: true,
     data: { asset },
@@ -263,6 +278,55 @@ async function handleDepartments(
   return NextResponse.json({
     success: true,
     data: { departments },
+  });
+}
+
+interface DNSRecordListResponse {
+  data: DNSRecordDetail[];
+  total: number;
+}
+
+async function handleDNSRecords(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<DNSRecordListResponse>>> {
+  const domain = searchParams.get('domain') || undefined;
+  const result = await provider.queryDNSRecords(domain);
+  return NextResponse.json({
+    success: true,
+    data: {
+      data: result.data,
+      total: result.total,
+    },
+  });
+}
+
+interface WebAppListResponse {
+  data: WebApp[];
+  total: number;
+}
+
+async function handleWebAppsByServer(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<WebAppListResponse>>> {
+  const ip = searchParams.get('ip') || '';
+  const serverType = searchParams.get('server_type') || '';
+  
+  if (!ip || !serverType) {
+    return NextResponse.json(
+      { success: false, error: '缺少 ip 或 server_type 参数' },
+      { status: 400 }
+    );
+  }
+  
+  const result = await provider.queryWebAppsByServer(ip, serverType);
+  return NextResponse.json({
+    success: true,
+    data: {
+      data: result.data,
+      total: result.total,
+    },
   });
 }
 
