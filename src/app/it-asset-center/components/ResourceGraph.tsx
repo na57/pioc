@@ -43,6 +43,23 @@ const NODE_META: Record<string, NodeMeta> = {
 };
 
 // ============================================
+// 全局唯一 ID 工具（避免不同资产类型 ID 冲突）
+// ============================================
+
+const ID_SEP = '::';
+
+function toGlobalId(nodeType: string, rawId: string): string {
+  return `${nodeType}${ID_SEP}${rawId}`;
+}
+
+function fromGlobalId(gid: string): { nodeType: string; id: string } {
+  if (!gid) return { nodeType: '', id: '' };
+  const p = gid.indexOf(ID_SEP);
+  if (p === -1) return { nodeType: '', id: gid };
+  return { nodeType: gid.slice(0, p), id: gid.slice(p + ID_SEP.length) };
+}
+
+// ============================================
 // 图数据结构（nodes + edges，力导向布局）
 // ============================================
 
@@ -69,36 +86,15 @@ interface ApiGraphNode {
   key_fields: Record<string, string | undefined>;
 }
 
-interface EChartsNode {
-  id: string;
-  name: string;
-  node_type: string;
+// ECharts 原生保留字段：userdata 存放我们自定义数据（避免 ECharts 内部遍历自定义属性报 dataIndex 错误）
+interface NodeUserdata {
+  nodeType: string;
+  rawId: string;
   status?: string;
-  _loaded?: boolean;
-  _loading?: boolean;
-  // Tooltip 显示需要的派生字段（避免挂载深层引用 _raw）
+  loaded?: boolean;
+  loading?: boolean;
   collapsed?: boolean;
-  _childCount?: number;
-  symbolSize: number;
-  category: number;
-  fixed?: boolean;
-  fx?: number;
-  fy?: number;
-  itemStyle: {
-    color: string;
-    borderColor: string;
-    borderWidth: number;
-    shadowBlur?: number;
-    shadowColor?: string;
-  };
-  label: {
-    show: boolean;
-    position: string;
-    formatter: string;
-    fontSize: number;
-    color: string;
-    fontWeight?: number;
-  };
+  childCount: number;
 }
 
 interface EChartsLink {
@@ -177,6 +173,23 @@ function setLoadingFlag(nodes: GraphNode[], targetId: string): GraphNode[] {
   });
 }
 
+function updateFixedPos(
+  nodes: GraphNode[],
+  targetId: string,
+  fx?: number,
+  fy?: number
+): GraphNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetId) {
+      return { ...node, fixed: true, fx, fy };
+    }
+    if (node.children) {
+      return { ...node, children: updateFixedPos(node.children, targetId, fx, fy) };
+    }
+    return node;
+  });
+}
+
 // 递归收集可见节点（考虑 collapsed 状态）
 function collectVisibleNodes(
   nodes: GraphNode[],
@@ -191,20 +204,32 @@ function collectVisibleNodes(
   return result;
 }
 
-// 递归收集可见边（source -> target）
+// 递归收集可见边（source -> target），返回原始 id 对
 function collectVisibleEdges(
   nodes: GraphNode[],
-  result: { source: string; target: string }[] = []
-): { source: string; target: string }[] {
+  result: { sourceId: string; targetId: string }[] = []
+): { sourceId: string; targetId: string }[] {
   nodes.forEach((node) => {
     if (node.children && node.children.length > 0 && !node.collapsed) {
       node.children.forEach((child) => {
-        result.push({ source: node.id, target: child.id });
+        result.push({ sourceId: node.id, targetId: child.id });
       });
       collectVisibleEdges(node.children, result);
     }
   });
   return result;
+}
+
+// 按原始 ID 在可见树中反查 GraphNode（用于边类型判断）
+function findNodeByRawId(nodes: GraphNode[], rawId: string): GraphNode | undefined {
+  for (const n of nodes) {
+    if (n.id === rawId) return n;
+    if (n.children && !n.collapsed) {
+      const f = findNodeByRawId(n.children, rawId);
+      if (f) return f;
+    }
+  }
+  return undefined;
 }
 
 // ============================================
@@ -213,15 +238,9 @@ function collectVisibleEdges(
 
 export default function ResourceGraph() {
   const { message } = App.useApp();
-  // 用 ref 持有 message / router，避免其引用变化导致 useCallback/useEffect 无限重跑
-  const messageRef = useRef(message);
-  messageRef.current = message;
   const router = useRouter();
-  const routerRef = useRef(router);
-  routerRef.current = router;
   const chartRef = useRef<any>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
-  // 记录上一次 roam 默认的光标，恢复时使用
   const defaultCanvasCursor = useRef<string>('grab');
   const [loading, setLoading] = useState(true);
   const [graphData, setGraphData] = useState<GraphNode[]>([]);
@@ -230,10 +249,10 @@ export default function ResourceGraph() {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
   const handleUnauthorized = useCallback(() => {
-    routerRef.current.push(
+    router.push(
       `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`
     );
-  }, []);
+  }, [router]);
 
   // 加载顶层信息系统（无父应用的系统）
   const loadTopLevelSystems = useCallback(async () => {
@@ -249,7 +268,7 @@ export default function ResourceGraph() {
       }
       const result = await response.json();
       if (!result.success) {
-        messageRef.current.error(result.error || '加载信息系统失败');
+        message.error(result.error || '加载信息系统失败');
         setLoading(false);
         return;
       }
@@ -262,15 +281,14 @@ export default function ResourceGraph() {
         _loaded: false,
         collapsed: true,
       }));
-      // 保存一份完整列表（用于下拉选项）
       setAllTopSystems(systems.map((s) => ({ id: s.id, name: s.name, status: s.status })));
       setGraphData(systems);
     } catch {
-      messageRef.current.error('加载信息系统失败');
+      message.error('加载信息系统失败');
     } finally {
       setLoading(false);
     }
-  }, [handleUnauthorized]);
+  }, [message, handleUnauthorized]);
 
   // 加载子节点
   const fetchChildren = useCallback(
@@ -286,7 +304,7 @@ export default function ResourceGraph() {
       }
       const result = await response.json();
       if (!result.success) {
-        messageRef.current.error(result.error || '加载子节点失败');
+        message.error(result.error || '加载子节点失败');
         return [];
       }
       const children: GraphNode[] = (result.data.children || []).map(
@@ -302,25 +320,24 @@ export default function ResourceGraph() {
       );
       return children;
     },
-    [handleUnauthorized]
+    [message, handleUnauthorized]
   );
 
-  // 节点点击：加载子节点 / 切换展开折叠
+  // 节点点击：读取 ECharts userdata 反解 rawId/nodeType → 操作 graphData
   const handleNodeClick = useCallback(
     async (params: any) => {
-      const data = params?.data;
-      if (!data) return;
+      const ud: NodeUserdata | undefined = params?.data?.userdata;
+      if (!ud || !ud.rawId) return;
 
-      // EChartsNode 自身已携带所需字段，直接读取
-      const nodeId = data.id;
-      const nodeType = data.node_type;
-      const loaded = data._loaded;
+      const nodeId = ud.rawId;
+      const nodeType = ud.nodeType;
+      const loaded = ud.loaded;
 
       setSelectedNode({
         id: nodeId,
         node_type: nodeType,
-        name: data.name,
-        status: data.status,
+        name: params.data.name,
+        status: ud.status,
       });
 
       if (!loaded) {
@@ -342,42 +359,30 @@ export default function ResourceGraph() {
     [fetchChildren]
   );
 
-  // 初始加载：获取顶层信息系统
+  // 拖拽结束后保存节点固定位置
+  const handleDragEnd = useCallback((params: any) => {
+    const ud: NodeUserdata | undefined = params?.data?.userdata;
+    if (!ud || !ud.rawId) return;
+    const nodeId = ud.rawId;
+    const x = params.event?.offsetX;
+    const y = params.event?.offsetY;
+
+    setGraphData((prev) =>
+      updateFixedPos(
+        prev,
+        nodeId,
+        typeof x === 'number' ? x : undefined,
+        typeof y === 'number' ? y : undefined
+      )
+    );
+  }, []);
+
+  // 初始加载
   useEffect(() => {
     loadTopLevelSystems();
   }, [loadTopLevelSystems]);
 
-  // 拖拽结束后保存节点固定位置
-  const handleDragEnd = useCallback((params: any) => {
-    const data = params?.data;
-    if (!data || !data.id) return;
-    const nodeId = data.id;
-    const coord = params.event?.offsetX !== undefined
-      ? { x: params.event.offsetX, y: params.event.offsetY }
-      : null;
-
-    setGraphData((prev) => {
-      function updateFixed(nodes: GraphNode[]): GraphNode[] {
-        return nodes.map((n) => {
-          if (n.id === nodeId) {
-            return {
-              ...n,
-              fixed: true,
-              fx: coord?.x ?? n.fx,
-              fy: coord?.y ?? n.fy,
-            };
-          }
-          if (n.children) {
-            return { ...n, children: updateFixed(n.children) };
-          }
-          return n;
-        });
-      }
-      return updateFixed(prev);
-    });
-  }, []);
-
-  // 获取 ECharts 渲染的 canvas 元素
+  // 获取 canvas
   const getCanvasEl = useCallback((): HTMLCanvasElement | null => {
     const wrap = canvasContainerRef.current;
     if (!wrap) return null;
@@ -395,17 +400,15 @@ export default function ResourceGraph() {
       instance.on('click', handleNodeClick);
       instance.on('dragEnd', handleDragEnd);
 
-      // 解决 roam 光标（四向箭头/grab）覆盖节点 pointer 光标的问题：
-      // 鼠标进入节点时直接修改 canvas 的 style.cursor，离开时恢复
+      // 光标切换：悬停节点时改为 pointer，避免 roam 的四向箭头
       instance.on('mouseover', (params: any) => {
         if (params?.componentType !== 'series') return;
-        // 只在"节点"上显示手形（边 edge 不显示）：dataType === 'node' 或 data.id 存在
-        const data = params.data;
-        const isNode = params.dataType === 'node' || (data && data.id);
+        const isNode =
+          params.dataType === 'node' ||
+          (params.data && params.data.userdata && params.data.userdata.rawId);
         if (!isNode) return;
         const canvas = getCanvasEl();
         if (canvas) {
-          // 先记录 roam 原本的光标（grab/grabbing/move 等），离开时还原
           if (canvas.style.cursor && canvas.style.cursor !== 'pointer') {
             defaultCanvasCursor.current = canvas.style.cursor;
           }
@@ -413,7 +416,7 @@ export default function ResourceGraph() {
         }
       });
 
-      instance.on('mouseout', (_params: any) => {
+      instance.on('mouseout', () => {
         const canvas = getCanvasEl();
         if (canvas) {
           canvas.style.cursor = defaultCanvasCursor.current;
@@ -423,17 +426,20 @@ export default function ResourceGraph() {
     [handleNodeClick, handleDragEnd, getCanvasEl]
   );
 
-  // 将图数据转换为力导向图的 nodes + links
+  // ============================================
+  // 转换为力导向图的 ECharts 配置数据
+  // ============================================
   const { echartsNodes, echartsLinks, categories, displaySystemCount } = useMemo(() => {
-    // 根据选中的顶层系统ID进行过滤（空数组表示全部显示）
-    const filteredRootNodes = selectedSystemIds.length > 0
-      ? graphData.filter((n) => selectedSystemIds.includes(n.id))
-      : graphData;
+    // 1. 按筛选条件取顶层节点，空数组=全部
+    const filteredRootNodes =
+      selectedSystemIds.length > 0
+        ? graphData.filter((n) => selectedSystemIds.includes(n.id))
+        : graphData;
 
     const visibleNodes = collectVisibleNodes(filteredRootNodes);
-    const visibleEdges = collectVisibleEdges(filteredRootNodes);
+    const visibleEdgesRaw = collectVisibleEdges(filteredRootNodes);
 
-    // 分类（按节点类型）
+    // 2. 分类（按 NODE_META 顺序 + 颜色）
     const categoryMap = new Map<string, number>();
     const cats: { name: string }[] = [];
     Object.entries(NODE_META).forEach(([type, meta]) => {
@@ -441,24 +447,70 @@ export default function ResourceGraph() {
       cats.push({ name: meta.label });
     });
 
-    const nodes: EChartsNode[] = visibleNodes.map((node) => {
+    // 3. 构建 ECharts data 项（加全局前缀去重，自定义数据放 userdata）
+    type EChartsNodeItem = {
+      id: string;                // 全局唯一 gid
+      name: string;
+      userdata: NodeUserdata;    // 原生 userdata 字段：自定义数据口袋
+      symbolSize: number;
+      category: number;
+      fixed?: boolean;
+      fx?: number;
+      fy?: number;
+      symbol: 'circle';
+      itemStyle: {
+        color: string;
+        borderColor: string;
+        borderWidth: number;
+        shadowBlur?: number;
+        shadowColor?: string;
+        cursor: string;
+      };
+      label: {
+        show: boolean;
+        position: 'bottom';
+        formatter: string;
+        distance: number;
+        fontSize: number;
+        color: string;
+        fontWeight: number;
+        align: 'center';
+        verticalAlign: 'top';
+        cursor: string;
+      };
+    };
+
+    const usedGids = new Set<string>();
+    const nodes: EChartsNodeItem[] = [];
+    for (const node of visibleNodes) {
+      const gid = toGlobalId(node.node_type, node.id);
+      if (usedGids.has(gid)) {
+        // 防御：相同 ID 已出现（理论不会出现，除非 data 本身有脏数据）
+        // eslint-disable-next-line no-console
+        console.warn('[ResourceGraph] 跳过重复节点 ID：', gid, node.name);
+        continue;
+      }
+      usedGids.add(gid);
+
       const meta = NODE_META[node.node_type] || { color: '#999', label: node.node_type };
       const isSystem = node.node_type === 'information_system';
-      const isLoading = node._loading;
-      // 信息系统节点略大
+      const isLoading = !!node._loading;
       const symbolSize = isSystem ? 32 : 26;
-
       const childCount = node.children?.length ?? 0;
-      return {
-        id: node.id,
+
+      nodes.push({
+        id: gid,
         name: node.name,
-        node_type: node.node_type,
-        status: node.status,
-        _loaded: node._loaded,
-        _loading: node._loading,
-        // Tooltip 用：派生字段（不挂载深层 children 引用）
-        collapsed: node.collapsed,
-        _childCount: childCount,
+        userdata: {
+          nodeType: node.node_type,
+          rawId: node.id,
+          status: node.status,
+          loaded: node._loaded,
+          loading: isLoading,
+          collapsed: node.collapsed,
+          childCount,
+        },
+        symbol: 'circle',
         symbolSize,
         category: categoryMap.get(node.node_type) ?? 0,
         fixed: node.fixed,
@@ -470,38 +522,44 @@ export default function ResourceGraph() {
           borderWidth: 2.5,
           shadowBlur: isLoading ? 12 : 6,
           shadowColor: isLoading ? meta.color : 'rgba(0,0,0,0.2)',
-          // 节点悬停显示手形光标，暗示可点击展开/折叠
           cursor: 'pointer',
         },
         label: {
           show: true,
           position: 'bottom',
           formatter: node.name,
+          distance: 6,
           fontSize: 12,
           color: '#333',
           fontWeight: isSystem ? 600 : 400,
-          // 标签区域也显示手形光标
+          align: 'center',
+          verticalAlign: 'top',
           cursor: 'pointer',
         },
-      };
-    });
+      });
+    }
 
-    const links: EChartsLink[] = visibleEdges.map((edge) => {
-      // 查找源节点类型以决定边样式
-      const sourceNode = visibleNodes.find((n) => n.id === edge.source);
-      const isSystemRelation = sourceNode?.node_type === 'information_system';
-      return {
-        source: edge.source,
-        target: edge.target,
+    // 4. 构建 links（source/target 都用 gid，并用可见树反查对应类型）
+    const links: EChartsLink[] = [];
+    for (const edge of visibleEdgesRaw) {
+      const srcNode = findNodeByRawId(filteredRootNodes, edge.sourceId);
+      const dstNode = findNodeByRawId(filteredRootNodes, edge.targetId);
+      if (!srcNode || !dstNode) continue;
+      const srcGid = toGlobalId(srcNode.node_type, edge.sourceId);
+      const dstGid = toGlobalId(dstNode.node_type, edge.targetId);
+      if (srcGid === dstGid) continue;
+      const isSystemRelation = srcNode.node_type === 'information_system';
+      links.push({
+        source: srcGid,
+        target: dstGid,
         lineStyle: {
           color: '#5a6a7e',
           width: isSystemRelation ? 1.5 : 1,
           curveness: 0.15,
-          // 信息系统内部用实线，跨类型关联用虚线
           type: isSystemRelation ? 'solid' : 'dashed',
         },
-      };
-    });
+      });
+    }
 
     return {
       echartsNodes: nodes,
@@ -511,133 +569,148 @@ export default function ResourceGraph() {
     };
   }, [graphData, selectedSystemIds]);
 
-  // 构建 ECharts 力导向图配置
-  const option = useMemo(() => ({
-    tooltip: {
-      trigger: 'item',
-      confine: true,
-      appendToBody: true,
-      formatter: (params: any) => {
-        if (params.dataType === 'edge') {
-          return `<div style="max-width:200px">
-            <div style="font-weight:600;margin-bottom:4px">关联关系</div>
-            <div>${params.data.source} → ${params.data.target}</div>
+  // ============================================
+  // ECharts Option
+  // ============================================
+  const option = useMemo(() => {
+    // 避免空数组渲染：series.data 为空时 ECharts 也可能做内部遍历触发警告
+    const safeNodes = echartsNodes.length > 0 ? echartsNodes : [];
+    const safeLinks = echartsLinks.length > 0 ? echartsLinks : [];
+    const safeCats = categories.length > 0 ? categories : [{ name: '无' }];
+
+    return {
+      tooltip: {
+        trigger: 'item',
+        confine: true,
+        appendToBody: true,
+        enterable: false,
+        hideDelay: 100,
+        formatter: (params: any) => {
+          if (params.dataType === 'edge') {
+            return `<div style="max-width:220px">
+              <div style="font-weight:600;margin-bottom:4px">关联关系</div>
+              <div>${params.data.sourceName || params.data.source} → ${params.data.targetName || params.data.target}</div>
+            </div>`;
+          }
+          const ud: NodeUserdata | undefined = params.data?.userdata;
+          if (!ud || !ud.rawId) return '';
+          const meta = NODE_META[ud.nodeType];
+          const statusText = ud.status || '-';
+          const loadingHint = ud.loading ? '<div style="color:#1677ff">⏳ 正在加载子节点...</div>' : '';
+          const expandHint = !ud.loaded
+            ? '<div style="color:#666;margin-top:4px">💡 点击展开关联资源</div>'
+            : ud.childCount > 0
+              ? `<div style="color:#666;margin-top:4px">📌 子节点 ${ud.childCount} 个（点击${ud.collapsed ? '展开' : '折叠'}）</div>`
+              : '<div style="color:#999;margin-top:4px">— 无下级资源 —</div>';
+          return `<div style="max-width:280px">
+            <div style="font-weight:600;margin-bottom:6px;font-size:13px">${params.data.name}</div>
+            <div style="margin-bottom:2px">类型：<span style="color:${meta?.color || '#999'}">${meta?.label || ud.nodeType}</span></div>
+            <div style="margin-bottom:2px">状态：${statusText}</div>
+            ${loadingHint}
+            ${expandHint}
           </div>`;
-        }
-        const data: EChartsNode | undefined = params.data;
-        if (!data || !data.id) return '';
-        const meta = NODE_META[data.node_type];
-        const statusText = data.status || '-';
-        const loadingHint = data._loading ? '<div style="color:#1677ff">⏳ 正在加载子节点...</div>' : '';
-        const childCount = data._childCount ?? 0;
-        const expandHint = !data._loaded
-          ? '<div style="color:#666;margin-top:4px">💡 点击展开关联资源</div>'
-          : childCount > 0
-            ? `<div style="color:#666;margin-top:4px">📌 子节点 ${childCount} 个（点击${data.collapsed ? '展开' : '折叠'}）</div>`
-            : '<div style="color:#999;margin-top:4px">— 无下级资源 —</div>';
-        return `<div style="max-width:280px">
-          <div style="font-weight:600;margin-bottom:6px;font-size:13px">${data.name}</div>
-          <div style="margin-bottom:2px">类型：<span style="color:${meta?.color || '#999'}">${meta?.label || data.node_type}</span></div>
-          <div style="margin-bottom:2px">状态：${statusText}</div>
-          ${loadingHint}
-          ${expandHint}
-        </div>`;
+        },
       },
-    },
-    legend: [
-      {
-        data: categories.map((c) => c.name),
-        orient: 'vertical',
-        right: 16,
-        top: 16,
-        textStyle: { fontSize: 11 },
-        itemWidth: 12,
-        itemHeight: 12,
-      },
-    ],
-    animation: true,
-    animationDuration: 800,
-    animationEasingUpdate: 'quinticInOut',
-    series: [
-      {
-        type: 'graph',
-        layout: 'force',
-        data: echartsNodes,
-        links: echartsLinks,
-        categories: categories,
-        roam: true,
-        draggable: true,
-        focusNodeAdjacency: true,
-        // 力导向布局参数
-        force: {
-          repulsion: 420,       // 节点排斥力（略大避免拥挤）
-          edgeLength: [100, 180], // 边长度范围
-          gravity: 0.06,         // 中心力强度（略小让图更舒展）
-          edgeForce: 0.15,
-          friction: 0.6,
+      legend: [
+        {
+          data: safeCats.map((c) => c.name),
+          orient: 'vertical' as const,
+          right: 16,
+          top: 16,
+          textStyle: { fontSize: 11 },
+          itemWidth: 12,
+          itemHeight: 12,
         },
-        label: {
-          show: true,
-          position: 'bottom',
-          distance: 6,
-          fontSize: 12,
-          color: '#333',
-          align: 'center',
-          verticalAlign: 'top',
-        },
-        lineStyle: {
-          color: '#5a6a7e',
-          width: 1.2,
-          curveness: 0.15,
-          opacity: 0.85,
-        },
-        // 边箭头：指向子节点
-        edgeSymbol: ['none', 'arrow'],
-        edgeSymbolSize: [0, 8],
-        edgeLabel: {
-          show: false,
-        },
-        emphasis: {
-          focus: 'adjacency',
+      ],
+      animation: true,
+      animationDuration: 600,
+      animationEasingUpdate: 'quinticInOut',
+      series: [
+        {
+          type: 'graph',
+          layout: 'force',
+          // 保证 categories 顺序与 data.category 索引严格对齐
+          categories: safeCats,
+          // 只放标准字段：data / links / roam / draggable / force / emphasis / select / edgeSymbol / label / lineStyle / symbol 等
+          data: safeNodes,
+          links: safeLinks,
+          roam: true,
+          draggable: true,
+          focusNodeAdjacency: true,
+          force: {
+            repulsion: 420,
+            edgeLength: [100, 180],
+            gravity: 0.06,
+            edgeForce: 0.15,
+            friction: 0.6,
+          },
+          symbol: 'circle',
+          label: {
+            show: true,
+            position: 'bottom',
+            distance: 6,
+            fontSize: 12,
+            color: '#333',
+            align: 'center',
+            verticalAlign: 'top',
+            cursor: 'pointer',
+          },
           lineStyle: {
-            width: 2.5,
-            opacity: 1,
+            color: '#5a6a7e',
+            width: 1.2,
+            curveness: 0.15,
+            opacity: 0.85,
           },
-          itemStyle: {
-            shadowBlur: 16,
-            shadowColor: 'rgba(0,0,0,0.35)',
-            borderWidth: 3,
-            cursor: 'pointer',
+          edgeSymbol: ['none', 'arrow'],
+          edgeSymbolSize: [0, 8],
+          edgeLabel: { show: false },
+          emphasis: {
+            focus: 'adjacency' as const,
+            lineStyle: {
+              width: 2.5,
+              opacity: 1,
+            },
+            itemStyle: {
+              shadowBlur: 16,
+              shadowColor: 'rgba(0,0,0,0.35)',
+              borderWidth: 3,
+              cursor: 'pointer',
+            },
+            label: {
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+            },
           },
-          label: {
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
+          select: {
+            itemStyle: {
+              borderWidth: 4,
+              borderColor: '#f5222d',
+              shadowBlur: 20,
+              shadowColor: 'rgba(245,34,45,0.4)',
+              cursor: 'pointer',
+            },
+            label: {
+              fontWeight: 700,
+              cursor: 'pointer',
+            },
           },
+          top: 20,
+          bottom: 20,
+          left: 20,
+          right: 160,
         },
-        select: {
-          itemStyle: {
-            borderWidth: 4,
-            borderColor: '#f5222d',
-            shadowBlur: 20,
-            shadowColor: 'rgba(245,34,45,0.4)',
-            cursor: 'pointer',
-          },
-          label: {
-            fontWeight: 700,
-            cursor: 'pointer',
-          },
-        },
-        symbol: 'circle',
-        top: 20,
-        bottom: 20,
-        left: 20,
-        right: 160,
-      },
-    ],
-  }), [echartsNodes, echartsLinks, categories]);
+      ],
+    };
+  }, [echartsNodes, echartsLinks, categories]);
 
   // 选中节点详情面板
+  const STATUS_BADGE_COLOR: Record<string, string> = {
+    active: '#52c41a',
+    inactive: '#8c8c8c',
+    planning: '#1677ff',
+  };
+
   const renderSelectedPanel = () => {
     if (!selectedNode) {
       return (
@@ -669,13 +742,6 @@ export default function ResourceGraph() {
         </Text>
       </div>
     );
-  };
-
-  // 状态颜色映射
-  const STATUS_BADGE_COLOR: Record<string, string> = {
-    active: '#52c41a',
-    inactive: '#8c8c8c',
-    planning: '#1677ff',
   };
 
   return (
@@ -710,19 +776,15 @@ export default function ResourceGraph() {
             value={selectedSystemIds}
             onChange={(values) => {
               setSelectedSystemIds(values);
-              // 筛选时清空已选节点，避免引用不存在的节点
               if (values.length > 0 && selectedNode && !values.includes(selectedNode.id)) {
                 setSelectedNode(null);
               }
             }}
-            // label 使用纯字符串 sys.name，保证 showSearch 可模糊匹配
             options={allTopSystems.map((sys) => ({
               value: sys.id,
               label: sys.name,
-              // 自定义字段：保留 status 给 optionRender 使用
               status: sys.status,
             }))}
-            // 自定义下拉选项渲染：色点 + 系统名称（不影响搜索，搜索匹配的是纯 label）
             optionRender={(optionInfo: any) => {
               const status = optionInfo?.option?.data?.status || '';
               const color = STATUS_BADGE_COLOR[status] || '#bfbfbf';
@@ -773,6 +835,7 @@ export default function ResourceGraph() {
                 style={{ height: '640px', width: '100%' }}
                 onChartReady={onChartReady}
                 lazyUpdate={true}
+                notMerge={false}
               />
               {selectedNode && (
                 <div
