@@ -37,6 +37,9 @@ export const ASSET_TYPE_META: Record<
   ops_access_control: { label: '运维访问控制', category: 'operations', icon: 'SafetyOutlined' },
   third_party_service: { label: '第三方服务', category: 'external', icon: 'CloudOutlined' },
   external_api: { label: '外部接口', category: 'external', icon: 'ApiOutlined' },
+  data_source: { label: '数据采集源', category: 'governance', icon: 'DatabaseOutlined' },
+  web_site_monitor: { label: 'Web站点监控', category: 'operations', icon: 'EyeOutlined' },
+  port_monitor: { label: '端口监控', category: 'operations', icon: 'ApiOutlined' },
 };
 
 import type { MiddlewareName } from './types';
@@ -68,6 +71,7 @@ export const CATEGORY_LABELS: Record<AssetCategory, string> = {
   software: '软件层',
   operations: '运维支撑层',
   external: '外部依赖层',
+  governance: '数据治理层',
 };
 
 /**
@@ -242,4 +246,100 @@ export const VIRTUAL_MACHINE_METADATA_LABELS: Record<string, string> = {
   department_code: '单位号',
   owner: '负责人',
   owner_employee_id: '负责人工号',
+};
+
+/**
+ * 数据采集源抽象字段中文标签映射
+ */
+export const DATA_SOURCE_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '采集源名称',
+  code: '采集源编码',
+  status: '运行状态',
+  connection_target: '连接目标',
+  connection_host: '连接主机',
+  connection_port: '连接端口',
+  source_type: '技术类型',
+  data_category: '业务分类',
+  business_system_id: '所属业务系统ID',
+  business_system_name: '所属业务系统',
+  department: '归属部门',
+  technical_owner: '技术负责人',
+  last_sync_time: '最后同步时间',
+  sync_interval: '同步频率',
+  security_level: '安全等级',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * 数据采集源 provider 扩展字段中文标签映射（存放在 metadata 中）
+ */
+export const DATA_SOURCE_METADATA_LABELS: Record<string, string> = {
+  vendor_name: '厂商名称',
+  vendor_id: '厂商ID',
+  system_developer: '系统开发者',
+  system_developer_phone: '系统开发者电话',
+  unit_owner: '单位负责人',
+  unit_owner_phone: '单位负责人电话',
+  data_source_category: '数据源类别',
+  icon_path: '图标路径',
+  connection_alias: '连接别名',
+  enabled: '是否启用',
+  deleted: '是否删除',
+};
+
+/**
+ * Web 站点监控抽象字段中文标签映射
+ */
+export const WEB_SITE_MONITOR_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '监控名称',
+  code: '监控编码',
+  status: '运行状态',
+  domain: '目标域名',
+  ip: '目标IP地址',
+  port: '目标端口',
+  path: '目标路径',
+  protocol: '监控协议',
+  expected_status_code: '期望状态码',
+  collection_interval: '采集间隔(秒)',
+  source_system: '来源监控系统',
+  source_monitor_id: '来源监控任务ID',
+  last_check_time: '最近检测时间',
+  last_check_status: '最近检测状态',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
+};
+
+/**
+ * 端口监控抽象字段中文标签映射
+ */
+export const PORT_MONITOR_FIELD_LABELS: Record<string, string> = {
+  id: '唯一标识',
+  system_id: '信息系统唯一标识',
+  asset_type: '资产类型',
+  category: '所属分层',
+  name: '监控名称',
+  code: '监控编码',
+  status: '运行状态',
+  ip: '目标IP地址',
+  port: '目标端口',
+  protocol: '传输协议',
+  collection_interval: '采集间隔(秒)',
+  source_system: '来源监控系统',
+  source_monitor_id: '来源监控任务ID',
+  last_check_time: '最近检测时间',
+  last_check_status: '最近检测状态',
+  description: '备注',
+  created_at: '创建时间',
+  updated_at: '更新时间',
 };

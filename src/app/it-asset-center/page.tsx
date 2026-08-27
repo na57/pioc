@@ -18,13 +18,14 @@ import {
   Col,
   Tabs,
 } from 'antd';
-import { SearchOutlined, DatabaseOutlined, AppstoreOutlined, RobotOutlined, BarChartOutlined } from '@ant-design/icons';
+import { SearchOutlined, DatabaseOutlined, AppstoreOutlined, RobotOutlined, BarChartOutlined, ApartmentOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import FriendlyTime from '@/components/FriendlyTime';
 import AssetStatCard from './components/AssetStatCard';
 import FilterSelect from './components/FilterSelect';
 import AssetListPanel from './components/AssetListPanel';
+import ResourceGraph from './components/ResourceGraph';
 import { AIChatPanel } from '@/components/ai-chat';
 import type { InformationSystem, AssetCategory } from '@/lib/services/it-asset-center';
 import { CATEGORY_LABELS } from '@/lib/services/it-asset-center';
@@ -46,7 +47,13 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ItAssetCenterPage() {
   const { message } = App.useApp();
+  // 用 ref 持有 message，避免其引用变化导致 useCallback/useEffect 无限重跑
+  // （React Compiler 下 App.useApp() 返回的 message 引用可能不稳定）
+  const messageRef = useRef(message);
+  messageRef.current = message;
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const screens = useBreakpoint();
@@ -90,6 +97,7 @@ export default function ItAssetCenterPage() {
     software: 0,
     operations: 0,
     external: 0,
+    governance: 0,
   });
   const [categoryRunningStats, setCategoryRunningStats] = useState<Record<AssetCategory, number>>({
     infrastructure: 0,
@@ -99,6 +107,7 @@ export default function ItAssetCenterPage() {
     software: 0,
     operations: 0,
     external: 0,
+    governance: 0,
   });
   const [totalRunningSystemsCount, setTotalRunningSystemsCount] = useState(0);
 
@@ -127,15 +136,15 @@ export default function ItAssetCenterPage() {
             total: result.data.total,
           });
         } else {
-          message.error(result.error || '获取信息系统列表失败');
+          messageRef.current.error(result.error || '获取信息系统列表失败');
         }
       } catch {
-        message.error('获取信息系统列表失败');
+        messageRef.current.error('获取信息系统列表失败');
       } finally {
         setLoading(false);
       }
     },
-    [searchKeyword, selectedStatus, selectedDepartment, selectedParent, message]
+    [searchKeyword, selectedStatus, selectedDepartment, selectedParent]
   );
 
   const fetchCategoryStats = useCallback(async () => {
@@ -151,6 +160,7 @@ export default function ItAssetCenterPage() {
           software: 0,
           operations: 0,
           external: 0,
+          governance: 0,
         };
         const runningStats: Record<AssetCategory, number> = {
           infrastructure: 0,
@@ -160,6 +170,7 @@ export default function ItAssetCenterPage() {
           software: 0,
           operations: 0,
           external: 0,
+          governance: 0,
         };
         result.data.data.forEach((asset: { category: AssetCategory; status: string }) => {
           stats[asset.category] = (stats[asset.category] || 0) + 1;
@@ -231,14 +242,21 @@ export default function ItAssetCenterPage() {
     }
   }, []);
 
+  // 挂载时只执行一次的静态数据加载（部门、上级系统、分类统计、运行中系统计数）
   useEffect(() => {
-    fetchSystems(pagination.current, pagination.pageSize);
     fetchCategoryStats();
     fetchDepartments();
     fetchParents();
     fetchTotalRunningSystemsCount();
-  }, [fetchSystems, fetchCategoryStats, fetchDepartments, fetchParents, fetchTotalRunningSystemsCount]);
+  }, [fetchCategoryStats, fetchDepartments, fetchParents, fetchTotalRunningSystemsCount]);
 
+  // 系统列表随筛选条件变化重新加载（不再连带触发上面四个请求）
+  useEffect(() => {
+    fetchSystems(pagination.current, pagination.pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchSystems]);
+
+  // 将筛选状态同步到 URL（仅当 URL 确实变化时才 router.replace，避免不必要的导航 Promise）
   useEffect(() => {
     const newSearchParams = new URLSearchParams(searchParamsRef.current.toString());
     if (searchKeyword) newSearchParams.set('keyword', searchKeyword);
@@ -256,7 +274,11 @@ export default function ItAssetCenterPage() {
 
     const queryString = newSearchParams.toString();
     const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
-    router.replace(newUrl, { scroll: false });
+    // 避免与当前 URL 相同时仍触发导航（每次导航会在 Turbopack dev 下创建大量 Promise）
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+    if (newUrl !== currentPath) {
+      routerRef.current.replace(newUrl, { scroll: false });
+    }
   }, [
     searchKeyword,
     selectedStatus,
@@ -265,7 +287,6 @@ export default function ItAssetCenterPage() {
     pagination.current,
     pagination.pageSize,
     pathname,
-    router,
   ]);
 
   const handleSearch = () => {
@@ -336,7 +357,7 @@ export default function ItAssetCenterPage() {
     [isMobile]
   );
 
-  const categoryOrder: AssetCategory[] = ['infrastructure', 'network', 'data', 'application', 'software', 'operations', 'external'];
+  const categoryOrder: AssetCategory[] = ['infrastructure', 'network', 'data', 'application', 'software', 'operations', 'external', 'governance'];
 
   // AI问答初始建议
   const aiInitialSuggestions = [
@@ -505,8 +526,8 @@ export default function ItAssetCenterPage() {
         onChange={(key) => {
           setActiveTab(key);
           const newParams = new URLSearchParams(searchParams.toString());
-          if (key === 'assets') {
-            newParams.set('tab', 'assets');
+          if (key === 'assets' || key === 'graph') {
+            newParams.set('tab', key);
           } else {
             newParams.delete('tab');
           }
@@ -560,6 +581,16 @@ export default function ItAssetCenterPage() {
               </span>
             ),
             children: aiChatPanel,
+          },
+          {
+            key: 'graph',
+            label: (
+              <span>
+                <ApartmentOutlined style={{ marginRight: 4 }} />
+                资源图谱
+              </span>
+            ),
+            children: <ResourceGraph />,
           },
         ]}
       />

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Card,
   Table,
@@ -31,6 +31,7 @@ const CATEGORY_COLORS: Record<AssetCategory, string> = {
   software: 'magenta',
   operations: 'gold',
   external: 'lime',
+  governance: 'volcano',
 };
 
 const STATUS_COLORS: Record<string, 'success' | 'default' | 'error' | 'warning' | 'processing'> = {
@@ -100,7 +101,12 @@ function buildQueryString(filters: AssetListPanelFilters): string {
 
 export default function AssetListPanel({ initialFilters, showTitle = false }: AssetListPanelProps) {
   const { message } = App.useApp();
+  // 用 ref 持有 message / router，避免其引用变化导致 useCallback/useEffect 无限重跑
+  const messageRef = useRef(message);
+  messageRef.current = message;
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const searchParams = useSearchParams();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
@@ -124,9 +130,17 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
   const [assetTypes, setAssetTypes] = useState<{ type: AssetType; category: AssetCategory; label: string }[]>([]);
   const [systems, setSystems] = useState<{ id: string; name: string }[]>([]);
 
+  const handleUnauthorized = useCallback(() => {
+    routerRef.current.push(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+  }, []);
+
   const fetchAssetTypes = useCallback(async () => {
     try {
       const response = await fetch('/api/it-asset-center?action=asset-types');
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       const result = await response.json();
       if (result.success) {
         setAssetTypes(result.data.types);
@@ -134,11 +148,15 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
     } catch {
       // 静默失败
     }
-  }, []);
+  }, [handleUnauthorized]);
 
   const fetchSystems = useCallback(async () => {
     try {
       const response = await fetch('/api/it-asset-center?action=systems&per_page=1000');
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       const result = await response.json();
       if (result.success) {
         setSystems(result.data.data.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })));
@@ -146,24 +164,30 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
     } catch {
       // 静默失败
     }
-  }, []);
+  }, [handleUnauthorized]);
 
   const fetchAssets = useCallback(
     async (page: number, pageSize: number) => {
       setLoading(true);
+      const params = new URLSearchParams({
+        action: 'assets',
+        page: page.toString(),
+        per_page: pageSize.toString(),
+      });
+      if (searchKeyword) params.append('keyword', searchKeyword);
+      if (selectedSystemId) params.append('system_id', selectedSystemId);
+      if (selectedAssetType) params.append('asset_type', selectedAssetType);
+      if (selectedCategory) params.append('category', selectedCategory);
+      if (selectedStatus) params.append('status', selectedStatus);
+      const url = `/api/it-asset-center?${params.toString()}`;
       try {
-        const params = new URLSearchParams({
-          action: 'assets',
-          page: page.toString(),
-          per_page: pageSize.toString(),
-        });
-        if (searchKeyword) params.append('keyword', searchKeyword);
-        if (selectedSystemId) params.append('system_id', selectedSystemId);
-        if (selectedAssetType) params.append('asset_type', selectedAssetType);
-        if (selectedCategory) params.append('category', selectedCategory);
-        if (selectedStatus) params.append('status', selectedStatus);
+        const response = await fetch(url);
 
-        const response = await fetch(`/api/it-asset-center?${params.toString()}`);
+        if (response.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+
         const result = await response.json();
 
         if (result.success) {
@@ -174,15 +198,25 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
             total: result.data.total,
           });
         } else {
-          message.error(result.error || '获取资产列表失败');
+          console.error('[AssetListPanel] 获取资产列表失败:', {
+            url,
+            status: response.status,
+            error: result.error,
+            userMessage: result.userMessage,
+          });
+          messageRef.current.error(result.error || '获取资产列表失败');
         }
-      } catch {
-        message.error('获取资产列表失败');
+      } catch (err) {
+        console.error('[AssetListPanel] 获取资产列表异常:', {
+          url,
+          error: err,
+        });
+        messageRef.current.error('获取资产列表失败');
       } finally {
         setLoading(false);
       }
     },
-    [searchKeyword, selectedSystemId, selectedAssetType, selectedCategory, selectedStatus, message]
+    [searchKeyword, selectedSystemId, selectedAssetType, selectedCategory, selectedStatus]
   );
 
   // 同步URL - 当筛选条件或分页变化时更新URL
@@ -198,9 +232,13 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
         pageSize: overrides?.pageSize ?? pagination.pageSize,
       };
       const qs = buildQueryString(filters);
-      router.replace(`${qs}`, { scroll: false });
+      // 仅当 URL 确实变化时才 router.replace，避免不必要的导航 Promise
+      const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+      if (qs !== currentPath) {
+        routerRef.current.replace(`${qs}`, { scroll: false });
+      }
     },
-    [searchKeyword, selectedSystemId, selectedAssetType, selectedCategory, selectedStatus, pagination, router]
+    [searchKeyword, selectedSystemId, selectedAssetType, selectedCategory, selectedStatus, pagination]
   );
 
   useEffect(() => {
@@ -209,7 +247,7 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
   }, [fetchAssetTypes, fetchSystems]);
 
   useEffect(() => {
-    if (selectedAssetType) {
+    if (selectedAssetType && assetTypes.length > 0) {
       const valid = assetTypes.some(
         (t) =>
           t.type === selectedAssetType &&

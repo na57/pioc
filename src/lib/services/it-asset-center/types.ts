@@ -48,7 +48,10 @@ export type AssetType =
   | 'code_repository'
   | 'ops_access_control'
   | 'third_party_service'
-  | 'external_api';
+  | 'external_api'
+  | 'data_source'
+  | 'web_site_monitor'
+  | 'port_monitor';
 
 /**
  * 中间件名称枚举
@@ -82,7 +85,8 @@ export type AssetCategory =
   | 'application'
   | 'software'
   | 'operations'
-  | 'external';
+  | 'external'
+  | 'governance';
 
 // ============================================
 // 信息系统
@@ -372,6 +376,94 @@ export interface Monitoring extends ITAssetBase {
   alert_rule_count?: number;
 }
 
+/**
+ * Web 站点监控
+ * 监控系统（Hertzbeat / Nightingale 等）中对 Web 站点的一条监控记录
+ * 核心属性按五个维度组织：
+ * 1. 监控目标：定义"监控谁"（domain / ip + port + path）
+ * 2. 监控协议：定义"用什么协议"（http / https）
+ * 3. 判定方式：定义"怎么算正常"（expected_status_code）
+ * 4. 调度：定义"多久查一次"（collection_interval）
+ * 5. 来源与状态：定义"从哪来、现在咋样"（source_* + last_check_*）
+ */
+export interface WebSiteMonitor extends ITAssetBase {
+  asset_type: 'web_site_monitor';
+
+  // 一、监控目标识别
+  /** 目标域名（规范化：去尾部点、小写） */
+  domain?: string;
+  /** 目标 IP 地址 */
+  ip?: string;
+  /** 目标端口，如 443、80 */
+  port?: number;
+  /** 目标路径，如 /healthz */
+  path?: string;
+
+  // 二、监控协议
+  /** 监控协议：http / https */
+  protocol?: string;
+
+  // 三、判定
+  /** 期望状态码，如 200 */
+  expected_status_code?: number;
+
+  // 四、调度
+  /** 采集间隔（秒） */
+  collection_interval?: number;
+
+  // 五、来源
+  /** 监控系统：hertzbeat / nightingale / prometheus / zabbix */
+  source_system?: string;
+  /** 在来源系统中的监控任务 ID */
+  source_monitor_id?: string;
+
+  // 六、状态快照
+  /** 最近检测时间 */
+  last_check_time?: string;
+  /** 最近检测状态：ok / fail / unknown */
+  last_check_status?: string;
+}
+
+/**
+ * 端口监控
+ * 监控系统（Hertzbeat / Nightingale 等）中对 IP+端口连通性的一条监控记录
+ * 核心属性按五个维度组织：
+ * 1. 监控目标：定义"监控谁"（ip + port）
+ * 2. 监控协议：定义"用什么协议"（tcp / udp）
+ * 3. 调度：定义"多久查一次"（collection_interval）
+ * 4. 来源：定义"从哪来"（source_*）
+ * 5. 状态：定义"现在咋样"（last_check_*）
+ */
+export interface PortMonitor extends ITAssetBase {
+  asset_type: 'port_monitor';
+
+  // 一、监控目标识别
+  /** 目标 IP 地址 */
+  ip?: string;
+  /** 目标端口，如 22、3306、6379 */
+  port?: number;
+
+  // 二、监控协议
+  /** 传输协议：tcp / udp */
+  protocol?: string;
+
+  // 三、调度
+  /** 采集间隔（秒） */
+  collection_interval?: number;
+
+  // 四、来源
+  /** 监控系统：hertzbeat / nightingale / prometheus / zabbix */
+  source_system?: string;
+  /** 在来源系统中的监控任务 ID */
+  source_monitor_id?: string;
+
+  // 五、状态快照
+  /** 最近检测时间 */
+  last_check_time?: string;
+  /** 最近检测状态：ok / fail / unknown */
+  last_check_status?: string;
+}
+
 export interface Logging extends ITAssetBase {
   asset_type: 'logging';
   log_type?: string;
@@ -419,6 +511,59 @@ export interface OpsAccessControl extends ITAssetBase {
   hostname?: string;
   /** 访问协议：SSH / RDP / Telnet / VNC / MySQL / Oracle 等 */
   access_protocol?: string;
+}
+
+// ============================================
+// 数据治理层资产
+// ============================================
+
+/**
+ * 数据采集源
+ * 数据中台对外的一条采集连接配置，是数据从业务系统流向数据中台的管道入口
+ * 核心属性按五个维度组织：
+ * 1. 连接目标：定义"采的是什么"
+ * 2. 类型分类：定义"这是什么类型的数据"
+ * 3. 归属关系：定义"归谁管"
+ * 4. 运行状态：定义"活不活跃"
+ * 5. 安全级别：定义"敏感程度"
+ */
+export interface DataSource extends ITAssetBase {
+  asset_type: 'data_source';
+  category: 'governance';
+
+  // 一、连接目标（最核心）
+  /** 连接目标标识：数据库名 / Topic 名 / API 路径 / 文件路径等 */
+  connection_target: string;
+  /** 连接主机：IP 或域名 */
+  connection_host: string;
+  /** 连接端口 */
+  connection_port?: number;
+
+  // 二、类型分类（治理维度）
+  /** 技术类型：MySQL / Oracle / Kafka / API / File / Redis 等 */
+  source_type: string;
+  /** 业务分类：交易数据 / 日志数据 / 配置数据 / 监控数据 / 主数据 等 */
+  data_category: string;
+
+  // 三、归属关系（治理责任）
+  /** 所属业务系统 ID */
+  business_system_id: string;
+  /** 所属业务系统名称 */
+  business_system_name?: string;
+  /** 归属部门 */
+  department?: string;
+  /** 技术负责人 */
+  technical_owner?: string;
+
+  // 四、运行状态（活性判断）
+  /** 最后同步时间 */
+  last_sync_time?: string;
+  /** 同步频率：如 "5min"、"1h"、"1day" */
+  sync_interval?: string;
+
+  // 五、安全级别
+  /** 安全等级：公开 / 内部 / 机密 / 绝密 */
+  security_level?: 'public' | 'internal' | 'confidential' | 'secret';
 }
 
 // ============================================
@@ -473,7 +618,10 @@ export type ITAsset =
   | CodeRepository
   | OpsAccessControl
   | ThirdPartyService
-  | ExternalAPI;
+  | ExternalAPI
+  | DataSource
+  | WebSiteMonitor
+  | PortMonitor;
 
 // ============================================
 // 关系与统计

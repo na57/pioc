@@ -53,6 +53,8 @@ async function getHandler(request: NextRequest): Promise<NextResponse<ApiRespons
         return await handleDNSRecords(searchParams, provider);
       case 'web-apps-by-server':
         return await handleWebAppsByServer(searchParams, provider);
+      case 'graph-children':
+        return await handleGraphChildren(searchParams, provider);
       default:
         return NextResponse.json(
           { success: false, error: '未知的 action 参数' },
@@ -312,14 +314,14 @@ async function handleWebAppsByServer(
 ): Promise<NextResponse<ApiResponse<WebAppListResponse>>> {
   const ip = searchParams.get('ip') || '';
   const serverType = searchParams.get('server_type') || '';
-  
+
   if (!ip || !serverType) {
     return NextResponse.json(
       { success: false, error: '缺少 ip 或 server_type 参数' },
       { status: 400 }
     );
   }
-  
+
   const result = await provider.queryWebAppsByServer(ip, serverType);
   return NextResponse.json({
     success: true,
@@ -327,6 +329,228 @@ async function handleWebAppsByServer(
       data: result.data,
       total: result.total,
     },
+  });
+}
+
+// ============================================
+// 资源图谱 - 子节点查询
+// 根据节点类型返回其直接子节点
+// ============================================
+
+interface GraphNode {
+  id: string;
+  node_type: string;
+  name: string;
+  status?: string;
+  key_fields: Record<string, string | undefined>;
+}
+
+function assetToGraphNode(asset: ITAsset): GraphNode {
+  const a = asset as any;
+  return {
+    id: asset.id,
+    node_type: asset.asset_type,
+    name: asset.name,
+    status: asset.status,
+    key_fields: {
+      domain: a.domain,
+      ip: a.ip || a.ip_address,
+      ip_address: a.ip_address,
+      server_type: a.server_type,
+      system_id: asset.system_id,
+    },
+  };
+}
+
+function normalizeDomain(domain: string): string {
+  return domain.replace(/\.+$/, '').toLowerCase();
+}
+
+async function handleGraphChildren(
+  searchParams: URLSearchParams,
+  provider: any
+): Promise<NextResponse<ApiResponse<{ children: GraphNode[] }>>> {
+  const nodeId = searchParams.get('node_id');
+  const nodeType = searchParams.get('node_type');
+
+  if (!nodeId || !nodeType) {
+    return NextResponse.json(
+      { success: false, error: '缺少 node_id 或 node_type 参数' },
+      { status: 400 }
+    );
+  }
+
+  const children: GraphNode[] = [];
+
+  if (nodeType === 'information_system') {
+    // 1. 子信息系统
+    const subSystems = await provider.querySystems({ parent: nodeId, page: 1, pageSize: 1000 });
+    for (const sys of subSystems.data) {
+      children.push({
+        id: sys.id,
+        node_type: 'information_system',
+        name: sys.name,
+        status: sys.status,
+        key_fields: {},
+      });
+    }
+
+    // 2. 直接关联的资产（系统已自动剔除 web_site_monitor/port_monitor/dns_record）
+    const assets = await provider.queryAssetsBySystemId(nodeId, { page: 1, pageSize: 1000 });
+    for (const asset of assets.data) {
+      if (asset.asset_type === 'dns_record') continue;
+      children.push(assetToGraphNode(asset));
+    }
+  } else if (nodeType === 'domain') {
+    const asset = await provider.queryAssetById(nodeId, 'domain' as AssetType);
+    if (asset) {
+      const domain = (asset as any).domain;
+      if (domain) {
+        // 1. DNS 记录（强关联）
+        const dnsResult = await provider.queryDNSRecords(domain);
+        for (const dns of dnsResult.data) {
+          // DNSRecordDetail 没有 host_record 字段，使用 record_value（记录值，如 IP/CNAME目标）
+          // fallback: 若 record_value 也为空则用 domain + record_type
+          const recordValue = dns.record_value || dns.domain;
+          children.push({
+            id: dns.id,
+            node_type: 'dns_record',
+            name: `${recordValue} (${dns.record_type})`,
+            status: 'active',
+            key_fields: {},
+          });
+        }
+        // 2. Web 站点监控（域名匹配）
+        const normalized = normalizeDomain(domain);
+        const wsmResult = await provider.queryAssets({
+          asset_type: 'web_site_monitor' as AssetType,
+          keyword: normalized,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of wsmResult.data) {
+          const itemDomain = ((item as any).domain || '').toString();
+          if (itemDomain && normalizeDomain(itemDomain) === normalized) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+    }
+  } else if (nodeType === 'physical_device' || nodeType === 'virtual_machine') {
+    const asset = await provider.queryAssetById(nodeId, nodeType as AssetType);
+    if (asset) {
+      const ip = (asset as any).ip || (asset as any).ip_address;
+      if (ip) {
+        // 1. Web 服务器（IP 精确匹配）
+        const wsResult = await provider.queryAssets({
+          asset_type: 'web_server' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of wsResult.data) {
+          if ((item as any).ip_address === ip) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+        // 2. 运维访问控制（IP 精确匹配）
+        const oacResult = await provider.queryAssets({
+          asset_type: 'ops_access_control' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of oacResult.data) {
+          if ((item as any).ip_address === ip) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+    }
+  } else if (nodeType === 'web_server') {
+    const asset = await provider.queryAssetById(nodeId, 'web_server' as AssetType);
+    if (asset) {
+      const ip = (asset as any).ip_address;
+      const serverType = (asset as any).server_type;
+      if (ip && serverType) {
+        // 1. Web 应用（复合键关联）
+        const waResult = await provider.queryWebAppsByServer(ip, serverType);
+        for (const item of waResult.data) {
+          children.push(assetToGraphNode(item as unknown as ITAsset));
+        }
+        // 2. Web 站点监控（IP 精确匹配）
+        const wsmResult = await provider.queryAssets({
+          asset_type: 'web_site_monitor' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of wsmResult.data) {
+          if ((item as any).ip === ip) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+    }
+  } else if (nodeType === 'web_site_monitor') {
+    const asset = await provider.queryAssetById(nodeId, 'web_site_monitor' as AssetType);
+    if (asset) {
+      const domain = (asset as any).domain;
+      const ip = (asset as any).ip;
+      if (domain) {
+        // 1. 域名（域名归一化匹配）
+        const normalized = normalizeDomain(domain);
+        const domainResult = await provider.queryAssets({
+          asset_type: 'domain' as AssetType,
+          keyword: normalized,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of domainResult.data) {
+          const itemDomain = ((item as any).domain || '').toString();
+          if (itemDomain && normalizeDomain(itemDomain) === normalized) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+      if (ip) {
+        // 2. Web 服务器（IP 精确匹配）
+        const wsResult = await provider.queryAssets({
+          asset_type: 'web_server' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of wsResult.data) {
+          if ((item as any).ip_address === ip) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+    }
+  } else if (nodeType === 'port_monitor') {
+    const asset = await provider.queryAssetById(nodeId, 'port_monitor' as AssetType);
+    if (asset) {
+      const ip = (asset as any).ip;
+      if (ip) {
+        const wsResult = await provider.queryAssets({
+          asset_type: 'web_server' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of wsResult.data) {
+          if ((item as any).ip_address === ip) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    data: { children },
   });
 }
 

@@ -21,6 +21,9 @@ import {
   DNSRecordDetail,
   Domain,
   WebApp,
+  DataSource,
+  WebSiteMonitor,
+  PortMonitor,
 } from '../types';
 import { ASSET_TYPE_META, CATEGORY_LABELS, MIDDLEWARE_NAME_META } from '../constants';
 
@@ -97,6 +100,7 @@ class MockDataGenerator {
       software: 3,
       operations: 3,
       external: 2,
+      governance: 2,
     };
 
     const assetTypesByCategory = Object.entries(ASSET_TYPE_META).reduce(
@@ -443,6 +447,120 @@ class MockDataGenerator {
           },
         };
       }
+      case 'data_source': {
+        const sourceTypes = ['MySQL', 'PostgreSQL', 'Oracle', 'SQL Server', 'Redis', 'Kafka', 'API', '文件'];
+        const dataCategories = ['教务数据', '财务数据', '人事数据', '科研数据', '资产数据', '图书数据'];
+        const sourceType = sourceTypes[sequence % sourceTypes.length];
+        const dataCategory = dataCategories[sequence % dataCategories.length];
+        const host = `10.0.${(sequence % 256) + 1}.${(sequence % 254) + 1}`;
+        const ports: Record<string, number> = {
+          'MySQL': 3306,
+          'PostgreSQL': 5432,
+          'Oracle': 1521,
+          'SQL Server': 1433,
+          'Redis': 6379,
+          'Kafka': 9092,
+          'API': 443,
+          '文件': 0,
+        };
+        return {
+          ...base,
+          asset_type: 'data_source',
+          category: 'governance',
+          name: `${dataCategory}采集源-${sequence}`,
+          code: `DS-${base.system_id.replace('sys-', '').toUpperCase()}-${sequence.toString().padStart(3, '0')}`,
+          connection_target: `${host}${ports[sourceType] ? ':' + ports[sourceType] : ''}`,
+          connection_host: host,
+          connection_port: ports[sourceType] || undefined,
+          source_type: sourceType,
+          data_category: dataCategory,
+          business_system_id: base.system_id,
+          business_system_name: base.description?.split('，')[0] || undefined,
+          department: ['信息中心', '教务处', '财务处', '人事处'][sequence % 4],
+          technical_owner: ['张三', '李四', '王五'][sequence % 3],
+          last_sync_time: '2024-06-20T10:30:00Z',
+          sync_interval: ['每小时', '每天', '每周', '实时'][sequence % 4],
+          security_level: (['public', 'internal', 'confidential'] as const)[sequence % 3],
+          metadata: {
+            vendor_name: ['Oracle', 'Microsoft', '阿里云'][sequence % 3],
+            data_source_category: dataCategory,
+            connection_alias: `ds_alias_${sequence}`,
+            enabled: sequence % 5 !== 0 ? '是' : '否',
+          },
+        } as DataSource;
+      }
+      case 'web_site_monitor': {
+        const protocols = ['http', 'https'];
+        const statusCodes = [200, 200, 200, 301, 404];
+        const intervals = [30, 60, 60, 120, 300];
+        const sources = ['hertzbeat', 'nightingale', 'prometheus'];
+        const paths = ['/', '/healthz', '/api/status', '/login', '/'];
+        const useDomain = sequence % 3 !== 0;
+        const domain = useDomain
+          ? `${['www', 'api', 'mail', 'portal'][sequence % 4]}.${base.system_id.replace('sys-', '')}.example.edu.cn`
+          : undefined;
+        const ip = !useDomain ? `10.0.${sequence % 256}.${(sequence % 254) + 1}` : undefined;
+        const port = [443, 80, 8080, 8443][sequence % 4];
+        const protocol = protocols[sequence % protocols.length];
+        const path = paths[sequence % paths.length];
+        const expectedCode = statusCodes[sequence % statusCodes.length];
+        const interval = intervals[sequence % intervals.length];
+        const source = sources[sequence % sources.length];
+        const checkStatus = sequence % 10 === 0 ? 'fail' : sequence % 5 === 0 ? 'unknown' : 'ok';
+        return {
+          ...base,
+          asset_type: 'web_site_monitor',
+          category: 'operations',
+          name: `${domain || ip}:${port}${path}`,
+          code: `WSM-${base.system_id.replace('sys-', '').toUpperCase()}-${sequence.toString().padStart(3, '0')}`,
+          domain,
+          ip,
+          port,
+          path,
+          protocol,
+          expected_status_code: expectedCode,
+          collection_interval: interval,
+          source_system: source,
+          source_monitor_id: `${source}-monitor-${sequence}`,
+          last_check_time: '2024-06-20T10:30:00Z',
+          last_check_status: checkStatus,
+          metadata: {
+            timeout_ms: 5000,
+            retry_count: 3,
+          },
+        } as WebSiteMonitor;
+      }
+      case 'port_monitor': {
+        const ports = [22, 3306, 5432, 6379, 27017, 8080, 8443, 9090];
+        const protocols = ['tcp', 'tcp', 'tcp', 'udp'];
+        const intervals = [30, 60, 60, 120];
+        const sources = ['hertzbeat', 'nightingale', 'prometheus'];
+        const ip = `10.${sequence % 256}.${(sequence % 254) + 1}.${(sequence * 7) % 254}`;
+        const port = ports[sequence % ports.length];
+        const protocol = protocols[sequence % protocols.length];
+        const interval = intervals[sequence % intervals.length];
+        const source = sources[sequence % sources.length];
+        const checkStatus = sequence % 10 === 0 ? 'fail' : sequence % 5 === 0 ? 'unknown' : 'ok';
+        return {
+          ...base,
+          asset_type: 'port_monitor',
+          category: 'operations',
+          name: `${ip}:${port}`,
+          code: `PM-${base.system_id.replace('sys-', '').toUpperCase()}-${sequence.toString().padStart(3, '0')}`,
+          ip,
+          port,
+          protocol,
+          collection_interval: interval,
+          source_system: source,
+          source_monitor_id: `${source}-port-${sequence}`,
+          last_check_time: '2024-06-20T10:30:00Z',
+          last_check_status: checkStatus,
+          metadata: {
+            timeout_ms: 3000,
+            retry_count: 2,
+          },
+        } as PortMonitor;
+      }
       default:
         return base as ITAsset;
     }
@@ -596,6 +714,7 @@ export class MockDataProvider implements IItAssetDataProvider {
       software: 0,
       operations: 0,
       external: 0,
+      governance: 0,
     };
     const byCategoryActive: Record<AssetCategory, number> = {
       infrastructure: 0,
@@ -605,6 +724,7 @@ export class MockDataProvider implements IItAssetDataProvider {
       software: 0,
       operations: 0,
       external: 0,
+      governance: 0,
     };
 
     systemAssets.forEach((asset) => {
@@ -679,6 +799,76 @@ export class MockDataProvider implements IItAssetDataProvider {
           relation_type: 'serves',
         });
       });
+    }
+
+    // Web 站点监控关联域名 / Web 服务器
+    if (asset.asset_type === 'web_site_monitor') {
+      const monitor = asset as WebSiteMonitor;
+      // 按域名匹配域名资产
+      if (monitor.domain) {
+        const matchingDomains = this.assets
+          .filter(
+            (a) =>
+              a.asset_type === 'domain' &&
+              (a as Domain).domain?.replace(/\.+$/, '').toLowerCase() ===
+                monitor.domain!.replace(/\.+$/, '').toLowerCase()
+          )
+          .slice(0, 3);
+        matchingDomains.forEach((domain, idx) => {
+          relations.push({
+            id: `rel-${asset.id}-monitor-domain-${idx}`,
+            source_id: asset.id,
+            source_type: 'web_site_monitor',
+            target_id: domain.id,
+            target_type: 'domain',
+            relation_type: 'monitors',
+          });
+        });
+      }
+      // 按 IP 匹配 Web 服务器资产
+      if (monitor.ip) {
+        const matchingServers = this.assets
+          .filter(
+            (a) =>
+              a.asset_type === 'web_server' &&
+              (a as any).ip_address === monitor.ip
+          )
+          .slice(0, 3);
+        matchingServers.forEach((server, idx) => {
+          relations.push({
+            id: `rel-${asset.id}-monitor-server-${idx}`,
+            source_id: asset.id,
+            source_type: 'web_site_monitor',
+            target_id: server.id,
+            target_type: 'web_server',
+            relation_type: 'monitors',
+          });
+        });
+      }
+    }
+
+    // 端口监控关联 Web 服务器（按 IP 匹配）
+    if (asset.asset_type === 'port_monitor') {
+      const monitor = asset as PortMonitor;
+      if (monitor.ip) {
+        const matchingServers = this.assets
+          .filter(
+            (a) =>
+              a.asset_type === 'web_server' &&
+              (a as any).ip_address === monitor.ip
+          )
+          .slice(0, 3);
+        matchingServers.forEach((server, idx) => {
+          relations.push({
+            id: `rel-${asset.id}-port-monitor-server-${idx}`,
+            source_id: asset.id,
+            source_type: 'port_monitor',
+            target_id: server.id,
+            target_type: 'web_server',
+            relation_type: 'monitors',
+          });
+        });
+      }
     }
 
     return relations;

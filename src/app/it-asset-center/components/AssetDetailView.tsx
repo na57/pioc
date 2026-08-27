@@ -23,6 +23,10 @@ import {
   THIRD_PARTY_SERVICE_METADATA_LABELS,
   OPS_ACCESS_CONTROL_METADATA_LABELS,
   VIRTUAL_MACHINE_METADATA_LABELS,
+  DATA_SOURCE_FIELD_LABELS,
+  DATA_SOURCE_METADATA_LABELS,
+  WEB_SITE_MONITOR_FIELD_LABELS,
+  PORT_MONITOR_FIELD_LABELS,
 } from '@/lib/services/it-asset-center';
 import {
   RelatedAssetsSection,
@@ -89,6 +93,7 @@ const CATEGORY_COLORS: Record<AssetCategory, string> = {
   software: 'magenta',
   operations: 'gold',
   external: 'lime',
+  governance: 'volcano',
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -167,7 +172,7 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
       if (key === 'listen_ports' && Array.isArray(value)) return value.join(', ');
       return String(value);
     },
-    relatedAssets: [{ type: 'web_apps_by_server' }],
+    relatedAssets: [{ type: 'web_apps_by_server' }, { type: 'web_site_monitors_by_server_ip' }],
   },
 
   web_app: {
@@ -245,13 +250,267 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
       { label: '创建时间', field: 'created_at', type: 'time' },
       { label: '更新时间', field: 'updated_at', type: 'time' },
     ],
-    relatedAssets: [{ type: 'dns_records_by_domain' }],
+    relatedAssets: [{ type: 'dns_records_by_domain' }, { type: 'web_site_monitors_by_domain' }],
+  },
+
+  data_source: {
+    fields: [
+      { label: '采集源名称', field: 'name' },
+      { label: '采集源编码', field: 'code' },
+      { label: '技术类型', field: 'source_type', type: 'tag' },
+      { label: '业务分类', field: 'data_category', type: 'tag' },
+      { label: '连接目标', field: 'connection_target' },
+      { label: '连接主机', field: 'connection_host' },
+      {
+        label: '连接端口',
+        type: 'custom',
+        render: (asset) => {
+          const ds = asset as any;
+          return ds.connection_port || '-';
+        },
+      },
+      { label: '运行状态', type: 'status' },
+      {
+        label: '所属业务系统',
+        type: 'custom',
+        render: (asset) => {
+          const ds = asset as any;
+          if (ds.business_system_name) {
+            return (
+              <Link href={`/it-asset-center/systems/${ds.business_system_id}`}>
+                {ds.business_system_name}
+              </Link>
+            );
+          }
+          return '-';
+        },
+      },
+      { label: '归属部门', field: 'department' },
+      { label: '技术负责人', field: 'technical_owner' },
+      {
+        label: '同步频率',
+        type: 'custom',
+        render: (asset) => {
+          const ds = asset as any;
+          return ds.sync_interval || '-';
+        },
+      },
+      {
+        label: '安全等级',
+        type: 'custom',
+        render: (asset) => {
+          const ds = asset as any;
+          if (!ds.security_level) return '-';
+          const levelMap: Record<string, { label: string; color: string }> = {
+            public: { label: '公开', color: 'green' },
+            internal: { label: '内部', color: 'blue' },
+            confidential: { label: '机密', color: 'orange' },
+            secret: { label: '绝密', color: 'red' },
+          };
+          const cfg = levelMap[ds.security_level] || { label: ds.security_level, color: 'default' };
+          return <Tag color={cfg.color}>{cfg.label}</Tag>;
+        },
+      },
+      {
+        label: '最后同步时间',
+        type: 'custom',
+        render: (asset) => {
+          const ds = asset as any;
+          return ds.last_sync_time ? <FriendlyTime date={ds.last_sync_time} /> : '-';
+        },
+      },
+      { label: '备注', field: 'description', span: 'column', showIf: (a) => !!a.description },
+      { label: '创建时间', field: 'created_at', type: 'time' },
+      { label: '更新时间', field: 'updated_at', type: 'time' },
+    ],
+    metadataLabels: DATA_SOURCE_METADATA_LABELS,
+    renderMetadataValue: (key, value) => {
+      if (key === 'last_sync_time') return <FriendlyTime date={String(value)} />;
+      if (key === 'enabled') {
+        const enabled = String(value);
+        return <Tag color={enabled === '是' || enabled === 'true' ? 'green' : 'red'}>{enabled}</Tag>;
+      }
+      return String(value);
+    },
+  },
+
+  web_site_monitor: {
+    fields: [
+      {
+        label: '监控目标',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          const parts: string[] = [];
+          if (m.domain) parts.push(m.domain);
+          if (m.ip) parts.push(m.ip);
+          if (m.port) parts.push(`:${m.port}`);
+          if (m.path) parts.push(m.path);
+          return parts.length > 0 ? (
+            <Tag color="blue">{parts.join('')}</Tag>
+          ) : (
+            '-'
+          );
+        },
+      },
+      {
+        label: '监控协议',
+        field: 'protocol',
+        type: 'tag',
+      },
+      {
+        label: '期望状态码',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          if (!m.expected_status_code) return '-';
+          return <Tag color="green">HTTP {m.expected_status_code}</Tag>;
+        },
+      },
+      {
+        label: '采集间隔',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          return m.collection_interval ? `${m.collection_interval} 秒` : '-';
+        },
+      },
+      {
+        label: '来源监控系统',
+        field: 'source_system',
+        type: 'tag',
+      },
+      {
+        label: '来源监控任务ID',
+        field: 'source_monitor_id',
+      },
+      {
+        label: '最近检测状态',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          if (!m.last_check_status) return '-';
+          const statusMap: Record<string, { label: string; color: string }> = {
+            ok: { label: '正常', color: 'success' },
+            fail: { label: '异常', color: 'error' },
+            unknown: { label: '未知', color: 'default' },
+          };
+          const cfg = statusMap[m.last_check_status] || {
+            label: m.last_check_status,
+            color: 'default',
+          };
+          return <Tag color={cfg.color as any}>{cfg.label}</Tag>;
+        },
+      },
+      {
+        label: '最近检测时间',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          return m.last_check_time ? <FriendlyTime date={m.last_check_time} /> : '-';
+        },
+      },
+      { label: '运行状态', type: 'status' },
+      { label: '所属信息系统', type: 'systemLink' },
+      { label: '备注', field: 'description', span: 'column', showIf: (a) => !!a.description },
+      { label: '创建时间', field: 'created_at', type: 'time' },
+      { label: '更新时间', field: 'updated_at', type: 'time' },
+    ],
+    metadataLabels: {
+      timeout_ms: '超时时间(毫秒)',
+      retry_count: '重试次数',
+    },
+    renderMetadataValue: (key, value) => {
+      if (key === 'timeout_ms') return `${value} ms`;
+      if (key === 'retry_count') return `${value} 次`;
+      return String(value);
+    },
+    relatedAssets: [
+      { type: 'domains_by_monitor_domain' },
+      { type: 'web_servers_by_monitor_ip' },
+    ],
+  },
+
+  port_monitor: {
+    fields: [
+      {
+        label: '监控目标',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          const parts: string[] = [];
+          if (m.ip) parts.push(m.ip);
+          if (m.port) parts.push(`:${m.port}`);
+          return parts.length > 0 ? <Tag color="blue">{parts.join('')}</Tag> : '-';
+        },
+      },
+      {
+        label: '传输协议',
+        field: 'protocol',
+        type: 'tag',
+      },
+      {
+        label: '采集间隔',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          return m.collection_interval ? `${m.collection_interval} 秒` : '-';
+        },
+      },
+      {
+        label: '来源监控系统',
+        field: 'source_system',
+        type: 'tag',
+      },
+      {
+        label: '来源监控任务ID',
+        field: 'source_monitor_id',
+      },
+      {
+        label: '最近检测状态',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          if (!m.last_check_status) return '-';
+          const statusMap: Record<string, { label: string; color: string }> = {
+            ok: { label: '正常', color: 'success' },
+            fail: { label: '异常', color: 'error' },
+            unknown: { label: '未知', color: 'default' },
+          };
+          const cfg = statusMap[m.last_check_status] || {
+            label: m.last_check_status,
+            color: 'default',
+          };
+          return <Tag color={cfg.color as any}>{cfg.label}</Tag>;
+        },
+      },
+      {
+        label: '最近检测时间',
+        type: 'custom',
+        render: (asset) => {
+          const m = asset as any;
+          return m.last_check_time ? <FriendlyTime date={m.last_check_time} /> : '-';
+        },
+      },
+      { label: '运行状态', type: 'status' },
+      { label: '所属信息系统', type: 'systemLink' },
+      { label: '备注', field: 'description', span: 'column', showIf: (a) => !!a.description },
+      { label: '创建时间', field: 'created_at', type: 'time' },
+      { label: '更新时间', field: 'updated_at', type: 'time' },
+    ],
+    metadataLabels: {
+      timeout_ms: '超时时间(毫秒)',
+      retry_count: '重试次数',
+      lx: '类型',
+    },
+    renderMetadataValue: (key, value) => {
+      if (key === 'timeout_ms') return `${value} ms`;
+      if (key === 'retry_count') return `${value} 次`;
+      return String(value);
+    },
+    relatedAssets: [{ type: 'web_servers_by_port_monitor_ip' }],
   },
 };
-
-// ============================================
-// Generic fallback config builder
-// ============================================
 
 const HIDDEN_KEYS = ['id', 'system_id', 'asset_type', 'category', 'name', 'status', 'metadata', 'tags', 'created_at', 'updated_at', 'department', 'owner', 'description', 'code'];
 

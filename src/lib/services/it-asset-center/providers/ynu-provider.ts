@@ -16,6 +16,9 @@ import {
   ThirdPartyService,
   OpsAccessControl,
   VirtualMachine,
+  DataSource,
+  WebSiteMonitor,
+  PortMonitor,
   AssetRelationship,
   SystemAssetStats,
   AssetType,
@@ -1056,6 +1059,451 @@ export class YnuDataProvider implements IItAssetDataProvider {
   }
 
   // ============================================
+  // 数据采集源资产查询
+  // ============================================
+
+  /**
+   * 映射数据采集源状态
+   * 中台 ZT 字段：活动/停用 等
+   * SFQY 字段：是否启用
+   */
+  private mapDataSourceStatus(raw: any): AssetStatus {
+    const zt = String(raw.ZT ?? raw.zt ?? '').trim();
+    const sfqy = String(raw.SFQY ?? raw.sfqy ?? '').trim();
+
+    if (sfqy === '否' || sfqy === '停用') return 'inactive';
+    if (zt.includes('活动') || zt.includes('启用')) return 'active';
+    if (zt.includes('停用')) return 'inactive';
+    return 'active';
+  }
+
+  /**
+   * 映射安全等级
+   */
+  private mapSecurityLevel(sjyib: string | undefined): 'public' | 'internal' | 'confidential' | 'secret' {
+    const value = String(sjyib ?? '').trim();
+    if (value.includes('绝密')) return 'secret';
+    if (value.includes('机密')) return 'confidential';
+    if (value.includes('内部')) return 'internal';
+    return 'public';
+  }
+
+  /**
+   * 将中台返回的采集数据源数据转换为系统标准 DataSource 格式
+   * 抽象字段：connection_target, connection_host, source_type, data_category,
+   *           business_system_id, business_system_name, department, technical_owner,
+   *           last_sync_time, sync_interval, security_level
+   * 扩展字段：厂商信息、联系人等放入 metadata
+   */
+  private transformDataSource(raw: any): DataSource {
+    const wybs = raw.WYBS ?? raw.wybs ?? '';
+    const ljmc = raw.LJMC ?? raw.ljmc ?? '';
+    const sjklx = raw.SJKLX ?? raw.sjklx ?? '';
+    const sjkfl = raw.SJKFL ?? raw.sjkfl ?? '';
+    const sjylb = raw.SJYLB ?? raw.sjylb ?? '';
+    const ipdz = raw.IPDZ ?? raw.ipdz ?? '';
+    const dk = raw.DK ?? raw.dk ?? '';
+    const ywxtid = raw.YWXTID ?? raw.ywxtid ?? '';
+    const ywxt = raw.YWXT ?? raw.ywxt ?? '';
+    const bmmc = raw.BMMC ?? raw.bmmc ?? '';
+    const ms = raw.MS ?? raw.ms ?? '';
+    const cjsj = raw.CJSJ ?? raw.cjsj ?? '';
+    const gxsj = raw.GXSJ ?? raw.gxsj ?? '';
+    const tstamp = raw.TSTAMP ?? raw.tstamp ?? '';
+    const status = this.mapDataSourceStatus(raw);
+
+    // 连接目标：优先使用连接名称，其次数据库名/别名
+    const connectionTarget = ljmc || (raw.LJBM ?? raw.ljbm ?? sjklx) || wybs;
+
+    return {
+      id: wybs,
+      system_id: ywxtid || 'unknown',
+      asset_type: 'data_source',
+      category: 'governance',
+      name: ljmc || `数据源-${wybs}`,
+      code: wybs,
+      status,
+      description: ms || undefined,
+      connection_target: connectionTarget,
+      connection_host: ipdz || '',
+      connection_port: dk ? parseInt(dk, 10) : undefined,
+      source_type: sjklx || '',
+      data_category: sjylb || sjkfl || '',
+      business_system_id: ywxtid || '',
+      business_system_name: ywxt || undefined,
+      department: bmmc || undefined,
+      technical_owner: raw.XTKFZXM ?? raw.xtkfzxm ?? undefined,
+      last_sync_time: gxsj ? this.formatTimestamp(gxsj) : undefined,
+      sync_interval: undefined,
+      security_level: undefined,
+      created_at: this.formatTimestamp(cjsj || tstamp),
+      updated_at: this.formatTimestamp(gxsj || tstamp),
+      metadata: {
+        vendor_name: raw.CSMC ?? raw.csmc ?? undefined,
+        vendor_id: raw.CSID ?? raw.csid ?? undefined,
+        system_developer: raw.XTKFZXM ?? raw.xtkfzxm ?? undefined,
+        system_developer_phone: raw.XTKFZDH ?? raw.xtkfzdh ?? undefined,
+        unit_owner: raw.DWFZRXM ?? raw.dwfzxm ?? undefined,
+        unit_owner_phone: raw.DWFZRDH ?? raw.dwfzrdh ?? undefined,
+        data_source_category: sjylb || undefined,
+        icon_path: raw.TBLJ ?? raw.tblj ?? undefined,
+        connection_alias: raw.LJBM ?? raw.ljbm ?? undefined,
+        enabled: raw.SFQY ?? raw.sfqy ?? undefined,
+        deleted: raw.SFSC ?? raw.sfsc ?? undefined,
+      },
+    } as DataSource;
+  }
+
+  /**
+   * 查询数据采集源资产列表
+   * 中台接口：/open_api/customization/tynugxggfwsjztcjsjyxx/full
+   */
+  private async queryDataSources(
+    params: {
+      system_id?: string;
+      keyword?: string;
+      status?: AssetStatus;
+      page?: number;
+      pageSize?: number;
+    }
+  ): Promise<PaginatedResult<ITAsset>> {
+    const { system_id, keyword, status, page = 1, pageSize = 10 } = params;
+
+    try {
+      const hasLocalFilters = !!(keyword || status);
+      const apiPage = hasLocalFilters ? 1 : page;
+      const apiPerPage = hasLocalFilters ? 10000 : pageSize;
+
+      const body: Record<string, unknown> = { page: apiPage, per_page: apiPerPage };
+      if (system_id) {
+        body.YWXTID = system_id;
+      }
+
+      const result = await this.callApi('/open_api/customization/tynugxggfwsjztcjsjyxx/full', body);
+      let sources: ITAsset[] = (result?.data || []).map((raw: any) => this.transformDataSource(raw));
+
+      if (status) {
+        sources = sources.filter((s) => s.status === status);
+      }
+
+      if (keyword) {
+        const lowerKeyword = keyword.toLowerCase();
+        sources = sources.filter((s) =>
+          s.name?.toLowerCase().includes(lowerKeyword) ||
+          s.code?.toLowerCase().includes(lowerKeyword) ||
+          s.description?.toLowerCase().includes(lowerKeyword) ||
+          (s as DataSource).connection_target?.toLowerCase().includes(lowerKeyword) ||
+          (s as DataSource).connection_host?.toLowerCase().includes(lowerKeyword) ||
+          (s as DataSource).source_type?.toLowerCase().includes(lowerKeyword) ||
+          (s as DataSource).data_category?.toLowerCase().includes(lowerKeyword) ||
+          (s as DataSource).business_system_name?.toLowerCase().includes(lowerKeyword) ||
+          (s as DataSource).department?.toLowerCase().includes(lowerKeyword)
+        );
+      }
+
+      sources.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+      const total = hasLocalFilters ? sources.length : parseInt(result?.total, 10) || sources.length;
+      const data = hasLocalFilters ? sources.slice((page - 1) * pageSize, page * pageSize) : sources;
+
+      return { data, total };
+    } catch (error) {
+      console.error('查询数据采集源失败:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  // ============================================
+  // Web 站点监控资产查询
+  // 数据来源：Hertzbeat 监控系统（经数据中台透传）
+  // ============================================
+
+  /**
+   * 判断字符串是否为 IPv4 地址
+   */
+  private isIPv4(value: string): boolean {
+    return /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value);
+  }
+
+  /**
+   * 根据端口号推断协议
+   * 443 -> https, 80 -> http, 其他默认 http
+   */
+  private inferProtocol(port?: number): string {
+    if (!port) return 'http';
+    if (port === 443) return 'https';
+    return 'http';
+  }
+
+  /**
+   * 将中台返回的 Web 站点监控数据转换为系统标准 WebSiteMonitor 格式
+   * 中台接口：/open_api/customization/tynugxggfwhzbwebzdjkxx/full
+   *
+   * 字段映射：
+   * - WYBS（唯一标识_校标） → id / code
+   * - JKMC（监控名称） → name
+   * - YM（域名） → domain 或 ip（自动识别）
+   * - DK（端口_校标） → port
+   * - CJRWWYBS（采集任务唯一标识） → source_monitor_id
+   * - LY（来源_校标） → source_system（Hertzbeat）
+   * - MS（描述_校标） → description
+   * - CJSJ（创建时间_校标） → created_at
+   * - GXSJ（更新时间_校标） → last_check_time / updated_at
+   * - TSTAMP（时间戳_校标） → updated_at 兜底
+   *
+   * 中台未提供：path / protocol / expected_status_code / collection_interval / last_check_status
+   * 这些字段按规则推断或留空
+   */
+  private transformWebSiteMonitor(raw: any): WebSiteMonitor {
+    const wybs = raw.WYBS ?? raw.wybs ?? '';
+    const jkmc = raw.JKMC ?? raw.jkmc ?? '';
+    const ym = raw.YM ?? raw.ym ?? '';
+    const dk = raw.DK ?? raw.dk ?? '';
+    const cjrwwybs = raw.CJRWWYBS ?? raw.cjrwwybs ?? '';
+    const ly = raw.LY ?? raw.ly ?? 'hertzbeat';
+    const ms = raw.MS ?? raw.ms ?? '';
+    const cjsj = raw.CJSJ ?? raw.cjsj ?? '';
+    const gxsj = raw.GXSJ ?? raw.gxsj ?? '';
+    const tstamp = raw.TSTAMP ?? raw.tstamp ?? '';
+
+    // 端口转换
+    const port = dk ? parseInt(dk, 10) : undefined;
+    const protocol = this.inferProtocol(port);
+
+    // 识别 YM 是域名还是 IP
+    const ymTrimmed = ym.trim();
+    let domain: string | undefined;
+    let ip: string | undefined;
+    if (ymTrimmed) {
+      if (this.isIPv4(ymTrimmed)) {
+        ip = ymTrimmed;
+      } else {
+        // 域名规范化：去尾点、小写
+        domain = ymTrimmed.replace(/\.+$/, '').toLowerCase();
+      }
+    }
+
+    // 构造监控目标显示名
+    const targetDisplay = `${domain || ip || ''}${port ? `:${port}` : ''}`;
+
+    return {
+      id: wybs,
+      system_id: 'unknown',
+      asset_type: 'web_site_monitor',
+      category: 'operations',
+      name: jkmc || targetDisplay || wybs,
+      code: wybs,
+      status: 'active',
+      description: ms || undefined,
+      domain,
+      ip,
+      port,
+      path: undefined,
+      protocol,
+      expected_status_code: 200,
+      collection_interval: undefined,
+      source_system: ly || 'hertzbeat',
+      source_monitor_id: cjrwwybs || undefined,
+      last_check_time: gxsj ? this.formatTimestamp(gxsj) : undefined,
+      last_check_status: undefined,
+      created_at: this.formatTimestamp(cjsj || tstamp),
+      updated_at: this.formatTimestamp(gxsj || tstamp),
+      metadata: {
+        lx: raw.LX ?? raw.lx ?? undefined,
+      },
+    } as WebSiteMonitor;
+  }
+
+  /**
+   * 查询 Web 站点监控资产列表
+   * 中台接口：/open_api/customization/tynugxggfwhzbwebzdjkxx/full
+   */
+  private async queryWebSiteMonitors(
+    params: {
+      keyword?: string;
+      status?: AssetStatus;
+      page?: number;
+      pageSize?: number;
+    }
+  ): Promise<PaginatedResult<ITAsset>> {
+    const { keyword, page = 1, pageSize = 10 } = params;
+
+    try {
+      const hasLocalFilters = !!keyword;
+      const apiPage = hasLocalFilters ? 1 : page;
+      const apiPerPage = hasLocalFilters ? 10000 : pageSize;
+
+      const result = await this.callApi('/open_api/customization/tynugxggfwhzbwebzdjkxx/full', {
+        page: apiPage,
+        per_page: apiPerPage,
+      });
+
+      let monitors: ITAsset[] = (result?.data || []).map((raw: any) =>
+        this.transformWebSiteMonitor(raw)
+      );
+
+      if (keyword) {
+        const lowerKeyword = keyword.toLowerCase();
+        monitors = monitors.filter((m) => {
+          const mon = m as WebSiteMonitor;
+          return (
+            mon.name?.toLowerCase().includes(lowerKeyword) ||
+            mon.code?.toLowerCase().includes(lowerKeyword) ||
+            mon.description?.toLowerCase().includes(lowerKeyword) ||
+            mon.domain?.toLowerCase().includes(lowerKeyword) ||
+            mon.ip?.toLowerCase().includes(lowerKeyword) ||
+            mon.source_system?.toLowerCase().includes(lowerKeyword) ||
+            mon.source_monitor_id?.toLowerCase().includes(lowerKeyword) ||
+            String(mon.port || '').includes(lowerKeyword)
+          );
+        });
+      }
+
+      monitors.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+      const total = hasLocalFilters
+        ? monitors.length
+        : parseInt(result?.total, 10) || monitors.length;
+      const data = hasLocalFilters
+        ? monitors.slice((page - 1) * pageSize, page * pageSize)
+        : monitors;
+
+      return { data, total };
+    } catch (error) {
+      console.error('查询Web站点监控失败:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  // ============================================
+  // 端口监控资产查询
+  // 数据来源：Hertzbeat 监控系统（经数据中台透传）
+  // ============================================
+
+  /**
+   * 将中台返回的端口监控数据转换为系统标准 PortMonitor 格式
+   * 中台接口：/open_api/customization/tynugxggfwhzbdkjkxx/full
+   *
+   * 字段映射：
+   * - WYBS（唯一标识_校标） → id / code
+   * - JKMC（监控名称） → name
+   * - IPDZ（IP地址_校标） → ip
+   * - DK（端口_校标） → port
+   * - CJRWWYBS（采集任务唯一标识） → source_monitor_id
+   * - LY（来源_校标） → source_system（Hertzbeat）
+   * - MS（描述_校标） → description
+   * - CJSJ（创建时间_校标） → created_at
+   * - GXSJ（更新时间_校标） → last_check_time / updated_at
+   * - TSTAMP（时间戳_校标） → updated_at 兜底
+   * - LX（类型_校标） → metadata.lx
+   *
+   * 中台未提供：protocol / collection_interval / last_check_status
+   * 这些字段按规则推断或留空
+   */
+  private transformPortMonitor(raw: any): PortMonitor {
+    const wybs = raw.WYBS ?? raw.wybs ?? '';
+    const jkmc = raw.JKMC ?? raw.jkmc ?? '';
+    const ipdz = raw.IPDZ ?? raw.ipdz ?? '';
+    const dk = raw.DK ?? raw.dk ?? '';
+    const cjrwwybs = raw.CJRWWYBS ?? raw.cjrwwybs ?? '';
+    const ly = raw.LY ?? raw.ly ?? 'hertzbeat';
+    const ms = raw.MS ?? raw.ms ?? '';
+    const cjsj = raw.CJSJ ?? raw.cjsj ?? '';
+    const gxsj = raw.GXSJ ?? raw.gxsj ?? '';
+    const tstamp = raw.TSTAMP ?? raw.tstamp ?? '';
+
+    // 端口转换
+    const port = dk ? parseInt(dk, 10) : undefined;
+
+    // 构造监控目标显示名
+    const targetDisplay = `${ipdz || ''}${port ? `:${port}` : ''}`;
+
+    return {
+      id: wybs,
+      system_id: 'unknown',
+      asset_type: 'port_monitor',
+      category: 'operations',
+      name: jkmc || targetDisplay || wybs,
+      code: wybs,
+      status: 'active',
+      description: ms || undefined,
+      ip: ipdz || undefined,
+      port,
+      protocol: 'tcp', // 中台未提供，Hertzbeat 端口监控默认 TCP
+      collection_interval: undefined,
+      source_system: ly || 'hertzbeat',
+      source_monitor_id: cjrwwybs || undefined,
+      last_check_time: gxsj ? this.formatTimestamp(gxsj) : undefined,
+      last_check_status: undefined,
+      created_at: this.formatTimestamp(cjsj || tstamp),
+      updated_at: this.formatTimestamp(gxsj || tstamp),
+      metadata: {
+        lx: raw.LX ?? raw.lx ?? undefined,
+      },
+    } as PortMonitor;
+  }
+
+  /**
+   * 查询端口监控资产列表
+   * 中台接口：/open_api/customization/tynugxggfwhzbdkjkxx/full
+   */
+  private async queryPortMonitors(
+    params: {
+      keyword?: string;
+      status?: AssetStatus;
+      page?: number;
+      pageSize?: number;
+    }
+  ): Promise<PaginatedResult<ITAsset>> {
+    const { keyword, page = 1, pageSize = 10 } = params;
+
+    try {
+      const hasLocalFilters = !!keyword;
+      const apiPage = hasLocalFilters ? 1 : page;
+      const apiPerPage = hasLocalFilters ? 10000 : pageSize;
+
+      const result = await this.callApi('/open_api/customization/tynugxggfwhzbdkjkxx/full', {
+        page: apiPage,
+        per_page: apiPerPage,
+      });
+
+      let monitors: ITAsset[] = (result?.data || []).map((raw: any) =>
+        this.transformPortMonitor(raw)
+      );
+
+      if (keyword) {
+        const lowerKeyword = keyword.toLowerCase();
+        monitors = monitors.filter((m) => {
+          const mon = m as PortMonitor;
+          return (
+            mon.name?.toLowerCase().includes(lowerKeyword) ||
+            mon.code?.toLowerCase().includes(lowerKeyword) ||
+            mon.description?.toLowerCase().includes(lowerKeyword) ||
+            mon.ip?.toLowerCase().includes(lowerKeyword) ||
+            mon.source_system?.toLowerCase().includes(lowerKeyword) ||
+            mon.source_monitor_id?.toLowerCase().includes(lowerKeyword) ||
+            String(mon.port || '').includes(lowerKeyword)
+          );
+        });
+      }
+
+      monitors.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+      const total = hasLocalFilters
+        ? monitors.length
+        : parseInt(result?.total, 10) || monitors.length;
+      const data = hasLocalFilters
+        ? monitors.slice((page - 1) * pageSize, page * pageSize)
+        : monitors;
+
+      return { data, total };
+    } catch (error) {
+      console.error('查询端口监控失败:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  // ============================================
   // 信息系统查询
   // ============================================
 
@@ -1094,12 +1542,18 @@ export class YnuDataProvider implements IItAssetDataProvider {
         systems = systems.filter((s) => s.owner_department === params.department);
       }
       if (params.parent) {
-        const lowerParent = params.parent.toLowerCase();
-        systems = systems.filter(
-          (s) =>
-            s.parent_id?.toLowerCase().includes(lowerParent) ||
-            s.parent_name?.toLowerCase().includes(lowerParent)
-        );
+        if (params.parent === 'root') {
+          // 特殊值 root：查询无父应用的顶层系统
+          systems = systems.filter(
+            (s) => !s.parent_id || s.parent_id.trim() === ''
+          );
+        } else {
+          // 精确匹配 parent_id（避免子串匹配误伤）
+          const lowerParent = params.parent.toLowerCase();
+          systems = systems.filter(
+            (s) => s.parent_id?.toLowerCase() === lowerParent
+          );
+        }
       }
 
       if (keyword) {
@@ -1176,13 +1630,14 @@ export class YnuDataProvider implements IItAssetDataProvider {
   async queryAssets(params: QueryAssetsParams): Promise<PaginatedResult<ITAsset>> {
     const { asset_type, category, system_id, keyword, status, page = 1, pageSize = 10 } = params;
 
-    // 中台当前提供域名、DNS记录、物理设备、虚拟机、Web 应用、第三方服务和运维访问控制接口
-    const allowedTypes = ['domain', 'dns_record', 'physical_device', 'virtual_machine', 'web_server', 'web_app', 'third_party_service', 'ops_access_control'];
+    // 中台当前提供域名、DNS记录、物理设备、虚拟机、Web应用、第三方服务、运维访问控制、数据采集源、Web站点监控数据
+    const allowedTypes = ['domain', 'dns_record', 'physical_device', 'virtual_machine', 'web_server', 'web_app', 'third_party_service', 'ops_access_control', 'data_source', 'web_site_monitor', 'port_monitor'];
     const requestedInfra = !asset_type && category === 'infrastructure';
     const requestedNetwork = !asset_type && category === 'network';
     const requestedApplication = !asset_type && category === 'application';
     const requestedExternal = !asset_type && category === 'external';
     const requestedOperations = !asset_type && category === 'operations';
+    const requestedGovernance = !asset_type && category === 'governance';
     const isAllowedType = !asset_type || allowedTypes.includes(asset_type);
 
     if (!isAllowedType) {
@@ -1195,6 +1650,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       category === 'application' ||
       category === 'external' ||
       category === 'operations' ||
+      category === 'governance' ||
       !category;
 
     // 查询物理设备资产
@@ -1295,7 +1751,30 @@ export class YnuDataProvider implements IItAssetDataProvider {
       }
     }
 
-    let assets = [...physicalDevices, ...virtualMachines, ...domains, ...dnsRecords, ...webServers, ...webApps, ...thirdPartyServices, ...opsAccessControls];
+    // 查询数据采集源资产
+    let dataSources: ITAsset[] = [];
+    if (!asset_type || asset_type === 'data_source' || requestedGovernance || fetchAll) {
+      const dsResult = await this.queryDataSources({ system_id, keyword, status, page: 1, pageSize: 10000 });
+      dataSources = dsResult.data;
+    }
+
+    // 查询 Web 站点监控资产
+    // 注意：Web 站点监控与信息系统无直接字段关联，按 system_id 查询时跳过
+    let webSiteMonitors: ITAsset[] = [];
+    if (!system_id && (!asset_type || asset_type === 'web_site_monitor' || requestedOperations || fetchAll)) {
+      const wsmResult = await this.queryWebSiteMonitors({ keyword, status, page: 1, pageSize: 10000 });
+      webSiteMonitors = wsmResult.data;
+    }
+
+    // 查询端口监控资产
+    // 注意：端口监控与信息系统无直接字段关联，按 system_id 查询时跳过
+    let portMonitors: ITAsset[] = [];
+    if (!system_id && (!asset_type || asset_type === 'port_monitor' || requestedOperations || fetchAll)) {
+      const pmResult = await this.queryPortMonitors({ keyword, status, page: 1, pageSize: 10000 });
+      portMonitors = pmResult.data;
+    }
+
+    let assets = [...physicalDevices, ...virtualMachines, ...domains, ...dnsRecords, ...webServers, ...webApps, ...thirdPartyServices, ...opsAccessControls, ...dataSources, ...webSiteMonitors, ...portMonitors];
 
     // 按资产类型过滤
     if (asset_type) {
@@ -1536,6 +2015,63 @@ export class YnuDataProvider implements IItAssetDataProvider {
         }
       }
 
+      // 数据采集源详情查询
+      if (assetType === 'data_source') {
+        try {
+          const result = await this.callApi('/open_api/customization/tynugxggfwsjztcjsjyxx/full', {
+            WYBS: id,
+            page: 1,
+            per_page: 1,
+          });
+          const rawData = result?.data || [];
+          if (rawData[0]) {
+            return this.transformDataSource(rawData[0]);
+          }
+          return null;
+        } catch (error) {
+          console.error('查询数据采集源详情失败:', error);
+          return null;
+        }
+      }
+
+      // Web 站点监控详情查询
+      if (assetType === 'web_site_monitor') {
+        try {
+          const result = await this.callApi('/open_api/customization/tynugxggfwhzbwebzdjkxx/full', {
+            WYBS: id,
+            page: 1,
+            per_page: 1,
+          });
+          const rawData = result?.data || [];
+          if (rawData[0]) {
+            return this.transformWebSiteMonitor(rawData[0]);
+          }
+          return null;
+        } catch (error) {
+          console.error('查询Web站点监控详情失败:', error);
+          return null;
+        }
+      }
+
+      // 端口监控详情查询
+      if (assetType === 'port_monitor') {
+        try {
+          const result = await this.callApi('/open_api/customization/tynugxggfwhzbdkjkxx/full', {
+            WYBS: id,
+            page: 1,
+            per_page: 1,
+          });
+          const rawData = result?.data || [];
+          if (rawData[0]) {
+            return this.transformPortMonitor(rawData[0]);
+          }
+          return null;
+        } catch (error) {
+          console.error('查询端口监控详情失败:', error);
+          return null;
+        }
+      }
+
       // 域名类资产
       if (!assetType || assetType === 'domain') {
         const domainResult = await this.callApi('/open_api/customization/tdwsgxggfwdnsymxxmx/full', {
@@ -1617,6 +2153,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       software: 0,
       operations: 0,
       external: 0,
+      governance: 0,
     };
     const by_category_active: Record<AssetCategory, number> = {
       infrastructure: 0,
@@ -1626,6 +2163,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       software: 0,
       operations: 0,
       external: 0,
+      governance: 0,
     };
 
     for (const asset of assets) {
@@ -1701,8 +2239,96 @@ export class YnuDataProvider implements IItAssetDataProvider {
     }
   }
 
-  async queryAssetRelationships(_assetId: string): Promise<AssetRelationship[]> {
-    return [];
+  async queryAssetRelationships(assetId: string): Promise<AssetRelationship[]> {
+    try {
+      // 查找当前资产
+      const currentAsset = await this.queryAssetById(assetId);
+      if (!currentAsset) return [];
+
+      const relations: AssetRelationship[] = [];
+
+      // Web 站点监控：按域名/IP 关联域名资产和 Web 服务器资产
+      if (currentAsset.asset_type === 'web_site_monitor') {
+        const monitor = currentAsset as WebSiteMonitor;
+
+        // 按域名匹配域名资产
+        if (monitor.domain) {
+          const normalizedDomain = monitor.domain.replace(/\.+$/, '').toLowerCase();
+          const domainResult = await this.queryAssets({
+            asset_type: 'domain',
+            keyword: normalizedDomain,
+            pageSize: 100,
+          });
+          domainResult.data.forEach((domain, idx) => {
+            const d = domain as any;
+            const domainValue = (d.domain || '').replace(/\.+$/, '').toLowerCase();
+            if (domainValue === normalizedDomain) {
+              relations.push({
+                id: `rel-${assetId}-monitor-domain-${idx}`,
+                source_id: assetId,
+                source_type: 'web_site_monitor',
+                target_id: domain.id,
+                target_type: 'domain',
+                relation_type: 'monitors',
+              });
+            }
+          });
+        }
+
+        // 按 IP 匹配 Web 服务器资产
+        if (monitor.ip) {
+          const serverResult = await this.queryAssets({
+            asset_type: 'web_server',
+            keyword: monitor.ip,
+            pageSize: 100,
+          });
+          serverResult.data.forEach((server, idx) => {
+            const s = server as WebServer;
+            if (s.ip_address === monitor.ip) {
+              relations.push({
+                id: `rel-${assetId}-monitor-server-${idx}`,
+                source_id: assetId,
+                source_type: 'web_site_monitor',
+                target_id: server.id,
+                target_type: 'web_server',
+                relation_type: 'monitors',
+              });
+            }
+          });
+        }
+      }
+
+      // 端口监控：按 IP 关联 Web 服务器资产
+      if (currentAsset.asset_type === 'port_monitor') {
+        const monitor = currentAsset as PortMonitor;
+
+        if (monitor.ip) {
+          const serverResult = await this.queryAssets({
+            asset_type: 'web_server',
+            keyword: monitor.ip,
+            pageSize: 100,
+          });
+          serverResult.data.forEach((server, idx) => {
+            const s = server as WebServer;
+            if (s.ip_address === monitor.ip) {
+              relations.push({
+                id: `rel-${assetId}-port-monitor-server-${idx}`,
+                source_id: assetId,
+                source_type: 'port_monitor',
+                target_id: server.id,
+                target_type: 'web_server',
+                relation_type: 'monitors',
+              });
+            }
+          });
+        }
+      }
+
+      return relations;
+    } catch (error) {
+      console.error('查询资产关系失败:', error);
+      return [];
+    }
   }
 
   // ============================================

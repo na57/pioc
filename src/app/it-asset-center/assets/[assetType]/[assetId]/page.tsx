@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
   Descriptions,
@@ -25,6 +25,15 @@ export default function AssetDetailPage() {
   const assetId = decodeURIComponent(params.assetId as string);
   const assetType = params.assetType as string;
   const { message } = App.useApp();
+  const messageRef = useRef(message);
+  messageRef.current = message;
+  const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
+
+  const handleUnauthorized = useCallback(() => {
+    routerRef.current.push(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [asset, setAsset] = useState<ITAsset | null>(null);
@@ -38,6 +47,10 @@ export default function AssetDetailPage() {
       const queryParams = new URLSearchParams({ action: 'asset-detail', id: assetId });
       queryParams.set('asset_type', assetType);
       const response = await fetch(`/api/it-asset-center?${queryParams.toString()}`);
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       const result = await response.json();
       if (result.success) {
         if (isDNSRecord) {
@@ -46,16 +59,22 @@ export default function AssetDetailPage() {
           setAsset(result.data.asset as ITAsset);
         }
       } else {
-        message.error(result.error || '获取资产详情失败');
+        console.error('[AssetDetailPage] 获取资产详情失败:', { assetType, assetId, error: result.error });
+        messageRef.current.error(result.error || '获取资产详情失败');
       }
-    } catch {
-      message.error('获取资产详情失败');
+    } catch (err) {
+      console.error('[AssetDetailPage] 获取资产详情异常:', { assetType, assetId, error: err });
+      messageRef.current.error('获取资产详情失败');
     }
-  }, [assetId, assetType, isDNSRecord, message]);
+  }, [assetId, assetType, isDNSRecord, handleUnauthorized]);
 
   const fetchSystemInfo = useCallback(async (systemId: string) => {
     try {
       const response = await fetch(`/api/it-asset-center?action=system-detail&id=${systemId}`);
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
       const result = await response.json();
       if (result.success && result.data.system) {
         setSystemInfo({
@@ -67,7 +86,7 @@ export default function AssetDetailPage() {
     } catch {
       // 静默失败
     }
-  }, []);
+  }, [handleUnauthorized]);
 
   useEffect(() => {
     setLoading(true);
