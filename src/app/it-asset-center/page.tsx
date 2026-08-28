@@ -26,6 +26,7 @@ import AssetStatCard from './components/AssetStatCard';
 import FilterSelect from './components/FilterSelect';
 import AssetListPanel from './components/AssetListPanel';
 import ResourceGraph from './components/ResourceGraph';
+import ActionButton from '@/app/tags/components/ActionButton';
 import { AIChatPanel } from '@/components/ai-chat';
 import type { InformationSystem, AssetCategory } from '@/lib/services/it-asset-center';
 import { CATEGORY_LABELS } from '@/lib/services/it-asset-center';
@@ -87,8 +88,25 @@ export default function ItAssetCenterPage() {
   const [activeTab, setActiveTab] = useState<string>(
     initialTab || (hasAssetFilters ? 'assets' : 'management')
   );
+  // 资源图谱聚焦系统：从系统列表"查看图谱"跳转时设置
+  const [graphFocusSystem, setGraphFocusSystem] = useState<{
+    id: string;
+    name: string;
+    status?: string;
+  } | null>(null);
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
+  // 跳转到资源图谱并聚焦指定系统
+  const handleViewGraph = useCallback(
+    (record: InformationSystem) => {
+      setGraphFocusSystem({ id: record.id, name: record.name, status: record.status });
+      setActiveTab('graph');
+      const newParams = new URLSearchParams(searchParamsRef.current.toString());
+      newParams.set('tab', 'graph');
+      routerRef.current.replace(`${pathname}?${newParams.toString()}`, { scroll: false });
+    },
+    [pathname]
+  );
   const [categoryStats, setCategoryStats] = useState<Record<AssetCategory, number>>({
     infrastructure: 0,
     network: 0,
@@ -353,8 +371,20 @@ export default function ItAssetCenterPage() {
         responsive: ['md' as const],
         render: (text: string) => <FriendlyTime date={text} />,
       },
+      {
+        title: '操作',
+        key: 'actions',
+        width: 90,
+        render: (_: unknown, record: InformationSystem) => (
+          <ActionButton
+            icon={<ApartmentOutlined />}
+            tooltip="查看图谱"
+            onClick={() => handleViewGraph(record)}
+          />
+        ),
+      },
     ],
-    [isMobile]
+    [isMobile, handleViewGraph]
   );
 
   const categoryOrder: AssetCategory[] = ['infrastructure', 'network', 'data', 'application', 'software', 'operations', 'external', 'governance'];
@@ -590,7 +620,7 @@ export default function ItAssetCenterPage() {
                 资源图谱
               </span>
             ),
-            children: <ResourceGraph />,
+            children: <ResourceGraph focusSystem={graphFocusSystem} />,
           },
         ]}
       />

@@ -236,16 +236,44 @@ function findNodeByRawId(nodes: GraphNode[], rawId: string): GraphNode | undefin
 // 组件
 // ============================================
 
-export default function ResourceGraph() {
+export interface FocusSystem {
+  id: string;
+  name: string;
+  status?: string;
+}
+
+interface ResourceGraphProps {
+  /** 外部指定的聚焦系统：仅显示该系统作为第一级节点（如列表"查看图谱"跳转） */
+  focusSystem?: FocusSystem | null;
+}
+
+function makeSystemNode(sys: FocusSystem): GraphNode {
+  return {
+    id: sys.id,
+    node_type: 'information_system',
+    name: sys.name,
+    status: sys.status,
+    children: [],
+    _loaded: false,
+    collapsed: true,
+  };
+}
+
+export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
   const { message } = App.useApp();
   const router = useRouter();
   const chartRef = useRef<any>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const defaultCanvasCursor = useRef<string>('grab');
+  // 用 ref 持有 focus，供 loadTopLevelSystems 等异步流程读取最新值
+  const focusRef = useRef<FocusSystem | undefined | null>(focusSystem);
+  focusRef.current = focusSystem;
   const [loading, setLoading] = useState(true);
   const [graphData, setGraphData] = useState<GraphNode[]>([]);
   const [allTopSystems, setAllTopSystems] = useState<{ id: string; name: string; status?: string }[]>([]);
-  const [selectedSystemIds, setSelectedSystemIds] = useState<string[]>([]);
+  const [selectedSystemIds, setSelectedSystemIds] = useState<string[]>(
+    focusSystem ? [focusSystem.id] : []
+  );
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
   const handleUnauthorized = useCallback(() => {
@@ -281,14 +309,48 @@ export default function ResourceGraph() {
         _loaded: false,
         collapsed: true,
       }));
-      setAllTopSystems(systems.map((s) => ({ id: s.id, name: s.name, status: s.status })));
-      setGraphData(systems);
+      // 若存在聚焦系统，将其插入到第一级（即使它不是顶层系统）
+      const focus = focusRef.current;
+      const finalSystems = focus
+        ? [makeSystemNode(focus), ...systems.filter((s) => s.id !== focus.id)]
+        : systems;
+      setAllTopSystems(finalSystems.map((s) => ({ id: s.id, name: s.name, status: s.status })));
+      setGraphData(finalSystems);
+      if (focus) {
+        setSelectedSystemIds([focus.id]);
+      }
     } catch {
       message.error('加载信息系统失败');
     } finally {
       setLoading(false);
     }
   }, [message, handleUnauthorized]);
+
+  // 聚焦系统变化：预置筛选并保证该系统作为第一级节点存在
+  useEffect(() => {
+    focusRef.current = focusSystem;
+    if (!focusSystem) {
+      setSelectedSystemIds([]);
+      return;
+    }
+    setSelectedSystemIds([focusSystem.id]);
+    setGraphData((prev) => {
+      const rest = prev.filter((n) => n.id !== focusSystem.id);
+      return [makeSystemNode(focusSystem), ...rest];
+    });
+    // 下拉选项中也要包含该系统（可能不在顶层列表中）
+    setAllTopSystems((prev) => {
+      if (prev.some((s) => s.id === focusSystem.id)) {
+        return prev.map((s) =>
+          s.id === focusSystem.id ? { ...s, name: focusSystem.name, status: focusSystem.status } : s
+        );
+      }
+      return [
+        { id: focusSystem.id, name: focusSystem.name, status: focusSystem.status },
+        ...prev,
+      ];
+    });
+  }, [focusSystem]);
 
   // 加载子节点
   const fetchChildren = useCallback(
@@ -381,6 +443,63 @@ export default function ResourceGraph() {
   useEffect(() => {
     loadTopLevelSystems();
   }, [loadTopLevelSystems]);
+
+  // Safari 双指捏合会触发非标准 gesture* 事件（不触发 wheel），
+  // 默认行为是缩放整个页面。这里阻止默认行为，并把 gesture 的 scale
+  // 转换为 wheel 事件派发给 ECharts 画布，实现仅图谱缩放。
+  const lastGestureScaleRef = useRef<number | null>(null);
+
+  const handleGestureStart = useCallback((e: Event) => {
+    e.preventDefault();
+    lastGestureScaleRef.current = null;
+  }, []);
+
+  const handleGestureChange = useCallback((e: Event) => {
+    e.preventDefault();
+    const ge = e as Event & { scale?: number; clientX?: number; clientY?: number };
+    if (typeof ge.scale !== 'number') return;
+    const prev = lastGestureScaleRef.current ?? ge.scale;
+    const ratio = prev > 0 ? ge.scale / prev : 1;
+    lastGestureScaleRef.current = ge.scale;
+    if (Math.abs(ratio - 1) < 0.005) return;
+
+    const canvas = canvasContainerRef.current?.querySelector('canvas');
+    if (!canvas) return;
+    // 派发合成 wheel 事件（ctrlKey 表示缩放手势），ECharts roam 会接管
+    const wheel = new WheelEvent('wheel', {
+      deltaY: ratio > 1 ? -8 : 8, // 放大向上滚、缩小向下滚
+      clientX: ge.clientX ?? 0,
+      clientY: ge.clientY ?? 0,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(wheel);
+  }, []);
+
+  const handleGestureEnd = useCallback((e: Event) => {
+    e.preventDefault();
+    lastGestureScaleRef.current = null;
+  }, []);
+
+  // callback ref：节点挂载/卸载时绑定/解绑 gesture 事件
+  const setGraphContainer = useCallback(
+    (node: HTMLDivElement | null) => {
+      const prev = canvasContainerRef.current;
+      if (prev) {
+        prev.removeEventListener('gesturestart', handleGestureStart);
+        prev.removeEventListener('gesturechange', handleGestureChange);
+        prev.removeEventListener('gestureend', handleGestureEnd);
+      }
+      canvasContainerRef.current = node;
+      if (node) {
+        node.addEventListener('gesturestart', handleGestureStart, { passive: false });
+        node.addEventListener('gesturechange', handleGestureChange, { passive: false });
+        node.addEventListener('gestureend', handleGestureEnd, { passive: false });
+      }
+    },
+    [handleGestureStart, handleGestureChange, handleGestureEnd]
+  );
 
   // 获取 canvas
   const getCanvasEl = useCallback((): HTMLCanvasElement | null => {
@@ -785,8 +904,16 @@ export default function ResourceGraph() {
               label: sys.name,
               status: sys.status,
             }))}
+            // 自定义过滤：按系统名称（label 字符串）模糊匹配。
+            // 注意：antd 使用 options 数组时默认按 optionFilterProp（默认 value）过滤，
+            // 会导致中文搜索匹配到 id 而显示 No data
+            filterOption={(input, option) => {
+              const label = String((option?.label as string) ?? '');
+              return label.toLowerCase().includes(input.toLowerCase());
+            }}
             optionRender={(optionInfo: any) => {
-              const status = optionInfo?.option?.data?.status || '';
+              const opt = optionInfo?.option ?? {};
+              const status = opt.status ?? opt.data?.status ?? '';
               const color = STATUS_BADGE_COLOR[status] || '#bfbfbf';
               return (
                 <Space orientation="horizontal" size={6} align="center">
@@ -828,7 +955,7 @@ export default function ResourceGraph() {
               }
             />
           ) : (
-            <div style={{ position: 'relative' }} ref={canvasContainerRef}>
+            <div style={{ position: 'relative' }} ref={setGraphContainer}>
               <ReactECharts
                 ref={chartRef}
                 option={option}
