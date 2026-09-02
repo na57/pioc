@@ -100,14 +100,23 @@ export interface TextbookFieldMapping extends Record<string, string> {
 }
 
 export interface SupervisionFieldMapping extends Record<string, string> {
-  classCode: string;
-  teacherName: string;
+  uniqueId: string;
+  documentCode: string;
+  reviewer: string;
+  reviewerName: string;
+  evaluatedPerson: string;
+  evaluatedPersonName: string;
+  courseCode: string;
+  courseName: string;
+  teachingClassId: string;
+  totalScore: string;
+  shouldAttend: string;
+  actualAttend: string;
+  visitTime: string;
   semesterCode: string;
-  supervisorName: string;
-  supervisionType: string;
-  supervisionDate: string;
-  evaluation: string;
-  rating: string;
+  semesterName: string;
+  suggestion: string;
+  expertOpinion: string;
 }
 
 export interface GradeFieldMapping extends Record<string, string> {
@@ -126,13 +135,14 @@ export interface GradeFieldMapping extends Record<string, string> {
 }
 
 export interface CourseIdeologyFieldMapping extends Record<string, string> {
-  classCode: string;
-  semesterCode: string;
-  courseCode: string;
-  courseName: string;
-  teacherName: string;
-  ideologyPoint: string;
   sequence: string;
+  themeActivity: string;
+  selectedChapter: string;
+  knowledgeEntry: string;
+  ideologyPoint: string;
+  educationStrategy: string;
+  timestamp: string;
+  teachingClassId: string;
 }
 
 // ============================================
@@ -312,16 +322,25 @@ const defaultConfig: CourseCenterConfig = {
       },
     },
     supervisionRecord: {
-      name: 't_dws_ydxt_ydxtddjlmx',
+      name: '',
       fields: {
-        classCode: 'jxbid',
-        teacherName: 'jsxm',
-        semesterCode: 'xnxqm',
-        supervisorName: 'ddzxm',
-        supervisionType: 'ddlxmc',
-        supervisionDate: 'tksj',
-        evaluation: 'pj',
-        rating: 'sypf',
+        uniqueId: 'wybs',
+        documentCode: 'wjdm',
+        reviewer: 'bpr',
+        reviewerName: 'bprxm',
+        evaluatedPerson: 'cpr',
+        evaluatedPersonName: 'cprxm',
+        courseCode: 'kcdm',
+        courseName: 'kcmc',
+        teachingClassId: 'jxbid',
+        totalScore: 'zf',
+        shouldAttend: 'ydrs',
+        actualAttend: 'sdrs',
+        visitTime: 'tksj',
+        semesterCode: 'xnxqdm',
+        semesterName: 'xnxqmc',
+        suggestion: 'pjjy',
+        expertOpinion: 'pgzjyj',
       },
     },
     undergraduateGrade: {
@@ -359,15 +378,16 @@ const defaultConfig: CourseCenterConfig = {
       },
     },
     courseIdeology: {
-      name: 't_dws_gxjx_bzkskcszmx',
+      name: '',
       fields: {
-        classCode: 'jxbh',
-        semesterCode: 'xnxqm',
-        courseCode: 'kch',
-        courseName: 'kcmc',
-        teacherName: 'jsxm',
-        ideologyPoint: 'szfxzd',
         sequence: 'px',
+        themeActivity: 'szrhd',
+        selectedChapter: 'xqzj',
+        knowledgeEntry: 'zsdqr',
+        ideologyPoint: 'szjhd',
+        educationStrategy: 'szyrcl',
+        timestamp: 'tstamp',
+        teachingClassId: 'jxbh',
       },
     },
   },

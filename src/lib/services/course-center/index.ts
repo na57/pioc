@@ -18,6 +18,7 @@ export type {
   Department,
   CourseNature,
   CourseCategory,
+  CourseType,
 } from './types';
 
 // 导出工厂函数

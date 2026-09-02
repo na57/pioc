@@ -1,6 +1,9 @@
 # 课程中心应用配置
 # 将此文件复制为 course-center.yaml 并修改为你的实际配置
 
+# 数据提供者名称，对应 src/lib/services/course-center/providers/{name}-provider.ts
+provider: "ynu"
+
 # ============================================
 # 配置方式说明
 # ============================================
@@ -133,14 +136,14 @@ tables:
       dayOfWeek: "skxq"              # 上课星期
       className: "skbjmc"            # 上课班级名称
       deptName: "kcksdwmc"           # 开课单位名称
-      campusCode: "jsszxqmc"            # 校区代码
-      campusName: "xkxqh"            # 校区名称
-      buildingCode: "xkxqh"           # 教学楼代码
-      buildingName: "xkxqh"          # 教学楼名称
-      roomCode: "xkxqh"                # 教室码
-      roomName: "xkxqh"               # 教室名称
-      seatCount: "xkxqh"               # 座位数
-      studentCount: "xkxqh"           # 选课人数
+      campusCode: "xnqdm"            # 校区代码
+      campusName: "xnqmc"            # 校区名称
+      buildingCode: "jxlm"           # 教学楼代码
+      buildingName: "jxlmc"          # 教学楼名称
+      roomCode: "jsm"                # 教室码
+      roomName: "jsmc"               # 教室名称
+      seatCount: "zws"               # 座位数
+      studentCount: "xkrs"           # 选课人数
 
   # 研究生教学班表
   graduateTeaching:
@@ -196,7 +199,7 @@ tables:
       semesterName: "xnxqmc"
       textbookName: "jcmc"           # 教材名称
       isbn: "isbn"
-      author: "cbs"                   # 作者
+      author: "zz"                   # 作者
       publisher: "cbs"               # 出版社
       publishDate: "cbrq"            # 出版日期
       isNewEdition: "sfzxjcsyqk"     # 是否最新教材使用情況

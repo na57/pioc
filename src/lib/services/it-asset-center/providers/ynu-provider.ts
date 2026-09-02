@@ -132,6 +132,10 @@ export class YnuDataProvider implements IItAssetDataProvider {
     const data = await response.json();
 
     if (String(data.code) !== '10000' || data.message !== 'ok') {
+      // 查询结果为空（20013 Records not found）不算错误，视为空结果返回
+      if (Number(data.code) === 20013) {
+        return { data: [], total: 0 };
+      }
       throw new Error(`API 返回错误: ${data.message || data.description || data.code}`);
     }
 

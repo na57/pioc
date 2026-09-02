@@ -22,8 +22,8 @@ import {
   Descriptions,
   Collapse,
 } from 'antd';
-import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined, DownOutlined, CopyOutlined, FileTextOutlined, BulbOutlined, RobotOutlined } from '@ant-design/icons';
-import { useParams, useRouter } from 'next/navigation';
+import { BookOutlined, TeamOutlined, BarChartOutlined, ArrowLeftOutlined, CloseOutlined, SearchOutlined, EyeOutlined, DownOutlined, CopyOutlined, FileTextOutlined, BulbOutlined, RobotOutlined, NodeIndexOutlined } from '@ant-design/icons';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import * as echarts from 'echarts';
@@ -31,123 +31,19 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+import type {
+  Course,
+  TeachingClass,
+  ClassroomStats,
+  Textbook,
+  CourseType,
+} from '@/lib/services/course-center';
+import CourseGraphView from './CourseGraphView';
 
 const { Title } = Typography;
-const { Panel } = Collapse;
 const { Option } = Select;
 
-// 课程类型
-interface Course {
-  kch: string;
-  kcmc: string;
-  kcfzrh: string;
-  kcksdwh: string;
-  kcksdwmc: string;
-  xf: string;
-  zxs: string;
-  llxs: string;
-  syxs: string;
-  sjxs: string;
-  kcjj: string;
-  jc: string;
-  cksm: string;
-  kcccm: string;
-  kcccmc: string;
-  kcflm: string;
-  kcflmc: string;
-  jxfsdm: string;
-  skyzdm: string;
-  skyzmc: string;
-  kcztdm: string;
-  kslxdm: string;
-  kslxdmmc: string;
-  kcsm: string;
-  kcmb: string;
-  ywkcmb: string;
-  zhxs: string;
-  kcywmc: string;
-  gsyxbm: string;
-  gsyxmc: string;
-  tstamp: string;
-}
-
-// 教学班类型
-interface TeachingClass {
-  jxbh: string;
-  jsgh: string;
-  jsxm: string;
-  xnxqdm: string;
-  xnxqmc: string;
-  kcdm: string;
-  kcmc: string;
-  skzc: string;
-  skxq: string;
-  ksjc: string;
-  jsjc: string;
-  jasdm: string;
-  jxdd: string;
-  jsszxqh: string;
-  jsszxqmc: string;
-  skbjh: string;
-  skbjmc: string;
-  kxh: string;
-  kcksdwh: string;
-  kcksdwmc: string;
-  kkxnd: string;
-  kkxqm: string;
-  sksj: string;
-  jxzy: string;
-  krl: string;
-  xdrs: string;
-  xkxqh: string;
-  xkrsxd: string;
-  xknj: string;
-  pkyq: string;
-  jslxm: string;
-  qsz: string;
-  zzz: string;
-  kcxzm: string;
-  jxbmc: string;
-  jxtz: string;
-  kksm: string;
-  tstamp: string;
-}
-
-// 课堂统计类型
-interface ClassroomStats {
-  xnxqmc: string;
-  kckssj: string;
-  kcjssj: string;
-  rwcs: string;
-  zzd: string;
-  hyd: string;
-  jszb: string;
-  bszb: string;
-  ysjlv: string;
-  sjd: string;
-  cjsj: string;
-  dtlv: string;
-  ttlv: string;
-  tstamp: string;
-  jxbh: string;
-  wybs: string;
-}
-
-// 教材类型
-interface Textbook {
-  wybs: string;
-  cbh: string;
-  jcmc: string;
-  kcdm: string;
-  bc: string;
-  cbrq: string;
-  sfzxjcsyqk: string;
-  cbs: string;
-  bzzzs: string;
-  tstamp: string;
-}
-
-// 督导记录类型
+// 督导记录类型（详情页扩展字段）
 interface SupervisionRecord {
   wybs: string;
   wjdm: string;
@@ -222,7 +118,9 @@ export default function CourseDetailPage() {
   const { message } = App.useApp();
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const kch = params.kch as string;
+  const initialCourseType = (searchParams.get('type') as CourseType) || 'undergraduate';
 
   const [loading, setLoading] = useState(false);
   const [course, setCourse] = useState<Course | null>(null);
@@ -232,7 +130,7 @@ export default function CourseDetailPage() {
   const [classroomStatsLoading, setClassroomStatsLoading] = useState(false);
   const [selectedJxbh, setSelectedJxbh] = useState<string>('');
   const [activeTab, setActiveTab] = useState<string>('info');
-  const [courseType, setCourseType] = useState<'undergraduate' | 'graduate'>('undergraduate');
+  const [courseType, setCourseType] = useState<CourseType>(initialCourseType);
   const [statsDrawerVisible, setStatsDrawerVisible] = useState(false);
   const [statsActiveTab, setStatsActiveTab] = useState<string>('detail');
   
@@ -319,56 +217,52 @@ export default function CourseDetailPage() {
   const fetchCourseDetail = useCallback(async () => {
     setLoading(true);
     try {
-      // 先尝试获取本科生课程
-      let response = await fetch(`/api/course-center?course_type=undergraduate&keyword=${kch}&page=1&per_page=1`);
-      let result = await response.json();
+      const response = await fetch(
+        `/api/course-center?action=detail&kch=${encodeURIComponent(kch)}&course_type=${courseType}`
+      );
+      const result = await response.json();
 
-      if (result.success && result.data.length > 0) {
-        setCourse(result.data[0]);
-        setCourseType('undergraduate');
-        fetchTeachingClasses(result.data[0].kch, 'undergraduate');
-        fetchTextbooks(result.data[0].kch);
-      } else {
-        // 尝试获取研究生课程
-        response = await fetch(`/api/course-center?course_type=graduate&keyword=${kch}&page=1&per_page=1`);
-        result = await response.json();
-
-        if (result.success && result.data.length > 0) {
-          setCourse(result.data[0]);
-          setCourseType('graduate');
-          fetchTeachingClasses(result.data[0].kch, 'graduate');
+      if (result.success && result.data?.course) {
+        setCourse(result.data.course);
+        fetchTeachingClasses(result.data.course.kch, courseType);
+        if (courseType === 'undergraduate') {
+          fetchTextbooks(result.data.course.kch);
+        } else {
           // 研究生课程暂不支持教材查询
           setTextbooks([]);
-        } else {
-          message.error('课程不存在');
         }
+      } else {
+        message.error('课程不存在');
       }
     } catch (error) {
+      console.error('获取课程详情失败:', error);
       message.error('获取课程详情失败');
     } finally {
       setLoading(false);
     }
-  }, [kch, message]);
+  }, [kch, courseType, message]);
 
   // 获取教学班列表
   const fetchTeachingClasses = async (courseKch: string, type: 'undergraduate' | 'graduate') => {
     setTeachingClassesLoading(true);
     try {
       const response = await fetch(
-        `/api/course-center?action=teaching-classes&kcdm=${courseKch}&course_type=${type}`
+        `/api/course-center?action=teaching-classes&kch=${encodeURIComponent(courseKch)}&course_type=${type}`
       );
       const result = await response.json();
 
       if (result.success) {
-        setTeachingClasses(result.data);
+        const data = result.data?.data || [];
+        setTeachingClasses(data);
         setTeachingClassPagination(prev => ({
           ...prev,
-          total: result.data.length,
+          total: data.length,
         }));
       } else {
-        message.error(result.message || '获取教学班列表失败');
+        message.error(result.error || result.message || '获取教学班列表失败');
       }
     } catch (error) {
+      console.error('获取教学班列表失败:', error);
       message.error('获取教学班列表失败');
     } finally {
       setTeachingClassesLoading(false);
@@ -379,20 +273,24 @@ export default function CourseDetailPage() {
   const fetchTextbooks = async (courseKch: string) => {
     setTextbooksLoading(true);
     try {
-      const response = await fetch(`/api/course-center?action=textbooks&kcdm=${courseKch}`);
+      const response = await fetch(
+        `/api/course-center?action=textbooks&kch=${encodeURIComponent(courseKch)}&course_type=${courseType}`
+      );
       const result = await response.json();
 
       if (result.success) {
-        setTextbooks(result.data);
+        const data = result.data?.data || [];
+        setTextbooks(data);
         setTextbookPagination(prev => ({
           ...prev,
           current: 1,
-          total: result.data.length,
+          total: data.length,
         }));
       } else {
-        message.error(result.message || '获取教材使用情况失败');
+        message.error(result.error || result.message || '获取教材使用情况失败');
       }
     } catch (error) {
+      console.error('获取教材使用情况失败:', error);
       message.error('获取教材使用情况失败');
     } finally {
       setTextbooksLoading(false);
@@ -553,17 +451,21 @@ export default function CourseDetailPage() {
 
   // 获取课堂统计数据
   const fetchClassroomStats = async (jxbh: string) => {
+    if (!course) return;
     setClassroomStatsLoading(true);
     try {
-      const response = await fetch(`/api/course-center?action=classroom-stats&jxbh=${jxbh}`);
+      const response = await fetch(
+        `/api/course-center?action=classroom-stats&kch=${encodeURIComponent(course.kch)}&jxbh=${encodeURIComponent(jxbh)}&course_type=${courseType}`
+      );
       const result = await response.json();
 
       if (result.success) {
-        setClassroomStats(result.data);
+        setClassroomStats(result.data?.data || []);
       } else {
-        message.error(result.message || '获取课堂统计数据失败');
+        message.error(result.error || result.message || '获取课堂统计数据失败');
       }
     } catch (error) {
+      console.error('获取课堂统计数据失败:', error);
       message.error('获取课堂统计数据失败');
     } finally {
       setClassroomStatsLoading(false);
@@ -963,7 +865,17 @@ export default function CourseDetailPage() {
   return (
     <div style={{ padding: 24 }}>
       <Card style={{ marginBottom: 16 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()}>
+        <Button
+          icon={<ArrowLeftOutlined />}
+          onClick={() => {
+            const backParams = new URLSearchParams(searchParams.toString());
+            backParams.delete('type');
+            const backUrl = backParams.toString()
+              ? `/course-center?${backParams.toString()}`
+              : '/course-center';
+            router.push(backUrl);
+          }}
+        >
           返回课程列表
         </Button>
       </Card>
@@ -1176,6 +1088,22 @@ export default function CourseDetailPage() {
                     />
                   )}
                 </Spin>
+              ),
+            },
+            {
+              key: 'graph',
+              label: (
+                <Space>
+                  <NodeIndexOutlined />
+                  课程图谱
+                </Space>
+              ),
+              children: (
+                <CourseGraphView
+                  kch={kch}
+                  courseName={course?.kcmc || ''}
+                  courseType={courseType}
+                />
               ),
             },
           ]}
