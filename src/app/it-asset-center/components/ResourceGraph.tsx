@@ -42,6 +42,9 @@ const NODE_META: Record<string, NodeMeta> = {
   data_source: { color: '#eb2f96', label: '数据源' }, // 粉色
 };
 
+// 非活动状态节点的统一颜色（灰色），正常颜色的节点即表示活动状态
+const INACTIVE_NODE_COLOR = '#8c8c8c';
+
 // ============================================
 // 全局唯一 ID 工具（避免不同资产类型 ID 冲突）
 // ============================================
@@ -204,32 +207,21 @@ function collectVisibleNodes(
   return result;
 }
 
-// 递归收集可见边（source -> target），返回原始 id 对
+// 递归收集可见边（source -> target），直接携带节点引用，
+// 避免后续再用原始 id 反查类型（跨资产类型 id 冲突会导致类型误判）
 function collectVisibleEdges(
   nodes: GraphNode[],
-  result: { sourceId: string; targetId: string }[] = []
-): { sourceId: string; targetId: string }[] {
+  result: { source: GraphNode; target: GraphNode }[] = []
+): { source: GraphNode; target: GraphNode }[] {
   nodes.forEach((node) => {
     if (node.children && node.children.length > 0 && !node.collapsed) {
       node.children.forEach((child) => {
-        result.push({ sourceId: node.id, targetId: child.id });
+        result.push({ source: node, target: child });
       });
       collectVisibleEdges(node.children, result);
     }
   });
   return result;
-}
-
-// 按原始 ID 在可见树中反查 GraphNode（用于边类型判断）
-function findNodeByRawId(nodes: GraphNode[], rawId: string): GraphNode | undefined {
-  for (const n of nodes) {
-    if (n.id === rawId) return n;
-    if (n.children && !n.collapsed) {
-      const f = findNodeByRawId(n.children, rawId);
-      if (f) return f;
-    }
-  }
-  return undefined;
 }
 
 // ============================================
@@ -567,6 +559,9 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
       categoryMap.set(type, cats.length);
       cats.push({ name: meta.label, itemStyle: { color: meta.color } });
     });
+    // 追加"非活动资产"分类（灰色），非活动状态的节点统一归入该分类
+    const inactiveCategoryIndex = cats.length;
+    cats.push({ name: '非活动资产', itemStyle: { color: INACTIVE_NODE_COLOR } });
 
     // 3. 构建 ECharts data 项（加全局前缀去重，自定义数据放 userdata）
     type EChartsNodeItem = {
@@ -616,8 +611,12 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
       const meta = NODE_META[node.node_type] || { color: '#999', label: node.node_type };
       const isSystem = node.node_type === 'information_system';
       const isLoading = !!node._loading;
-      const symbolSize = isSystem ? 32 : 26;
+      const symbolSize = isSystem ? 52 : 26;
       const childCount = node.children?.length ?? 0;
+      // 非活动状态（inactive/unknown/faulty/idle/planning）统一用灰色显示，正常颜色即表示活动状态
+      const isInactive = !!node.status && node.status !== 'active';
+      const nodeColor = isInactive ? INACTIVE_NODE_COLOR : meta.color;
+      const nodeCategory = isInactive ? inactiveCategoryIndex : (categoryMap.get(node.node_type) ?? 0);
 
       nodes.push({
         id: gid,
@@ -633,16 +632,16 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
         },
         symbol: 'circle',
         symbolSize,
-        category: categoryMap.get(node.node_type) ?? 0,
+        category: nodeCategory,
         fixed: node.fixed,
         fx: node.fx,
         fy: node.fy,
         itemStyle: {
-          color: meta.color,
+          color: nodeColor,
           borderColor: '#ffffff',
           borderWidth: 2.5,
           shadowBlur: isLoading ? 12 : 6,
-          shadowColor: isLoading ? meta.color : 'rgba(0,0,0,0.2)',
+          shadowColor: isLoading ? nodeColor : 'rgba(0,0,0,0.2)',
           cursor: 'pointer',
         },
         label: {
@@ -660,14 +659,14 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
       });
     }
 
-    // 4. 构建 links（source/target 都用 gid，并用可见树反查对应类型）
+    // 4. 构建 links（source/target 都用 gid。边在收集阶段已携带精确节点引用，
+    //    不再用原始 id 反查类型，避免跨资产类型 id 冲突导致类型误判）
     const links: EChartsLink[] = [];
     for (const edge of visibleEdgesRaw) {
-      const srcNode = findNodeByRawId(filteredRootNodes, edge.sourceId);
-      const dstNode = findNodeByRawId(filteredRootNodes, edge.targetId);
-      if (!srcNode || !dstNode) continue;
-      const srcGid = toGlobalId(srcNode.node_type, edge.sourceId);
-      const dstGid = toGlobalId(dstNode.node_type, edge.targetId);
+      const srcNode = edge.source;
+      const dstNode = edge.target;
+      const srcGid = toGlobalId(srcNode.node_type, srcNode.id);
+      const dstGid = toGlobalId(dstNode.node_type, dstNode.id);
       if (srcGid === dstGid) continue;
       const isSystemRelation = srcNode.node_type === 'information_system';
       links.push({
@@ -716,7 +715,6 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
           const ud: NodeUserdata | undefined = params.data?.userdata;
           if (!ud || !ud.rawId) return '';
           const meta = NODE_META[ud.nodeType];
-          const statusText = ud.status || '-';
           const loadingHint = ud.loading ? '<div style="color:#1677ff">⏳ 正在加载子节点...</div>' : '';
           const expandHint = !ud.loaded
             ? '<div style="color:#666;margin-top:4px">💡 点击展开关联资源</div>'
@@ -726,7 +724,6 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
           return `<div style="max-width:280px">
             <div style="font-weight:600;margin-bottom:6px;font-size:13px">${params.data.name}</div>
             <div style="margin-bottom:2px">类型：<span style="color:${meta?.color || '#999'}">${meta?.label || ud.nodeType}</span></div>
-            <div style="margin-bottom:2px">状态：${statusText}</div>
             ${loadingHint}
             ${expandHint}
           </div>`;

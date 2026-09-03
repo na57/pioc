@@ -495,26 +495,9 @@ async function handleGraphChildren(
   } else if (nodeType === 'web_site_monitor') {
     const asset = await provider.queryAssetById(nodeId, 'web_site_monitor' as AssetType);
     if (asset) {
-      const domain = (asset as any).domain;
       const ip = (asset as any).ip;
-      if (domain) {
-        // 1. 域名（域名归一化匹配）
-        const normalized = normalizeDomain(domain);
-        const domainResult = await provider.queryAssets({
-          asset_type: 'domain' as AssetType,
-          keyword: normalized,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of domainResult.data) {
-          const itemDomain = ((item as any).domain || '').toString();
-          if (itemDomain && normalizeDomain(itemDomain) === normalized) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-      }
       if (ip) {
-        // 2. Web 服务器（IP 精确匹配）
+        // Web 服务器（IP 精确匹配）
         const wsResult = await provider.queryAssets({
           asset_type: 'web_server' as AssetType,
           keyword: ip,

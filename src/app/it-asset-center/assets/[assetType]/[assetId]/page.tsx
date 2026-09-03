@@ -11,10 +11,8 @@ import {
   Empty,
   Tag,
 } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
-import Link from 'next/link';
+
 import FriendlyTime from '@/components/FriendlyTime';
-import ActionButton from '@/app/tags/components/ActionButton';
 import type { ITAsset, DNSRecordDetail } from '@/lib/services/it-asset-center';
 import { AssetDetailView } from '@/app/it-asset-center/components/AssetDetailView';
 
@@ -145,10 +143,7 @@ export default function AssetDetailPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Link href="/it-asset-center?tab=assets">
-          <ActionButton icon={<ArrowLeftOutlined />} tooltip="返回资产列表" />
-        </Link>
+      <div style={{ marginBottom: 16 }}>
         <Title level={3} style={{ margin: 0 }}>
           {pageTitle}
         </Title>

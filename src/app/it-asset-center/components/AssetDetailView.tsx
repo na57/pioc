@@ -226,7 +226,6 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
       { label: '被管控目标主机名', field: 'hostname' },
       { label: '访问协议', field: 'access_protocol', type: 'tag' },
       { label: '运行状态', type: 'status' },
-      { label: '所属信息系统', type: 'systemLink' },
       { label: '创建时间', field: 'created_at', type: 'time' },
       { label: '更新时间', field: 'updated_at', type: 'time' },
     ],
@@ -272,18 +271,7 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
       { label: '运行状态', type: 'status' },
       {
         label: '所属业务系统',
-        type: 'custom',
-        render: (asset) => {
-          const ds = asset as any;
-          if (ds.business_system_name) {
-            return (
-              <Link href={`/it-asset-center/systems/${ds.business_system_id}`}>
-                {ds.business_system_name}
-              </Link>
-            );
-          }
-          return '-';
-        },
+        type: 'systemLink',
       },
       { label: '归属部门', field: 'department' },
       { label: '技术负责人', field: 'technical_owner' },
@@ -426,7 +414,6 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
       return String(value);
     },
     relatedAssets: [
-      { type: 'domains_by_monitor_domain' },
       { type: 'web_servers_by_monitor_ip' },
     ],
   },

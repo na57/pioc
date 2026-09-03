@@ -23,7 +23,6 @@ export type RelatedAssetsType =
   | 'dns_records_by_domain'
   | 'web_servers_by_ip'
   | 'ops_access_control_by_ip'
-  | 'domains_by_monitor_domain'
   | 'web_servers_by_monitor_ip'
   | 'web_site_monitors_by_server_ip'
   | 'web_site_monitors_by_domain'
@@ -42,7 +41,6 @@ const TYPE_INFO: Record<RelatedAssetsType, { label: string; assetType: string }>
   dns_records_by_domain: { label: 'DNS记录', assetType: 'dns_record' },
   web_servers_by_ip: { label: 'Web服务器', assetType: 'web_server' },
   ops_access_control_by_ip: { label: '运维访问控制', assetType: 'ops_access_control' },
-  domains_by_monitor_domain: { label: '域名资产', assetType: 'domain' },
   web_servers_by_monitor_ip: { label: 'Web服务器', assetType: 'web_server' },
   web_site_monitors_by_server_ip: { label: 'Web站点监控', assetType: 'web_site_monitor' },
   web_site_monitors_by_domain: { label: 'Web站点监控', assetType: 'web_site_monitor' },
@@ -155,18 +153,6 @@ async function fetchRelatedData(type: RelatedAssetsType, asset: ITAsset, onUnaut
       if (res.status === 401) { onUnauthorized(); return []; }
       const result = await res.json();
       return result.success ? (result.data.data || []) : [];
-    }
-  } else if (type === 'domains_by_monitor_domain') {
-    const domain = (asset as any).domain;
-    if (domain) {
-      const normalizedDomain = domain.replace(/\.+$/, '').toLowerCase();
-      const res = await fetch(
-        `/api/it-asset-center?action=assets&asset_type=domain&keyword=${encodeURIComponent(normalizedDomain)}&per_page=100`
-      );
-      if (res.status === 401) { onUnauthorized(); return []; }
-      const result = await res.json();
-      const items = result.success ? (result.data.data || []) : [];
-      return items.filter((item: any) => (item.domain || '').replace(/\.+$/, '').toLowerCase() === normalizedDomain);
     }
   } else if (type === 'web_servers_by_monitor_ip') {
     const ip = (asset as any).ip;

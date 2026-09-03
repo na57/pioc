@@ -1099,7 +1099,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
    *           last_sync_time, sync_interval, security_level
    * 扩展字段：厂商信息、联系人等放入 metadata
    */
-  private transformDataSource(raw: any): DataSource {
+  private transformDataSource(raw: any, systemIdOverride?: string): DataSource {
     const wybs = raw.WYBS ?? raw.wybs ?? '';
     const ljmc = raw.LJMC ?? raw.ljmc ?? '';
     const sjklx = raw.SJKLX ?? raw.sjklx ?? '';
@@ -1121,7 +1121,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
 
     return {
       id: wybs,
-      system_id: ywxtid || 'unknown',
+      system_id: systemIdOverride || ywxtid || 'unknown',
       asset_type: 'data_source',
       category: 'governance',
       name: ljmc || `数据源-${wybs}`,
@@ -1180,11 +1180,15 @@ export class YnuDataProvider implements IItAssetDataProvider {
 
       const body: Record<string, unknown> = { page: apiPage, per_page: apiPerPage };
       if (system_id) {
-        body.YWXTID = system_id;
+        // 通过系统名称（YWXT）匹配数据源，而非系统 ID
+        const system = await this.querySystemById(system_id);
+        if (system?.name) {
+          body.YWXT = system.name;
+        }
       }
 
       const result = await this.callApi('/open_api/customization/tynugxggfwsjztcjsjyxx/full', body);
-      let sources: ITAsset[] = (result?.data || []).map((raw: any) => this.transformDataSource(raw));
+      let sources: ITAsset[] = (result?.data || []).map((raw: any) => this.transformDataSource(raw, system_id));
 
       if (status) {
         sources = sources.filter((s) => s.status === status);
