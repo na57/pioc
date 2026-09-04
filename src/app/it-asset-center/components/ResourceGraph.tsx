@@ -13,9 +13,10 @@ import {
   Space,
   Button,
 } from 'antd';
-import { FilterOutlined } from '@ant-design/icons';
+import { FilterOutlined, FullscreenOutlined, ExpandOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ActionButton from '@/app/tags/components/ActionButton';
 
 const { Text } = Typography;
 
@@ -255,6 +256,7 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
   const { message } = App.useApp();
   const router = useRouter();
   const chartRef = useRef<any>(null);
+  const echartsInstanceRef = useRef<any>(null);
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const defaultCanvasCursor = useRef<string>('grab');
   // 用 ref 持有 focus，供 loadTopLevelSystems 等异步流程读取最新值
@@ -267,6 +269,12 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
     focusSystem ? [focusSystem.id] : []
   );
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [expandingSystemId, setExpandingSystemId] = useState<string | null>(null);
+  const [expandProgress, setExpandProgress] = useState<{
+    total: number;
+    current: number;
+  } | null>(null);
+  const expandCancelledRef = useRef(false);
 
   const handleUnauthorized = useCallback(() => {
     router.push(
@@ -413,6 +421,83 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
     [fetchChildren]
   );
 
+  // 完全展开系统：逐层展开子节点，像放烟花一样
+  const expandSystemFully = useCallback(
+    async (systemId: string) => {
+      expandCancelledRef.current = false;
+      setExpandingSystemId(systemId);
+      setExpandProgress({ total: 0, current: 0 });
+
+      let totalExpanded = 0;
+      // 按类型分组的层级队列：[{ nodeType, nodeIds }]
+      const layers: { nodeType: string; nodeIds: string[] }[] = [];
+      const visited = new Set<string>();
+      visited.add(systemId);
+      layers.push({ nodeType: 'information_system', nodeIds: [systemId] });
+
+      while (layers.length > 0) {
+        const currentLayer = layers.shift()!;
+        // 按 node_type 分组收集下一层的子节点
+        const nextByType = new Map<string, string[]>();
+
+        for (const nodeId of currentLayer.nodeIds) {
+          if (expandCancelledRef.current) break;
+          const children = await fetchChildren(nodeId, currentLayer.nodeType);
+          if (children.length === 0) {
+            // 标记节点为已加载（无子节点）
+            setGraphData((prev) => markLoaded(prev, nodeId));
+          } else {
+            // 添加到图谱并标记为已展开
+            setGraphData((prev) => attachChildren(prev, nodeId, children));
+
+            // 按类型分组收集子节点到下一层
+            for (const child of children) {
+              if (visited.has(child.id)) continue;
+              visited.add(child.id);
+              const ids = nextByType.get(child.node_type);
+              if (ids) {
+                ids.push(child.id);
+              } else {
+                nextByType.set(child.node_type, [child.id]);
+              }
+            }
+          }
+          totalExpanded++;
+          setExpandProgress({ total: totalExpanded, current: totalExpanded });
+        }
+
+        // 将下一层按类型依次入队
+        if (expandCancelledRef.current) break;
+        for (const [nt, ids] of nextByType.entries()) {
+          layers.push({ nodeType: nt, nodeIds: ids });
+        }
+        // 层间延迟，创造烟花效果
+        if (layers.length > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
+
+      setExpandingSystemId(null);
+      setExpandProgress(null);
+    },
+    [fetchChildren]
+  );
+
+  // 适配画布：重置所有节点的固定位置，让力导向布局重新计算以适配屏幕
+  const fitToScreen = useCallback(() => {
+    const instance = echartsInstanceRef.current;
+    if (!instance) return;
+    // 清除所有节点的 fixed/fx/fy（拖拽固定的位置）
+    setGraphData((prev) =>
+      prev.map((node) => {
+        if (!node.fixed) return node;
+        return { ...node, fixed: false, fx: undefined, fy: undefined };
+      })
+    );
+    // 重置缩放和位移到初始状态
+    instance.dispatchAction({ type: 'restore' });
+  }, []);
+
   // 拖拽结束后保存节点固定位置
   const handleDragEnd = useCallback((params: any) => {
     const ud: NodeUserdata | undefined = params?.data?.userdata;
@@ -435,6 +520,13 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
   useEffect(() => {
     loadTopLevelSystems();
   }, [loadTopLevelSystems]);
+
+  // 组件卸载时取消正在进行的展开
+  useEffect(() => {
+    return () => {
+      expandCancelledRef.current = true;
+    };
+  }, []);
 
   // Safari 双指捏合会触发非标准 gesture* 事件（不触发 wheel），
   // 默认行为是缩放整个页面。这里阻止默认行为，并把 gesture 的 scale
@@ -503,6 +595,7 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
   // 注册图表事件
   const onChartReady = useCallback(
     (instance: any) => {
+      echartsInstanceRef.current = instance;
       instance.off('click');
       instance.off('dragEnd');
       instance.off('mouseover');
@@ -553,15 +646,28 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
     // 2. 分类（按 NODE_META 顺序 + 颜色）
     // 注意：必须为每个分类设置 itemStyle.color，否则图例会使用 ECharts 默认调色板，
     // 导致图例颜色与节点实际颜色不一致
+    // 构建类别名称时包含节点数量统计
+    const typeCountMap = new Map<string, number>();
+    let inactiveCount = 0;
+    for (const node of visibleNodes) {
+      const isInactive = !!node.status && node.status !== 'active';
+      if (isInactive) {
+        inactiveCount++;
+      } else {
+        typeCountMap.set(node.node_type, (typeCountMap.get(node.node_type) || 0) + 1);
+      }
+    }
+
     const categoryMap = new Map<string, number>();
     const cats: { name: string; itemStyle: { color: string } }[] = [];
     Object.entries(NODE_META).forEach(([type, meta]) => {
       categoryMap.set(type, cats.length);
-      cats.push({ name: meta.label, itemStyle: { color: meta.color } });
+      const count = typeCountMap.get(type) || 0;
+      cats.push({ name: count > 0 ? `${meta.label} (${count})` : meta.label, itemStyle: { color: meta.color } });
     });
     // 追加"非活动资产"分类（灰色），非活动状态的节点统一归入该分类
     const inactiveCategoryIndex = cats.length;
-    cats.push({ name: '非活动资产', itemStyle: { color: INACTIVE_NODE_COLOR } });
+    cats.push({ name: inactiveCount > 0 ? `非活动资产 (${inactiveCount})` : '非活动资产', itemStyle: { color: INACTIVE_NODE_COLOR } });
 
     // 3. 构建 ECharts data 项（加全局前缀去重，自定义数据放 userdata）
     type EChartsNodeItem = {
@@ -873,6 +979,11 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
               {selectedSystemIds.length > 0 && `，已筛选 ${displaySystemCount} 个`}
             </Tag>
           )}
+          <ActionButton
+            icon={<FullscreenOutlined />}
+            tooltip="适配画布"
+            onClick={fitToScreen}
+          />
         </Space>
       }
       extra={
@@ -896,6 +1007,11 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
               setSelectedSystemIds(values);
               if (values.length > 0 && selectedNode && !values.includes(selectedNode.id)) {
                 setSelectedNode(null);
+              }
+              if (values.length !== 1) {
+                setExpandingSystemId(null);
+                setExpandProgress(null);
+                expandCancelledRef.current = true;
               }
             }}
             options={allTopSystems.map((sys) => ({
@@ -931,6 +1047,15 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
               );
             }}
           />
+          {selectedSystemIds.length === 1 && (
+            <ActionButton
+              icon={<ExpandOutlined />}
+              tooltip="完全展开选中系统的所有下级节点"
+              style={{ fontSize: 14 }}
+              loading={expandingSystemId !== null}
+              onClick={() => expandSystemFully(selectedSystemIds[0])}
+            />
+          )}
         </Space>
       }
       styles={{ body: { padding: 16 } }}
