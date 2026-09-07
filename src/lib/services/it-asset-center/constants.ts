@@ -142,6 +142,12 @@ export const WEB_SERVER_METADATA_LABELS: Record<string, string> = {
   listen_ports: '监听端口',
   source: '来源',
   config_file: '配置文件',
+  physical_addr: '物理地址',
+  virtual_addr: '虚拟地址',
+  hostname: '主机名',
+  protocol: '协议',
+  port: '端口',
+  pid: 'PID',
 };
 
 /**
@@ -171,6 +177,12 @@ export const WEB_APP_METADATA_LABELS: Record<string, string> = {
   agent_id: 'AgentID',
   source: '来源',
   timestamp: '时间戳',
+  physical_addr: '物理地址',
+  virtual_addr: '虚拟地址',
+  hostname: '主机名',
+  protocol: '协议',
+  port: '端口',
+  pid: 'PID',
 };
 
 /**

@@ -41,6 +41,7 @@ const NODE_META: Record<string, NodeMeta> = {
   port_monitor: { color: '#389e0d', label: '端口监控' }, // 深绿
   ops_access_control: { color: '#faad14', label: '运维访问控制' }, // 黄色
   data_source: { color: '#eb2f96', label: '数据源' }, // 粉色
+  third_party_service: { color: '#531dab', label: '第三方服务' }, // 紫色
 };
 
 // 非活动状态节点的统一颜色（灰色），正常颜色的节点即表示活动状态

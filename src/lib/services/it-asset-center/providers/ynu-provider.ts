@@ -389,6 +389,19 @@ export class YnuDataProvider implements IItAssetDataProvider {
   }
 
   /**
+   * 映射短信模板状态
+   * 中台 ZT 字段（腾讯云短信模板状态）：0-待审核, 1-审核通过, 2-审核失败, 或其他文本状态
+   */
+  private mapSmsTemplateStatus(statusText?: string): AssetStatus {
+    const value = String(statusText ?? '').trim();
+    if (!value) return 'unknown';
+    if (value === '1' || value.includes('审核通过') || value.includes('通过') || value.includes('active')) return 'active';
+    if (value === '0' || value.includes('待审核') || value.includes('pending')) return 'inactive';
+    if (value === '2' || value.includes('审核失败') || value.includes('失败') || value.includes('rejected')) return 'inactive';
+    return 'unknown';
+  }
+
+  /**
    * 将中台返回的物理设备数据转换为系统标准格式
    */
   private transformPhysicalDevice(raw: any): ITAsset {
@@ -612,6 +625,13 @@ export class YnuDataProvider implements IItAssetDataProvider {
     const name = raw.YYMC ?? raw.yymc ?? '';
     const ipAddress = raw.IPDZ ?? raw.ipdz ?? '';
     const serverType = raw.ZDLX ?? raw.zdlx ?? 'Web应用';
+    const physicalAddr = raw.WLDZ ?? raw.wldz ?? '';
+    const virtualAddr = raw.XNDZ ?? raw.xndz ?? '';
+    const hostname = raw.ZJM ?? raw.zjm ?? '';
+    const protocol = raw.XY ?? raw.xy ?? '';
+    const port = raw.DK ?? raw.dk ?? '';
+    const pid = raw.PID ?? raw.pid ?? '';
+    const source = raw.LY ?? raw.ly ?? '';
 
     // id 会在 buildWebServerFromApps 中被覆盖为 `${ip}@@${serverType}`
     const tempId = `${ipAddress}_${serverType}`;
@@ -624,14 +644,20 @@ export class YnuDataProvider implements IItAssetDataProvider {
       name,
       code: tempId,
       status: 'active',
-      description: `Web应用: ${name}${ipAddress ? ` (${ipAddress})` : ''}`,
+      description: `Web应用: ${name}${ipAddress ? ` (${ipAddress})` : ''}${port ? `:${port}` : ''}`,
       server_type: serverType,
       ip_address: ipAddress || undefined,
       purpose: name ? `运行 ${name}` : undefined,
       created_at: this.formatTimestamp(raw.TSTAMP ?? raw.tstamp),
       updated_at: this.formatTimestamp(raw.TSTAMP ?? raw.tstamp),
       metadata: {
-        source: raw.LY ?? raw.ly ?? undefined,
+        source: source || undefined,
+        physical_addr: physicalAddr || undefined,
+        virtual_addr: virtualAddr || undefined,
+        hostname: hostname || undefined,
+        protocol: protocol || undefined,
+        port: port || undefined,
+        pid: pid || undefined,
       },
     } as WebServer;
   }
@@ -639,7 +665,8 @@ export class YnuDataProvider implements IItAssetDataProvider {
   /**
    * 将单条中台 Web 应用数据转换为系统标准 WebApp 格式
    * 抽象字段：ip_address, server_type, app_name, app_version
-   * 扩展字段：agent_id, source, timestamp 等放入 metadata
+   * 扩展字段：agent_id, source, timestamp, 物理地址, 虚拟地址, 主机名, 协议, 端口, PID 等放入 metadata
+   * 中台接口字段：AGENTID, IPDZ, PID, DK(端口), XY(协议), ZDLX(站点类型), LY(来源), TSTAMP(时间戳), ZJM(主机名), XNDZ(虚拟地址), WLDZ(物理地址)
    */
   private transformWebApp(raw: any): WebApp {
     const wybs = raw.WYBS ?? raw.wybs ?? '';
@@ -650,9 +677,15 @@ export class YnuDataProvider implements IItAssetDataProvider {
     const appVersion = raw.YYBB ?? raw.yybb ?? '';
     const timestamp = raw.TSTAMP ?? raw.tstamp ?? '';
     const source = raw.LY ?? raw.ly ?? '';
+    const physicalAddr = raw.WLDZ ?? raw.wldz ?? '';
+    const virtualAddr = raw.XNDZ ?? raw.xndz ?? '';
+    const hostname = raw.ZJM ?? raw.zjm ?? '';
+    const protocol = raw.XY ?? raw.xy ?? '';
+    const port = raw.DK ?? raw.dk ?? '';
+    const pid = raw.PID ?? raw.pid ?? '';
 
-    // 使用 WYBS（唯一标识_校标）作为主键
-    const id = wybs || agentId || `${ipAddress}_${appName}`;
+    // 使用 IPDZ + DK + PID + WLDZ + XNDZ 组合作为唯一 ID
+    const id = [ipAddress, port, pid, physicalAddr, virtualAddr].filter(Boolean).join('_') || wybs || agentId;
 
     return {
       id,
@@ -662,7 +695,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       name: appName || id,
       code: id,
       status: 'active',
-      description: `Web应用: ${appName}${ipAddress ? ` (${ipAddress})` : ''}`,
+      description: `Web应用: ${appName}${ipAddress ? ` (${ipAddress})` : ''}${port ? `:${port}` : ''}`,
       ip_address: ipAddress || undefined,
       server_type: serverType || undefined,
       app_name: appName || undefined,
@@ -672,6 +705,12 @@ export class YnuDataProvider implements IItAssetDataProvider {
       metadata: {
         agent_id: agentId || undefined,
         source: source || undefined,
+        physical_addr: physicalAddr || undefined,
+        virtual_addr: virtualAddr || undefined,
+        hostname: hostname || undefined,
+        protocol: protocol || undefined,
+        port: port || undefined,
+        pid: pid || undefined,
         timestamp: timestamp || undefined,
       },
     } as WebApp;
@@ -726,7 +765,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
   /**
    * 查询 Web 服务器列表
    * 逻辑：从中台 Web 应用数据按 (IP地址 + Web服务器类型) 去重得到 Web 服务器
-   * 中台接口：/open_api/customization/tynugxggfwedrwebyyxx/full
+   * 中台接口：/open_api/customization/tynugxggfwedrwebzdxx/full
    */
   private async queryWebServers(
     params: {
@@ -743,7 +782,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       const apiPage = hasLocalFilters ? 1 : page;
       const apiPerPage = hasLocalFilters ? 10000 : pageSize;
 
-      const result = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', {
+      const result = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', {
         page: apiPage,
         per_page: apiPerPage,
       });
@@ -787,7 +826,12 @@ export class YnuDataProvider implements IItAssetDataProvider {
             apps.some((appName) => appName.toLowerCase().includes(lowerKeyword)) ||
             String(meta.agent_id || '').toLowerCase().includes(lowerKeyword) ||
             String(meta.site_type || '').toLowerCase().includes(lowerKeyword) ||
-            String(meta.source || '').toLowerCase().includes(lowerKeyword)
+            String(meta.source || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.hostname || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.physical_addr || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.protocol || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.port || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.pid || '').toLowerCase().includes(lowerKeyword)
           );
         });
       }
@@ -806,7 +850,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
 
   /**
    * 查询 Web 应用列表
-   * 中台接口：/open_api/customization/tynugxggfwedrwebyyxx/full
+   * 中台接口：/open_api/customization/tynugxggfwedrwebzdxx/full
    */
   private async queryWebApps(
     params: {
@@ -835,7 +879,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
         queryParams.IPDZ = ip_address;
       }
 
-      const result = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', queryParams);
+      const result = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', queryParams);
 
       let apps: WebApp[] = (result?.data || []).map((raw: any) => this.transformWebApp(raw));
 
@@ -861,7 +905,12 @@ export class YnuDataProvider implements IItAssetDataProvider {
             app.app_name?.toLowerCase().includes(lowerKeyword) ||
             app.app_version?.toLowerCase().includes(lowerKeyword) ||
             String(meta.agent_id || '').toLowerCase().includes(lowerKeyword) ||
-            String(meta.source || '').toLowerCase().includes(lowerKeyword)
+            String(meta.source || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.hostname || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.physical_addr || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.protocol || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.port || '').toLowerCase().includes(lowerKeyword) ||
+            String(meta.pid || '').toLowerCase().includes(lowerKeyword)
           );
         });
       }
@@ -888,32 +937,49 @@ export class YnuDataProvider implements IItAssetDataProvider {
    * 扩展字段：mbid, mbmc, mbnr, lx, tjsj 等放入 metadata
    */
   private transformSmsTemplate(raw: any): ThirdPartyService {
-    const mbid = raw.MBID ?? raw.mbid ?? '';
+    const mbwybs = raw.MBWYBS ?? raw.mbwybs ?? '';
     const mbmc = raw.MBMC ?? raw.mbmc ?? '';
     const lx = raw.LX ?? raw.lx ?? '';
     const tjsj = raw.TJSJ ?? raw.tjsj ?? '';
     const mbnr = raw.MBNR ?? raw.mbnr ?? '';
     const tstamp = raw.TSTAMP ?? raw.tstamp ?? '';
+    const zt = raw.ZT ?? raw.zt ?? '';
+    const bz = raw.BZ ?? raw.bz ?? '';
+    const fzrxm = raw.FZRXM ?? raw.fzrxm ?? '';
+    const fzrgh = raw.FZRGH ?? raw.fzrgh ?? '';
+    const dwmc = raw.DWMC ?? raw.dwmc ?? '';
+    const dwh = raw.DWH ?? raw.dwh ?? '';
+    const wybs = raw.WYBS ?? raw.wybs ?? '';
+    const systemId = raw.XXXTWYBS ?? raw.xxxtwybs ?? '';
+    const systemName = raw.XXXTMC ?? raw.xxxtmc ?? '';
 
     return {
-      id: `txy-dxmb-${mbid}`,
-      system_id: 'unknown',
+      id: `txy-dxmb-${mbwybs}`,
+      system_id: systemId || 'unknown',
       asset_type: 'third_party_service',
       category: 'external',
-      name: mbmc || `短信模板-${mbid}`,
-      code: `txy-dxmb-${mbid}`,
-      status: 'active',
+      name: mbmc || `短信模板-${mbwybs}`,
+      code: `txy-dxmb-${mbwybs}`,
+      status: zt ? this.mapSmsTemplateStatus(zt) : 'active',
       service_type: '短信模板',
       provider: '腾讯云',
-      description: `短信模板: ${mbmc}${lx ? ` (${lx})` : ''}`,
+      description: `短信模板: ${mbmc}${lx ? ` (${lx})` : ''}${bz ? ` - ${bz}` : ''}`,
       created_at: this.formatTimestamp(tjsj || tstamp),
       updated_at: this.formatTimestamp(tstamp),
       metadata: {
-        mbid: mbid || undefined,
+        mbwybs: mbwybs || undefined,
         mbmc: mbmc || undefined,
         mbnr: mbnr || undefined,
         lx: lx || undefined,
+        zt: zt || undefined,
+        bz: bz || undefined,
+        fzrxm: fzrxm || undefined,
+        fzrgh: fzrgh || undefined,
+        dwmc: dwmc || undefined,
+        dwh: dwh || undefined,
+        wybs: wybs || undefined,
         tjsj: tjsj || undefined,
+        system_name: systemName || undefined,
       },
     } as ThirdPartyService;
   }
@@ -937,7 +1003,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       const apiPage = hasLocalFilters ? 1 : page;
       const apiPerPage = hasLocalFilters ? 10000 : pageSize;
 
-      const result = await this.callApi('/open_api/customization/tynugxggfwtxydxwgdxmbxx/full', {
+      const result = await this.callApi('/open_api/customization/tdwsgxggfwtxydxwgdxmbmx/full', {
         page: apiPage,
         per_page: apiPerPage,
       });
@@ -1891,7 +1957,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
 
         // 策略1: 先按 IP 地址查询，再在内存中按 server_type 筛选
         try {
-          const webServerResult = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', {
+          const webServerResult = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', {
             IPDZ: ip,
             page: 1,
             per_page: 10000,
@@ -1921,7 +1987,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
         // 策略2: 回退到全量查询后筛选
         try {
           console.log(`[YnuProvider] 策略2: 全量查询回退`);
-          const allResult = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', {
+          const allResult = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', {
             page: 1,
             per_page: 10000,
           });
@@ -1945,20 +2011,28 @@ export class YnuDataProvider implements IItAssetDataProvider {
       // Web 应用详情查询
       if (assetType === 'web_app') {
         try {
-          // 按 WYBS（唯一标识_校标）查询
-          const result = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', {
-            WYBS: id,
+          // ID 格式: IPDZ_DK_PID_WLDZ，解析各字段用于 API 查询
+          const parts = id.split('_');
+          const ipFromId = parts[0] || '';
+          // 尝试按 IP 地址查询以减少数据量
+          const queryParams: Record<string, unknown> = {
             page: 1,
             per_page: 10000,
-          });
+          };
+          if (ipFromId) {
+            queryParams.IPDZ = ipFromId;
+          }
+          const result = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', queryParams);
           const rawData = result?.data || [];
           if (rawData.length > 0) {
-            return this.transformWebApp(rawData[0]);
+            const allApps = rawData.map((raw: any) => this.transformWebApp(raw));
+            const matched = allApps.find((app: WebApp) => app.id === id);
+            if (matched) return matched;
           }
 
           // 如果没找到，回退到全量查询
-          console.log(`[YnuProvider] Web应用详情: 按WYBS未找到，回退到全量查询`);
-          const allResult = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', {
+          console.log(`[YnuProvider] Web应用详情: 按IPDZ未找到，回退到全量查询`);
+          const allResult = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', {
             page: 1,
             per_page: 10000,
           });
@@ -1977,11 +2051,11 @@ export class YnuDataProvider implements IItAssetDataProvider {
       // 第三方服务详情查询
       if (assetType === 'third_party_service') {
         try {
-          // 短信模板类：id 格式为 "txy-dxmb-{MBID}"
+          // 短信模板类：id 格式为 "txy-dxmb-{MBWYBS}"
           if (id.startsWith('txy-dxmb-')) {
-            const mbid = id.substring('txy-dxmb-'.length);
-            const result = await this.callApi('/open_api/customization/tynugxggfwtxydxwgdxmbxx/full', {
-              MBID: mbid,
+            const mbwybs = id.substring('txy-dxmb-'.length);
+            const result = await this.callApi('/open_api/customization/tdwsgxggfwtxydxwgdxmbmx/full', {
+              MBWYBS: mbwybs,
               page: 1,
               per_page: 10000,
             });
@@ -2425,7 +2499,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
   async queryWebAppsByServer(ipAddress: string, serverType: string): Promise<PaginatedResult<WebApp>> {
     try {
       // 策略1: 先按 IP 地址查询，再在内存中按 server_type 筛选
-      const result = await this.callApi('/open_api/customization/tynugxggfwedrwebyyxx/full', {
+      const result = await this.callApi('/open_api/customization/tynugxggfwedrwebzdxx/full', {
         IPDZ: ipAddress,
         page: 1,
         per_page: 10000,
