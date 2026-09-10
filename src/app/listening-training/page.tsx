@@ -1255,8 +1255,6 @@ export default function ListeningTrainingPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Title level={2}>听力训练</Title>
-      
       {/* 顶部 Tabs 导航 */}
       <Tabs
         activeKey={activeTab}

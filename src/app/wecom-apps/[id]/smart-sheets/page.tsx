@@ -218,7 +218,7 @@ export default function SmartSheetsPage() {
         <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/wecom-apps')}>
           返回
         </Button>
-        <Title level={2} style={{ margin: 0 }}>
+        <Title level={4} style={{ margin: 0 }}>
           <TableOutlined /> {app?.name || '应用'} - 智能表格管理
         </Title>
       </div>

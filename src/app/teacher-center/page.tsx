@@ -9,7 +9,6 @@ import {
   Button,
   Space,
   Card,
-  Typography,
   Tag,
   Avatar,
   App,
@@ -20,7 +19,6 @@ import {
 } from '@ant-design/icons';
 import FriendlyTime from '@/components/FriendlyTime';
 
-const { Title } = Typography;
 const { Option } = Select;
 
 interface Teacher {
@@ -250,8 +248,6 @@ export default function TeacherCenterPage() {
 
   return (
     <div>
-      <Title level={2}>教师中心</Title>
-      
       <Card style={{ marginBottom: 16 }}>
         <Space orientation="horizontal" size="middle" wrap>
           <Input

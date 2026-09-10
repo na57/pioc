@@ -12,14 +12,12 @@ import {
   message,
   Row,
   Col,
-  Typography,
 } from 'antd';
 import {
   PlusOutlined,
   SearchOutlined,
   EditOutlined,
   DeleteOutlined,
-  TagsOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import TagModal from './components/TagModal';
@@ -27,7 +25,6 @@ import TagGroupModal from './components/TagGroupModal';
 import GroupList from './components/GroupList';
 import ActionButton from './components/ActionButton';
 
-const { Title } = Typography;
 const { Option } = Select;
 
 interface TagItem {
@@ -280,9 +277,6 @@ export default function TagsPage() {
 
   return (
     <div>
-      <Title level={2}>
-        <TagsOutlined /> 标签管理
-      </Title>
       <Row gutter={16}>
         {/* 左侧分组列表 */}
         <Col xs={24} sm={24} md={6} lg={5} xl={4}>

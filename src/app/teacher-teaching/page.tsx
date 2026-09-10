@@ -8,7 +8,6 @@ import {
   Input,
   Button,
   Space,
-  Typography,
   Pagination,
   Spin,
   Modal,
@@ -21,7 +20,6 @@ import {
 import { SearchOutlined, ReloadOutlined, BarChartOutlined } from '@ant-design/icons';
 import * as echarts from 'echarts';
 
-const { Title } = Typography;
 const { Option } = Select;
 
 interface Semester {
@@ -613,8 +611,6 @@ export default function TeacherTeachingPage() {
 
   return (
     <div>
-      <Title level={2}>教师授课情况</Title>
-
       <Card style={{ marginBottom: 24 }}>
         <Space wrap style={{ marginBottom: 16 }}>
           <span>学生类型：</span>

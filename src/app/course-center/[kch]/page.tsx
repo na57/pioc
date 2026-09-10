@@ -880,7 +880,7 @@ export default function CourseDetailPage() {
         </Button>
       </Card>
 
-      <Title level={2}>
+      <Title level={4} style={{ margin: 0 }}>
         <Space>
           <BookOutlined />
           {course.kcmc}

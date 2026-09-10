@@ -180,7 +180,7 @@ export default function SheetManagementPage() {
         <Button icon={<ArrowLeftOutlined />} onClick={() => router.push(`/wecom-apps/${appId}/smart-sheets`)}>
           返回
         </Button>
-        <Title level={2} style={{ margin: 0 }}>
+        <Title level={4} style={{ margin: 0 }}>
           {smartSheet?.name || '智能表格'} - 工作表管理
         </Title>
       </div>

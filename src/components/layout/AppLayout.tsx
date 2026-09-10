@@ -56,6 +56,7 @@ function AppLayout({ children }: AppLayoutProps) {
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [menus, setMenus] = useState<MenuItem[]>([]);
+  const [allApps, setAllApps] = useState<{ name: string; url: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuLoading, setMenuLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -66,6 +67,7 @@ function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     fetchUserInfo();
     fetchMenus();
+    fetchAllApps();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,6 +100,18 @@ function AppLayout({ children }: AppLayoutProps) {
       setMenus([]);
     } finally {
       setMenuLoading(false);
+    }
+  };
+
+  const fetchAllApps = async () => {
+    try {
+      const response = await fetch('/api/apps');
+      const data = await response.json();
+      if (data.success && Array.isArray(data.data)) {
+        setAllApps(data.data.map((app: { name: string; url: string }) => ({ name: app.name, url: app.url })));
+      }
+    } catch {
+      // 静默失败，不影响主流程
     }
   };
 
@@ -276,8 +290,47 @@ function AppLayout({ children }: AppLayoutProps) {
     return items;
   };
 
+  // 获取当前路由对应的菜单/应用名称（用于 Header 面包屑式展示）
+  const getCurrentPageTitle = (): string | null => {
+    if (!menus.length && !allApps.length) return null;
+
+    const find = (items: MenuItem[]): MenuItem | null => {
+      for (const item of items) {
+        const menuPath = item.app_id && item.app_url ? item.app_url : item.path;
+        if (menuPath && pathname.startsWith(menuPath) && menuPath !== '/') {
+          return item;
+        }
+        if (item.children) {
+          const found = find(item.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    // 先从菜单匹配
+    const matched = find(menus);
+    if (matched?.name) return matched.name;
+
+    // 菜单匹配不到时，从所有应用列表根据 URL 匹配兜底
+    const matchedApp = allApps.find(
+      (app) => app.url && pathname.startsWith(app.url) && app.url !== '/'
+    );
+    return matchedApp?.name ?? null;
+  };
+
   const navMenuItems = convertToMenuItems(menus);
   const selectedKeys = getSelectedKeys();
+  const currentPageTitle = getCurrentPageTitle();
+
+  // 设置浏览器标签页标题：应用名 - 系统名
+  useEffect(() => {
+    if (currentPageTitle) {
+      document.title = `${currentPageTitle} - ${systemConfig.name}`;
+    } else {
+      document.title = systemConfig.name;
+    }
+  }, [currentPageTitle, systemConfig.name]);
 
   // 响应式内容内边距
   const getContentPadding = () => {
@@ -322,7 +375,7 @@ function AppLayout({ children }: AppLayoutProps) {
           top: 0,
           zIndex: 100,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
             {/* 移动端汉堡菜单按钮 */}
             {isMobile && (
               <MenuOutlined
@@ -335,22 +388,43 @@ function AppLayout({ children }: AppLayoutProps) {
                 onClick={() => setMobileMenuOpen(true)}
               />
             )}
-            <Title
-              level={isMobile ? 5 : 4}
-              style={{
-                margin: '16px 0',
-                color: token.colorPrimary,
-                cursor: 'pointer',
-                marginRight: isMobile ? 12 : 24,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                maxWidth: isMobile ? 150 : 300,
-              }}
-              onClick={() => router.push('/dashboard')}
-            >
-              {systemConfig.name}
-            </Title>
+            {/* 品牌名：移动端为节省空间只显示当前应用名，隐藏品牌名 */}
+            {!isMobile && (
+              <Title
+                level={4}
+                style={{
+                  margin: '16px 0',
+                  color: token.colorPrimary,
+                  cursor: 'pointer',
+                  marginRight: 24,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: 300,
+                }}
+                onClick={() => router.push('/dashboard')}
+              >
+                {systemConfig.name}
+              </Title>
+            )}
+            {/* 当前应用/菜单名，点击返回首页 */}
+            {currentPageTitle && (
+              <Text
+                strong
+                style={{
+                  fontSize: isMobile ? 15 : 16,
+                  cursor: 'pointer',
+                  color: isMobile ? token.colorPrimary : token.colorText,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: isMobile ? 160 : 240,
+                }}
+                onClick={() => router.push('/dashboard')}
+              >
+                {currentPageTitle}
+              </Text>
+            )}
 
             {/* 桌面端导航菜单 */}
             {!isMobile && (

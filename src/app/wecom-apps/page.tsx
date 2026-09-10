@@ -29,7 +29,7 @@ import WecomAppModal from './components/WecomAppModal';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { Option } = Select;
 
 interface WecomAccount {
@@ -161,10 +161,6 @@ export default function WecomAppsPage() {
 
   return (
     <div>
-      <Title level={2}>
-        <AppstoreOutlined /> 企微应用管理
-      </Title>
-
       {/* 筛选栏 */}
       <Card style={{ marginBottom: 16 }}>
         <Space wrap>

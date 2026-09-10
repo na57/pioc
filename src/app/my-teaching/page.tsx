@@ -5,7 +5,6 @@ import {
   Card,
   Table,
   Select,
-  Typography,
   Pagination,
   Spin,
   Modal,
@@ -15,7 +14,6 @@ import {
 } from 'antd';
 import { BookOutlined } from '@ant-design/icons';
 
-const { Title } = Typography;
 const { Option } = Select;
 
 interface Semester {
@@ -278,8 +276,6 @@ export default function MyTeachingPage() {
 
   return (
     <div>
-      <Title level={2}>我的授课</Title>
-
       <Card style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span>学年学期：</span>

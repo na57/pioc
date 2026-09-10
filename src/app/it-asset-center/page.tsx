@@ -7,7 +7,6 @@ import {
   Input,
   Button,
   Space,
-  Typography,
   App,
   Spin,
   Empty,
@@ -31,7 +30,6 @@ import { AIChatPanel } from '@/components/ai-chat';
 import type { InformationSystem, AssetCategory } from '@/lib/services/it-asset-center';
 import { CATEGORY_LABELS } from '@/lib/services/it-asset-center';
 
-const { Title } = Typography;
 const { useBreakpoint } = Grid;
 
 const STATUS_OPTIONS = [
@@ -548,8 +546,6 @@ export default function ItAssetCenterPage() {
 
   return (
     <div>
-      <Title level={isMobile ? 4 : 2}>IT 资产中心</Title>
-
       <Tabs
         defaultActiveKey="management"
         activeKey={activeTab}

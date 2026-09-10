@@ -390,15 +390,17 @@ export class YnuDataProvider implements IItAssetDataProvider {
 
   /**
    * 映射短信模板状态
-   * 中台 ZT 字段（腾讯云短信模板状态）：0-待审核, 1-审核通过, 2-审核失败, 或其他文本状态
+   * 腾讯云短信模板状态码：
+   *   0 - 审核通过且已生效（可用）
+   *   1 - 审核中（不可用）
+   *   2 - 审核通过待生效（可用）
+   *  -1 - 审核未通过或审核失败（不可用）
+   * 中台 ZT 字段存储上述状态码，数字以字符串形式存储
    */
   private mapSmsTemplateStatus(statusText?: string): AssetStatus {
     const value = String(statusText ?? '').trim();
-    if (!value) return 'unknown';
-    if (value === '1' || value.includes('审核通过') || value.includes('通过') || value.includes('active')) return 'active';
-    if (value === '0' || value.includes('待审核') || value.includes('pending')) return 'inactive';
-    if (value === '2' || value.includes('审核失败') || value.includes('失败') || value.includes('rejected')) return 'inactive';
-    return 'unknown';
+    if (value === '0' || value === '2') return 'active';
+    return 'inactive';
   }
 
   /**
