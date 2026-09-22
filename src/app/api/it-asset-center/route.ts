@@ -465,6 +465,53 @@ async function handleGraphChildren(
             children.push(assetToGraphNode(item));
           }
         }
+        // 3. 备份策略（通过 target_host 包含当前 IP）
+        const bkResult = await provider.queryAssets({
+          asset_type: 'backup' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of bkResult.data) {
+          const targetHost = (item as any).target_host || '';
+          const ipList = targetHost.split(',').map((s: string) => s.trim()).filter(Boolean);
+          if (ipList.includes(ip)) {
+            children.push(assetToGraphNode(item));
+          }
+        }
+      }
+    }
+  } else if (nodeType === 'backup') {
+    const asset = await provider.queryAssetById(nodeId, 'backup' as AssetType);
+    if (asset) {
+      const targetHost = (asset as any).target_host;
+      if (targetHost) {
+        const ipList = targetHost.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const results = await Promise.all(
+          ipList.map(async (ip: string) => {
+            const vmResult = await provider.queryAssets({
+              asset_type: 'virtual_machine' as AssetType,
+              keyword: ip,
+              page: 1,
+              pageSize: 100,
+            });
+            return vmResult.data.filter((vm: any) => {
+              const vmIp = (vm as any).ip_address || (vm as any).ip || '';
+              return vmIp === ip;
+            });
+          })
+        );
+        // 合并去重
+        const seen = new Set<string>();
+        for (const vms of results) {
+          for (const vm of vms) {
+            const key = vm.id || (vm as any).hostname || vm.name;
+            if (!seen.has(key)) {
+              seen.add(key);
+              children.push(assetToGraphNode(vm));
+            }
+          }
+        }
       }
     }
   } else if (nodeType === 'web_server') {

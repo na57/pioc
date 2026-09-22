@@ -20,7 +20,7 @@ export const ASSET_TYPE_META: Record<
   security_group: { label: '安全组', category: 'network', icon: 'SecurityScanOutlined' },
   database: { label: '数据库', category: 'data', icon: 'DatabaseOutlined' },
   storage: { label: '存储系统', category: 'data', icon: 'FolderOpenOutlined' },
-  backup: { label: '备份系统', category: 'data', icon: 'CloudUploadOutlined' },
+  backup: { label: '备份策略', category: 'data', icon: 'CloudUploadOutlined' },
   web_server: { label: 'Web 服务器', category: 'application', icon: 'DeploymentUnitOutlined' },
   web_app: { label: 'Web 应用', category: 'application', icon: 'AppstoreOutlined' },
   middleware: { label: '中间件', category: 'application', icon: 'ToolOutlined' },

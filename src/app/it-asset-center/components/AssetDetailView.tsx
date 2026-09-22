@@ -138,6 +138,24 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
     ],
   },
 
+  backup: {
+    fields: [
+      { label: '备份策略名称', field: 'name' },
+      { label: '目标主机IP', field: 'target_host' },
+      { label: '备份策略', field: 'strategy', type: 'tag' },
+      { label: '最新时间点', field: 'latest_recovery_point', type: 'time' },
+      { label: '上一次备份时间', field: 'last_backup_at', type: 'time' },
+      { label: '运行状态', type: 'status' },
+      { label: '所属信息系统', type: 'systemLink' },
+      { label: '备注', field: 'description', span: 'column', showIf: (a) => !!a.description },
+      { label: '创建时间', field: 'created_at', type: 'time' },
+      { label: '更新时间', field: 'updated_at', type: 'time' },
+    ],
+    relatedAssets: [
+      { type: 'virtual_machines_by_backup_ip' },
+    ],
+  },
+
   virtual_machine: {
     fields: [
       { label: '虚拟机名称', field: 'name' },

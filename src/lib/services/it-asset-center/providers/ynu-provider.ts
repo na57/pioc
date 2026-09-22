@@ -16,6 +16,7 @@ import {
   ThirdPartyService,
   OpsAccessControl,
   VirtualMachine,
+  Backup,
   DataSource,
   WebSiteMonitor,
   PortMonitor,
@@ -1290,6 +1291,143 @@ export class YnuDataProvider implements IItAssetDataProvider {
   }
 
   // ============================================
+  // 备份策略资产查询
+  // 中台接口：/open_api/customization/trzbfxnjsj/full
+  // ============================================
+
+  /**
+   * 映射备份状态
+   * 中台 BFZT 字段：成功/失败/进行中/未备份等
+   */
+  private mapBackupStatus(statusText?: string): AssetStatus {
+    const value = String(statusText ?? '').trim();
+    if (!value) return 'unknown';
+    if (value.includes('成功') || value.includes('已完成')) return 'active';
+    if (value.includes('失败') || value.includes('异常')) return 'faulty';
+    if (value.includes('进行中') || value.includes('运行中')) return 'active';
+    if (value.includes('未备份') || value.includes('停用')) return 'inactive';
+    return 'unknown';
+  }
+
+  /**
+   * 将中台返回的容灾备份虚拟机数据转换为系统标准 Backup 格式
+   *
+   * 字段映射：
+   * - XNJIP（虚拟机IP） → target_host（目标主机IP）
+   * - ZXSJD（最新时间点） → latest_recovery_point（最新时间点）
+   * - SYCBFSJ（上一次备份时间） → last_backup_at（上一次备份时间）
+   * - BFCL（备份策略） → strategy（备份策略）
+   * - BFZT（备份状态） → status（运行状态）
+   * - XNJMC（虚拟机名称） → name（备份策略名称）
+   * - ZHMC（租户名称） → metadata.tenant
+   * - PTMC（平台名称） → metadata.platform
+   * - PTIP（平台IP） → metadata.platform_ip
+   */
+  private transformBackup(raw: any): Backup {
+    const xnjmc = raw.XNJMC ?? raw.xnjmc ?? '';
+    const xnjip = raw.XNJIP ?? raw.xnjip ?? '';
+    const zhmc = raw.ZHMC ?? raw.zhmc ?? '';
+    const ptmc = raw.PTMC ?? raw.ptmc ?? '';
+    const ptip = raw.PTIP ?? raw.ptip ?? '';
+    const zxsjd = raw.ZXSJD ?? raw.zxsjd ?? '';
+    const sycbfsj = raw.SYCBFSJ ?? raw.sycbfsj ?? '';
+    const bfcl = raw.BFCL ?? raw.bfcl ?? '';
+    const bfzt = raw.BFZT ?? raw.bfzt ?? '';
+    const tstamp = raw.TSTAMP ?? raw.tstamp ?? '';
+
+    // 使用 XNJIP 作为唯一标识（因为中台接口没有明确的 WYBS 字段）
+    const id = xnjip || xnjmc || `${zhmc}_${ptmc}`;
+    const status = this.mapBackupStatus(bfzt);
+
+    return {
+      id,
+      system_id: 'unknown',
+      asset_type: 'backup',
+      category: 'data',
+      name: xnjmc || xnjip || id,
+      code: id,
+      status,
+      description: xnjmc ? `备份策略: ${xnjmc}${xnjip ? ` (${xnjip})` : ''}` : undefined,
+      target_host: xnjip || undefined,
+      strategy: bfcl || undefined,
+      last_backup_at: sycbfsj ? this.formatTimestamp(sycbfsj) : undefined,
+      latest_recovery_point: zxsjd ? this.formatTimestamp(zxsjd) : undefined,
+      created_at: this.formatTimestamp(tstamp),
+      updated_at: this.formatTimestamp(tstamp),
+      metadata: {
+        tenant: zhmc || undefined,
+        platform: ptmc || undefined,
+        platform_ip: ptip || undefined,
+        backup_status: bfzt || undefined,
+      },
+    } as Backup;
+  }
+
+  /**
+   * 查询备份策略列表
+   * 中台接口：/open_api/customization/trzbfxnjsj/full
+   */
+  private async queryBackups(
+    params: {
+      keyword?: string;
+      status?: AssetStatus;
+      page?: number;
+      pageSize?: number;
+    }
+  ): Promise<PaginatedResult<ITAsset>> {
+    const { keyword, status, page = 1, pageSize = 10 } = params;
+
+    try {
+      const hasLocalFilters = !!(keyword || status);
+      const apiPage = hasLocalFilters ? 1 : page;
+      const apiPerPage = hasLocalFilters ? 10000 : pageSize;
+
+      const result = await this.callApi('/open_api/customization/trzbfxnjsj/full', {
+        page: apiPage,
+        per_page: apiPerPage,
+      });
+
+      let backups: ITAsset[] = (result?.data || []).map((raw: any) => this.transformBackup(raw));
+
+      if (status) {
+        backups = backups.filter((b) => b.status === status);
+      }
+
+      if (keyword) {
+        const lowerKeyword = keyword.toLowerCase();
+        backups = backups.filter((b) => {
+          const backup = b as Backup;
+          return (
+            backup.name?.toLowerCase().includes(lowerKeyword) ||
+            backup.code?.toLowerCase().includes(lowerKeyword) ||
+            backup.description?.toLowerCase().includes(lowerKeyword) ||
+            backup.target_host?.toLowerCase().includes(lowerKeyword) ||
+            backup.strategy?.toLowerCase().includes(lowerKeyword) ||
+            String(backup.metadata?.tenant || '').toLowerCase().includes(lowerKeyword) ||
+            String(backup.metadata?.platform || '').toLowerCase().includes(lowerKeyword) ||
+            String(backup.metadata?.platform_ip || '').toLowerCase().includes(lowerKeyword) ||
+            String(backup.metadata?.backup_status || '').toLowerCase().includes(lowerKeyword)
+          );
+        });
+      }
+
+      backups.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+      const total = hasLocalFilters
+        ? backups.length
+        : parseInt(result?.total, 10) || backups.length;
+      const data = hasLocalFilters
+        ? backups.slice((page - 1) * pageSize, page * pageSize)
+        : backups;
+
+      return { data, total };
+    } catch (error) {
+      console.error('查询备份策略失败:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  // ============================================
   // Web 站点监控资产查询
   // 数据来源：Hertzbeat 监控系统（经数据中台透传）
   // ============================================
@@ -1706,11 +1844,12 @@ export class YnuDataProvider implements IItAssetDataProvider {
   async queryAssets(params: QueryAssetsParams): Promise<PaginatedResult<ITAsset>> {
     const { asset_type, category, system_id, keyword, status, page = 1, pageSize = 10 } = params;
 
-    // 中台当前提供域名、DNS记录、物理设备、虚拟机、Web应用、第三方服务、运维访问控制、数据采集源、Web站点监控数据
-    const allowedTypes = ['domain', 'dns_record', 'physical_device', 'virtual_machine', 'web_server', 'web_app', 'third_party_service', 'ops_access_control', 'data_source', 'web_site_monitor', 'port_monitor'];
+    // 中台当前提供域名、DNS记录、物理设备、虚拟机、Web应用、第三方服务、运维访问控制、数据采集源、Web站点监控、端口监控、备份策略数据
+    const allowedTypes = ['domain', 'dns_record', 'physical_device', 'virtual_machine', 'web_server', 'web_app', 'third_party_service', 'ops_access_control', 'data_source', 'web_site_monitor', 'port_monitor', 'backup'];
     const requestedInfra = !asset_type && category === 'infrastructure';
     const requestedNetwork = !asset_type && category === 'network';
     const requestedApplication = !asset_type && category === 'application';
+    const requestedData = !asset_type && category === 'data';
     const requestedExternal = !asset_type && category === 'external';
     const requestedOperations = !asset_type && category === 'operations';
     const requestedGovernance = !asset_type && category === 'governance';
@@ -1723,6 +1862,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
     const fetchAll =
       category === 'infrastructure' ||
       category === 'network' ||
+      category === 'data' ||
       category === 'application' ||
       category === 'external' ||
       category === 'operations' ||
@@ -1834,6 +1974,14 @@ export class YnuDataProvider implements IItAssetDataProvider {
       dataSources = dsResult.data;
     }
 
+    // 查询备份策略资产
+    // 注意：备份策略与信息系统无直接字段关联，按 system_id 查询时跳过
+    let backups: ITAsset[] = [];
+    if (!system_id && (!asset_type || asset_type === 'backup' || requestedData || fetchAll)) {
+      const bkResult = await this.queryBackups({ keyword, status, page: 1, pageSize: 10000 });
+      backups = bkResult.data;
+    }
+
     // 查询 Web 站点监控资产
     // 注意：Web 站点监控与信息系统无直接字段关联，按 system_id 查询时跳过
     let webSiteMonitors: ITAsset[] = [];
@@ -1850,7 +1998,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       portMonitors = pmResult.data;
     }
 
-    let assets = [...physicalDevices, ...virtualMachines, ...domains, ...dnsRecords, ...webServers, ...webApps, ...thirdPartyServices, ...opsAccessControls, ...dataSources, ...webSiteMonitors, ...portMonitors];
+    let assets = [...physicalDevices, ...virtualMachines, ...domains, ...dnsRecords, ...webServers, ...webApps, ...thirdPartyServices, ...opsAccessControls, ...dataSources, ...backups, ...webSiteMonitors, ...portMonitors];
 
     // 按资产类型过滤
     if (asset_type) {
@@ -2152,6 +2300,29 @@ export class YnuDataProvider implements IItAssetDataProvider {
           return null;
         } catch (error) {
           console.error('查询端口监控详情失败:', error);
+          return null;
+        }
+      }
+
+      // 备份策略详情查询
+      if (assetType === 'backup') {
+        try {
+          // ID 格式为 IP 地址（XNJIP），通过 keyword 全量查询后匹配
+          const result = await this.callApi('/open_api/customization/trzbfxnjsj/full', {
+            page: 1,
+            per_page: 10000,
+          });
+          const rawData = result?.data || [];
+          const matched = rawData.find((raw: any) => {
+            const rawIp = raw.XNJIP ?? raw.xnjip ?? '';
+            return rawIp === id;
+          });
+          if (matched) {
+            return this.transformBackup(matched);
+          }
+          return null;
+        } catch (error) {
+          console.error('查询备份策略详情失败:', error);
           return null;
         }
       }

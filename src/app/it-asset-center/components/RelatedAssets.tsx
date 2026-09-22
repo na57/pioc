@@ -23,6 +23,7 @@ export type RelatedAssetsType =
   | 'dns_records_by_domain'
   | 'web_servers_by_ip'
   | 'ops_access_control_by_ip'
+  | 'virtual_machines_by_backup_ip'
   | 'web_servers_by_monitor_ip'
   | 'web_site_monitors_by_server_ip'
   | 'web_site_monitors_by_domain'
@@ -41,6 +42,7 @@ const TYPE_INFO: Record<RelatedAssetsType, { label: string; assetType: string }>
   dns_records_by_domain: { label: 'DNS记录', assetType: 'dns_record' },
   web_servers_by_ip: { label: 'Web服务器', assetType: 'web_server' },
   ops_access_control_by_ip: { label: '运维访问控制', assetType: 'ops_access_control' },
+  virtual_machines_by_backup_ip: { label: '虚拟机', assetType: 'virtual_machine' },
   web_servers_by_monitor_ip: { label: 'Web服务器', assetType: 'web_server' },
   web_site_monitors_by_server_ip: { label: 'Web站点监控', assetType: 'web_site_monitor' },
   web_site_monitors_by_domain: { label: 'Web站点监控', assetType: 'web_site_monitor' },
@@ -153,6 +155,32 @@ async function fetchRelatedData(type: RelatedAssetsType, asset: ITAsset, onUnaut
       if (res.status === 401) { onUnauthorized(); return []; }
       const result = await res.json();
       return result.success ? (result.data.data || []) : [];
+    }
+  } else if (type === 'virtual_machines_by_backup_ip') {
+    const targetHost = (asset as any).target_host;
+    if (targetHost) {
+      // target_host 可能是逗号分隔的多个 IP（如 "10.10.188.136, fe80::216:3eff:fe35:fb70"）
+      // 拆分为单个 IP 后分别查询，最后合并去重
+      const ipList = targetHost.split(',').map((ip: string) => ip.trim()).filter(Boolean);
+      if (ipList.length === 0) return [];
+      const results = await Promise.all(
+        ipList.map(async (ip: string) => {
+          const res = await fetch(
+            `/api/it-asset-center?action=assets&asset_type=virtual_machine&keyword=${encodeURIComponent(ip)}&per_page=100`
+          );
+          if (res.status === 401) { onUnauthorized(); return []; }
+          const result = await res.json();
+          return result.success ? (result.data.data || []) : [];
+        })
+      );
+      // 合并去重（同一台虚拟机可能有多个 IP 命中）
+      const seen = new Set<string>();
+      return results.flat().filter((vm: any) => {
+        const key = vm.id || vm.hostname || vm.name;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
   } else if (type === 'web_servers_by_monitor_ip') {
     const ip = (asset as any).ip;

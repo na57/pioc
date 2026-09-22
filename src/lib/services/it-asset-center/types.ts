@@ -272,10 +272,10 @@ export interface Storage extends ITAssetBase {
 
 export interface Backup extends ITAssetBase {
   asset_type: 'backup';
-  target?: string;
+  target_host?: string;
   strategy?: string;
-  retention_days?: number;
   last_backup_at?: string;
+  latest_recovery_point?: string;
 }
 
 // ============================================
