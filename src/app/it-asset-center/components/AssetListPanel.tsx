@@ -18,7 +18,7 @@ import { SearchOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import FilterSelect from './FilterSelect';
-import type { ITAsset, AssetType, AssetCategory } from '@/lib/services/it-asset-center';
+import type { ITAsset, AssetType, AssetCategory, Database } from '@/lib/services/it-asset-center';
 import { ASSET_TYPE_META, CATEGORY_LABELS } from '@/lib/services/it-asset-center';
 
 const { useBreakpoint } = Grid;
@@ -305,12 +305,18 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
         title: '资产名称',
         dataIndex: 'name',
         key: 'name',
-        render: (text: string, record: ITAsset) => (
-          <Space orientation="horizontal" size={4}>
-            <Badge status={STATUS_COLORS[record.status] || 'default'} />
-            <Link href={`/it-asset-center/assets/${record.asset_type}/${encodeURIComponent(record.id)}`}>{text}</Link>
-          </Space>
-        ),
+        render: (text: string, record: ITAsset) => {
+          const db = record as Database;
+          const displayName = record.asset_type === 'database' && db.host
+            ? `${text} (${db.host})`
+            : text;
+          return (
+            <Space orientation="horizontal" size={4}>
+              <Badge status={STATUS_COLORS[record.status] || 'default'} />
+              <Link href={`/it-asset-center/assets/${record.asset_type}/${encodeURIComponent(record.id)}`}>{displayName}</Link>
+            </Space>
+          );
+        },
       },
       {
         title: '资产类型',

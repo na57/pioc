@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
 import {
   Card,
   Spin,
@@ -13,7 +14,7 @@ import {
   Space,
   Button,
 } from 'antd';
-import { FilterOutlined, FullscreenOutlined, ExpandOutlined } from '@ant-design/icons';
+import { FilterOutlined, FullscreenOutlined, ExpandOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -41,6 +42,7 @@ const NODE_META: Record<string, NodeMeta> = {
   port_monitor: { color: '#389e0d', label: '端口监控' }, // 深绿
   ops_access_control: { color: '#faad14', label: '运维访问控制' }, // 黄色
   data_source: { color: '#eb2f96', label: '数据源' }, // 粉色
+  database: { color: '#722ed1', label: '数据库' }, // 紫色
   third_party_service: { color: '#531dab', label: '第三方服务' }, // 紫色
   backup: { color: '#08979c', label: '备份策略' }, // 青蓝色
 };
@@ -985,6 +987,169 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
             icon={<FullscreenOutlined />}
             tooltip="适配画布"
             onClick={fitToScreen}
+          />
+          <ActionButton
+            icon={<DownloadOutlined />}
+            tooltip="保存图片"
+            onClick={() => {
+              // 获取筛选后的顶层节点
+              const filteredRootNodes =
+                selectedSystemIds.length > 0
+                  ? graphData.filter((n) => selectedSystemIds.includes(n.id))
+                  : graphData;
+              if (filteredRootNodes.length === 0) {
+                message.warning('当前图谱为空，无内容可保存');
+                return;
+              }
+              message.loading({ content: '正在生成图片...', key: 'saveGraph' });
+
+              // 延迟一帧执行，让 loading 消息能显示出来
+              setTimeout(() => {
+                try {
+                  // 递归收集所有节点（忽略折叠状态）
+                  const allNodes: GraphNode[] = [];
+                  const allEdges: { source: GraphNode; target: GraphNode }[] = [];
+
+                  const collectAll = (nodes: GraphNode[]) => {
+                    for (const node of nodes) {
+                      allNodes.push(node);
+                      if (node.children && node.children.length > 0) {
+                        node.children.forEach((child) => {
+                          allEdges.push({ source: node, target: child });
+                        });
+                        collectAll(node.children);
+                      }
+                    }
+                  };
+                  collectAll(filteredRootNodes);
+
+                  // 构建导出用的 nodes/links（与可见渲染相同的样式逻辑）
+                  const typeCountMap = new Map<string, number>();
+                  let inactiveCount = 0;
+                  for (const node of allNodes) {
+                    const isInactive = !!node.status && node.status !== 'active';
+                    if (isInactive) {
+                      inactiveCount++;
+                    } else {
+                      typeCountMap.set(node.node_type, (typeCountMap.get(node.node_type) || 0) + 1);
+                    }
+                  }
+
+                  const categoryMap = new Map<string, number>();
+                  const cats: { name: string; itemStyle: { color: string } }[] = [];
+                  Object.entries(NODE_META).forEach(([type, meta]) => {
+                    categoryMap.set(type, cats.length);
+                    const count = typeCountMap.get(type) || 0;
+                    cats.push({ name: count > 0 ? `${meta.label} (${count})` : meta.label, itemStyle: { color: meta.color } });
+                  });
+                  const inactiveCategoryIndex = cats.length;
+                  cats.push({ name: inactiveCount > 0 ? `非活动资产 (${inactiveCount})` : '非活动资产', itemStyle: { color: INACTIVE_NODE_COLOR } });
+
+                  const usedGids = new Set<string>();
+                  const exportNodes: any[] = [];
+                  for (const node of allNodes) {
+                    const gid = toGlobalId(node.node_type, node.id);
+                    if (usedGids.has(gid)) continue;
+                    usedGids.add(gid);
+                    const meta = NODE_META[node.node_type] || { color: '#999', label: node.node_type };
+                    const isSystem = node.node_type === 'information_system';
+                    const isInactive = !!node.status && node.status !== 'active';
+                    const nodeColor = isInactive ? INACTIVE_NODE_COLOR : meta.color;
+                    const nodeCategory = isInactive ? inactiveCategoryIndex : (categoryMap.get(node.node_type) ?? 0);
+                    exportNodes.push({
+                      id: gid,
+                      name: node.name,
+                      symbol: 'circle',
+                      symbolSize: isSystem ? 52 : 26,
+                      category: nodeCategory,
+                      itemStyle: { color: nodeColor, borderColor: '#ffffff', borderWidth: 2.5 },
+                      label: {
+                        show: true, position: 'bottom', distance: 6, fontSize: isSystem ? 13 : 11,
+                        color: '#333', fontWeight: isSystem ? 600 : 400, align: 'center', verticalAlign: 'top',
+                      },
+                    });
+                  }
+
+                  const exportLinks: any[] = [];
+                  for (const edge of allEdges) {
+                    const srcGid = toGlobalId(edge.source.node_type, edge.source.id);
+                    const dstGid = toGlobalId(edge.target.node_type, edge.target.id);
+                    if (srcGid === dstGid) continue;
+                    const isSystemRelation = edge.source.node_type === 'information_system' || edge.target.node_type === 'information_system';
+                    exportLinks.push({
+                      source: srcGid,
+                      target: dstGid,
+                      lineStyle: {
+                        color: '#5a6a7e', width: isSystemRelation ? 1.5 : 1, curveness: 0.15,
+                        type: isSystemRelation ? 'solid' : 'dashed',
+                      },
+                    });
+                  }
+
+                  // 根据节点数量动态计算容器尺寸
+                  const nodeCount = allNodes.length;
+                  const baseSize = 1500;
+                  const perNode = 100;
+                  const size = Math.max(baseSize, Math.ceil(Math.sqrt(nodeCount) * perNode * 2));
+                  const container = document.createElement('div');
+                  container.style.cssText = `position:fixed;left:-9999px;top:0;width:${size}px;height:${Math.round(size * 0.8)}px;`;
+                  document.body.appendChild(container);
+                  const chart = echarts.init(container, undefined, { renderer: 'canvas' });
+
+                  chart.setOption({
+                    tooltip: { show: false },
+                    legend: { show: false },
+                    animation: false,
+                    series: [{
+                      type: 'graph',
+                      layout: 'force',
+                      categories: cats,
+                      data: exportNodes,
+                      links: exportLinks,
+                      roam: false,
+                      draggable: false,
+                      force: {
+                        repulsion: 420,
+                        edgeLength: [100, 180],
+                        gravity: 0.06,
+                        edgeForce: 0.15,
+                        friction: 0.6,
+                      },
+                      symbol: 'circle',
+                      label: {
+                        show: true, position: 'bottom', distance: 6, fontSize: 12,
+                        color: '#333', align: 'center', verticalAlign: 'top',
+                      },
+                      lineStyle: { color: '#5a6a7e', width: 1.2, curveness: 0.15, opacity: 0.85 },
+                      edgeSymbol: ['none', 'arrow'],
+                      edgeSymbolSize: [0, 8],
+                      edgeLabel: { show: false },
+                      emphasis: { focus: 'none' },
+                      top: 40, bottom: 40, left: 40, right: 40,
+                    }],
+                  });
+
+                  // 等待力导向布局完成后导出
+                  setTimeout(() => {
+                    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' });
+                    chart.dispose();
+                    document.body.removeChild(container);
+
+                    const link = document.createElement('a');
+                    link.href = dataUrl;
+                    link.download = `资源图谱_${new Date().toISOString().slice(0, 10)}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    message.destroy('saveGraph');
+                    message.success('图片已保存');
+                  }, 1500);
+                } catch (err) {
+                  message.destroy('saveGraph');
+                  message.error('生成图片失败');
+                }
+              }, 100);
+            }}
           />
         </Space>
       }

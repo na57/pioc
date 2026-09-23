@@ -17,6 +17,7 @@ import {
   OpsAccessControl,
   VirtualMachine,
   Backup,
+  Database,
   DataSource,
   WebSiteMonitor,
   PortMonitor,
@@ -1291,6 +1292,151 @@ export class YnuDataProvider implements IItAssetDataProvider {
   }
 
   // ============================================
+  // 数据库资产查询
+  // 中台接口：/open_api/customization/tdwsgxggfwsjkxxmx/full
+  // ============================================
+
+  /**
+   * 映射数据库运行状态
+   * 中台 ZT 字段：运行/停用/故障等
+   */
+  private mapDatabaseStatus(statusText?: string): AssetStatus {
+    const value = String(statusText ?? '').trim();
+    if (!value) return 'active';
+    if (value.includes('运行') || value.includes('正常') || value.includes('启用')) return 'active';
+    if (value.includes('停用') || value.includes('停止')) return 'inactive';
+    if (value.includes('故障') || value.includes('异常')) return 'faulty';
+    return 'active';
+  }
+
+  /**
+   * 将中台返回的数据库明细数据转换为系统标准 Database 格式
+   *
+   * 字段映射：
+   * - WYBS（唯一标识_校标） → id / code
+   * - XXXTID（信息系统ID） → system_id
+   * - SJKLX（数据库类型_校标） → db_type
+   * - SJKBB（数据库版本） → version
+   * - LJIP（连接IP） → host
+   * - DK（端口_校标） → port
+   * - SJKBMC（数据库实例名称） → instance_name（如接口返回该字段则映射）
+   * - ZT（状态_校标） → status
+   * - FZRXM（负责人姓名_校标） → owner
+   * - DWMC（单位名称_校标） → department
+   * - BZ（备注_校标） → description
+   * - TSTAMP（时间戳_校标） → created_at / updated_at
+   * 扩展字段（SJLY、DWH、FZRGH 等）放入 metadata
+   */
+  private transformDatabase(raw: any): Database {
+    const wybs = raw.WYBS ?? raw.wybs ?? '';
+    const xxxtid = raw.XXXTID ?? raw.xxxtid ?? '';
+    const sjklx = raw.SJKLX ?? raw.sjklx ?? '';
+    const sjkbb = raw.SJKBB ?? raw.sjkbb ?? '';
+    const ljip = raw.LJIP ?? raw.ljip ?? '';
+    const dk = raw.DK ?? raw.dk ?? '';
+    const zt = raw.ZT ?? raw.zt ?? '';
+    const fzrxm = raw.FZRXM ?? raw.fzrxm ?? '';
+    const dwmc = raw.DWMC ?? raw.dwmc ?? '';
+    const bz = raw.BZ ?? raw.bz ?? '';
+    const tstamp = raw.TSTAMP ?? raw.tstamp ?? '';
+
+    // 端口转换：string -> number
+    const port = dk ? parseInt(dk, 10) : undefined;
+
+    const status = this.mapDatabaseStatus(zt);
+
+    return {
+      id: wybs,
+      system_id: xxxtid || 'unknown',
+      asset_type: 'database',
+      category: 'data',
+      name: sjklx || wybs || '未知数据库',
+      code: wybs,
+      status,
+      description: bz || undefined,
+      db_type: sjklx || undefined,
+      version: sjkbb || undefined,
+      host: ljip || undefined,
+      port: port || undefined,
+      instance_name: undefined,  // 中台未提供此字段
+      owner: fzrxm || undefined,
+      department: dwmc || undefined,
+      created_at: this.formatTimestamp(tstamp),
+      updated_at: this.formatTimestamp(tstamp),
+      metadata: {
+        sjly: raw.SJLY ?? raw.sjly ?? undefined,
+        dwh: raw.DWH ?? raw.dwh ?? undefined,
+        fzrgh: raw.FZRGH ?? raw.fzrgh ?? undefined,
+        sjklx: sjklx || undefined,
+      },
+    } as Database;
+  }
+
+  /**
+   * 查询数据库资产列表
+   * 中台接口：/open_api/customization/tdwsgxggfwsjkxxmx/full
+   * 与信息系统通过 XXXTID 字段强关联
+   */
+  private async queryDatabases(
+    params: {
+      system_id?: string;
+      keyword?: string;
+      status?: AssetStatus;
+      page?: number;
+      pageSize?: number;
+    }
+  ): Promise<PaginatedResult<ITAsset>> {
+    const { system_id, keyword, status, page = 1, pageSize = 10 } = params;
+
+    try {
+      const hasLocalFilters = !!(keyword || status);
+      const apiPage = hasLocalFilters ? 1 : page;
+      const apiPerPage = hasLocalFilters ? 10000 : pageSize;
+
+      const body: Record<string, unknown> = { page: apiPage, per_page: apiPerPage };
+      if (system_id) {
+        body.XXXTID = system_id;
+      }
+
+      const result = await this.callApi('/open_api/customization/tdwsgxggfwsjkxxmx/full', body);
+      let databases: ITAsset[] = (result?.data || []).map((raw: any) => this.transformDatabase(raw));
+
+      if (status) {
+        databases = databases.filter((d) => d.status === status);
+      }
+
+      if (keyword) {
+        const lowerKeyword = keyword.toLowerCase();
+        databases = databases.filter((d) => {
+          const db = d as Database;
+          return (
+            d.name?.toLowerCase().includes(lowerKeyword) ||
+            d.code?.toLowerCase().includes(lowerKeyword) ||
+            d.description?.toLowerCase().includes(lowerKeyword) ||
+            db.db_type?.toLowerCase().includes(lowerKeyword) ||
+            db.host?.toLowerCase().includes(lowerKeyword) ||
+            db.version?.toLowerCase().includes(lowerKeyword) ||
+            db.instance_name?.toLowerCase().includes(lowerKeyword) ||
+            db.owner?.toLowerCase().includes(lowerKeyword) ||
+            db.department?.toLowerCase().includes(lowerKeyword) ||
+            String(db.port || '').includes(lowerKeyword)
+          );
+        });
+      }
+
+      databases.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+
+      const total = hasLocalFilters ? databases.length : parseInt(result?.total, 10) || databases.length;
+      const data = hasLocalFilters ? databases.slice((page - 1) * pageSize, page * pageSize) : databases;
+
+      return { data, total };
+    } catch (error) {
+      console.error('查询数据库资产失败:', error);
+      return { data: [], total: 0 };
+    }
+  }
+
+  // ============================================
   // 备份策略资产查询
   // 中台接口：/open_api/customization/trzbfxnjsj/full
   // ============================================
@@ -1844,8 +1990,8 @@ export class YnuDataProvider implements IItAssetDataProvider {
   async queryAssets(params: QueryAssetsParams): Promise<PaginatedResult<ITAsset>> {
     const { asset_type, category, system_id, keyword, status, page = 1, pageSize = 10 } = params;
 
-    // 中台当前提供域名、DNS记录、物理设备、虚拟机、Web应用、第三方服务、运维访问控制、数据采集源、Web站点监控、端口监控、备份策略数据
-    const allowedTypes = ['domain', 'dns_record', 'physical_device', 'virtual_machine', 'web_server', 'web_app', 'third_party_service', 'ops_access_control', 'data_source', 'web_site_monitor', 'port_monitor', 'backup'];
+    // 中台当前提供域名、DNS记录、物理设备、虚拟机、Web应用、第三方服务、运维访问控制、数据采集源、数据库、Web站点监控、端口监控、备份策略数据
+    const allowedTypes = ['domain', 'dns_record', 'physical_device', 'virtual_machine', 'web_server', 'web_app', 'third_party_service', 'ops_access_control', 'data_source', 'database', 'web_site_monitor', 'port_monitor', 'backup'];
     const requestedInfra = !asset_type && category === 'infrastructure';
     const requestedNetwork = !asset_type && category === 'network';
     const requestedApplication = !asset_type && category === 'application';
@@ -1974,6 +2120,14 @@ export class YnuDataProvider implements IItAssetDataProvider {
       dataSources = dsResult.data;
     }
 
+    // 查询数据库资产
+    // 数据库与信息系统通过 XXXTID 字段强关联，按 system_id 查询时直接透传
+    let databases: ITAsset[] = [];
+    if (!asset_type || asset_type === 'database' || requestedData || fetchAll) {
+      const dbResult = await this.queryDatabases({ system_id, keyword, status, page: 1, pageSize: 10000 });
+      databases = dbResult.data;
+    }
+
     // 查询备份策略资产
     // 注意：备份策略与信息系统无直接字段关联，按 system_id 查询时跳过
     let backups: ITAsset[] = [];
@@ -1998,7 +2152,7 @@ export class YnuDataProvider implements IItAssetDataProvider {
       portMonitors = pmResult.data;
     }
 
-    let assets = [...physicalDevices, ...virtualMachines, ...domains, ...dnsRecords, ...webServers, ...webApps, ...thirdPartyServices, ...opsAccessControls, ...dataSources, ...backups, ...webSiteMonitors, ...portMonitors];
+    let assets = [...physicalDevices, ...virtualMachines, ...domains, ...dnsRecords, ...webServers, ...webApps, ...thirdPartyServices, ...opsAccessControls, ...dataSources, ...databases, ...backups, ...webSiteMonitors, ...portMonitors];
 
     // 按资产类型过滤
     if (asset_type) {
@@ -2266,6 +2420,25 @@ export class YnuDataProvider implements IItAssetDataProvider {
         }
       }
 
+      // 数据库详情查询
+      if (assetType === 'database') {
+        try {
+          const result = await this.callApi('/open_api/customization/tdwsgxggfwsjkxxmx/full', {
+            WYBS: id,
+            page: 1,
+            per_page: 1,
+          });
+          const rawData = result?.data || [];
+          if (rawData[0]) {
+            return this.transformDatabase(rawData[0]);
+          }
+          return null;
+        } catch (error) {
+          console.error('查询数据库详情失败:', error);
+          return null;
+        }
+      }
+
       // Web 站点监控详情查询
       if (assetType === 'web_site_monitor') {
         try {
@@ -2357,6 +2530,16 @@ export class YnuDataProvider implements IItAssetDataProvider {
         const vmList = vmResult?.data || [];
         if (vmList[0]) {
           return this.transformVirtualMachine(vmList[0]);
+        }
+        // 再尝试数据库
+        const dbResult = await this.callApi('/open_api/customization/tdwsgxggfwsjkxxmx/full', {
+          WYBS: id,
+          page: 1,
+          per_page: 1,
+        });
+        const dbList = dbResult?.data || [];
+        if (dbList[0]) {
+          return this.transformDatabase(dbList[0]);
         }
         return null;
       }

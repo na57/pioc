@@ -479,37 +479,16 @@ async function handleGraphChildren(
             children.push(assetToGraphNode(item));
           }
         }
-      }
-    }
-  } else if (nodeType === 'backup') {
-    const asset = await provider.queryAssetById(nodeId, 'backup' as AssetType);
-    if (asset) {
-      const targetHost = (asset as any).target_host;
-      if (targetHost) {
-        const ipList = targetHost.split(',').map((s: string) => s.trim()).filter(Boolean);
-        const results = await Promise.all(
-          ipList.map(async (ip: string) => {
-            const vmResult = await provider.queryAssets({
-              asset_type: 'virtual_machine' as AssetType,
-              keyword: ip,
-              page: 1,
-              pageSize: 100,
-            });
-            return vmResult.data.filter((vm: any) => {
-              const vmIp = (vm as any).ip_address || (vm as any).ip || '';
-              return vmIp === ip;
-            });
-          })
-        );
-        // 合并去重
-        const seen = new Set<string>();
-        for (const vms of results) {
-          for (const vm of vms) {
-            const key = vm.id || (vm as any).hostname || vm.name;
-            if (!seen.has(key)) {
-              seen.add(key);
-              children.push(assetToGraphNode(vm));
-            }
+        // 4. 数据库（通过 host 字段 IP 匹配）
+        const dbResult = await provider.queryAssets({
+          asset_type: 'database' as AssetType,
+          keyword: ip,
+          page: 1,
+          pageSize: 100,
+        });
+        for (const item of dbResult.data) {
+          if ((item as any).host === ip) {
+            children.push(assetToGraphNode(item));
           }
         }
       }
@@ -578,9 +557,21 @@ async function handleGraphChildren(
     }
   }
 
+  // 全局去重：避免同一个节点被多个关联路径重复加入
+  const seen = new Set<string>();
+  const uniqueChildren: GraphNode[] = [];
+  const sep = '::';
+  for (const child of children) {
+    const gid = `${child.node_type}${sep}${child.id}`;
+    if (!seen.has(gid)) {
+      seen.add(gid);
+      uniqueChildren.push(child);
+    }
+  }
+
   return NextResponse.json({
     success: true,
-    data: { children },
+    data: { children: uniqueChildren },
   });
 }
 
