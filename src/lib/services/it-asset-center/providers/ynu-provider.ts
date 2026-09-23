@@ -1417,8 +1417,8 @@ export class YnuDataProvider implements IItAssetDataProvider {
             db.host?.toLowerCase().includes(lowerKeyword) ||
             db.version?.toLowerCase().includes(lowerKeyword) ||
             db.instance_name?.toLowerCase().includes(lowerKeyword) ||
-            d.metadata?.fzrxm?.toLowerCase().includes(lowerKeyword) ||
-            d.metadata?.dwh?.toLowerCase().includes(lowerKeyword) ||
+            String(d.metadata?.fzrxm ?? '').toLowerCase().includes(lowerKeyword) ||
+            String(d.metadata?.dwh ?? '').toLowerCase().includes(lowerKeyword) ||
             String(db.port || '').includes(lowerKeyword)
           );
         });
