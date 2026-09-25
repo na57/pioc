@@ -17,7 +17,7 @@ import {
   Col,
   Tabs,
 } from 'antd';
-import { SearchOutlined, DatabaseOutlined, AppstoreOutlined, RobotOutlined, BarChartOutlined, ApartmentOutlined } from '@ant-design/icons';
+import { SearchOutlined, DatabaseOutlined, AppstoreOutlined, RobotOutlined, BarChartOutlined, ApartmentOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import FriendlyTime from '@/components/FriendlyTime';
@@ -27,6 +27,7 @@ import AssetListPanel from './components/AssetListPanel';
 import ResourceGraph from './components/ResourceGraph';
 import ActionButton from '@/app/tags/components/ActionButton';
 import { AIChatPanel } from '@/components/ai-chat';
+import ComplianceInspectionDrawer from './components/ComplianceInspectionDrawer';
 import type { InformationSystem, AssetCategory } from '@/lib/services/it-asset-center';
 import { CATEGORY_LABELS } from '@/lib/services/it-asset-center';
 
@@ -94,6 +95,12 @@ export default function ItAssetCenterPage() {
   } | null>(null);
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
+  // 合规巡检抽屉状态
+  const [inspectionDrawer, setInspectionDrawer] = useState<{
+    open: boolean;
+    systemId: string;
+    systemName: string;
+  }>({ open: false, systemId: '', systemName: '' });
   // 跳转到资源图谱并聚焦指定系统
   const handleViewGraph = useCallback(
     (record: InformationSystem) => {
@@ -372,14 +379,44 @@ export default function ItAssetCenterPage() {
       {
         title: '操作',
         key: 'actions',
-        width: 90,
-        render: (_: unknown, record: InformationSystem) => (
-          <ActionButton
-            icon={<ApartmentOutlined />}
-            tooltip="查看图谱"
-            onClick={() => handleViewGraph(record)}
-          />
-        ),
+        width: 130,
+        render: (_: unknown, record: InformationSystem & { latestInspectionStatus?: string | null }) => {
+          // 根据最后一次巡检结果设置图标颜色
+          const status = record.latestInspectionStatus;
+          let iconColor: string | undefined;
+          let tooltipText = '合规巡检';
+          if (status === 'pass') {
+            iconColor = '#52c41a'; // 绿色 - 通过
+            tooltipText = '合规巡检（上次结果: 通过）';
+          } else if (status === 'fail') {
+            iconColor = '#ff4d4f'; // 红色 - 未通过
+            tooltipText = '合规巡检（上次结果: 未通过）';
+          } else if (status === 'warning') {
+            iconColor = '#faad14'; // 黄色 - 警告
+            tooltipText = '合规巡检（上次结果: 有告警）';
+          }
+
+          return (
+            <Space orientation="horizontal" size={4}>
+              <ActionButton
+                icon={<ApartmentOutlined />}
+                tooltip="查看图谱"
+                onClick={() => handleViewGraph(record)}
+              />
+              <ActionButton
+                icon={<SafetyCertificateOutlined style={{ color: iconColor }} />}
+                tooltip={tooltipText}
+                onClick={() =>
+                  setInspectionDrawer({
+                    open: true,
+                    systemId: record.id,
+                    systemName: record.name,
+                  })
+                }
+              />
+            </Space>
+          );
+        },
       },
     ],
     [isMobile, handleViewGraph]
@@ -619,6 +656,13 @@ export default function ItAssetCenterPage() {
             children: <ResourceGraph focusSystem={graphFocusSystem} />,
           },
         ]}
+      />
+      <ComplianceInspectionDrawer
+        open={inspectionDrawer.open}
+        systemId={inspectionDrawer.systemId}
+        systemName={inspectionDrawer.systemName}
+        onClose={() => setInspectionDrawer({ open: false, systemId: '', systemName: '' })}
+        onInspectionComplete={() => fetchSystems(pagination.current, pagination.pageSize)}
       />
     </div>
   );

@@ -106,6 +106,7 @@ export interface InformationSystem {
   parent_id?: string;
   parent_name?: string;
   custom_fields?: Record<string, string>;
+  latestInspectionStatus?: string | null;
   created_at: string;
   updated_at: string;
 }

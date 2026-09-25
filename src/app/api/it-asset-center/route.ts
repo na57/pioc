@@ -11,6 +11,8 @@ import {
   DNSRecordDetail,
   WebApp,
 } from '@/lib/services/it-asset-center';
+import { fetchGraphChildrenForNode } from '@/lib/services/it-asset-center/graph-children';
+import { query } from '@/lib/database/connection';
 
 const appUrl = '/it-asset-center';
 
@@ -71,7 +73,7 @@ async function getHandler(request: NextRequest): Promise<NextResponse<ApiRespons
 }
 
 interface SystemListResponse {
-  data: InformationSystem[];
+  data: (InformationSystem & { latestInspectionStatus?: string | null })[];
   total: number;
   page: number;
   per_page: number;
@@ -89,6 +91,56 @@ async function handleSystems(
   const per_page = parseInt(searchParams.get('per_page') || '10', 10);
 
   const result = await provider.querySystems({ keyword, status, department, parent, page, pageSize: per_page });
+
+  // 批量查询每个系统的最后一次巡检状态
+  if (result.data.length > 0) {
+    const systemIds = result.data.map((s: InformationSystem) => s.id);
+    const placeholders = systemIds.map(() => '?').join(',');
+    const latestRecords = await query<
+      Array<{ system_id: string; result_summary: string | null }>
+    >(
+      `SELECT t.system_id, t.result_summary
+       FROM inspection_records t
+       INNER JOIN (
+         SELECT system_id, MAX(created_at) AS max_created
+         FROM inspection_records
+         WHERE system_id IN (${placeholders})
+         GROUP BY system_id
+       ) latest ON t.system_id = latest.system_id AND t.created_at = latest.max_created`,
+      systemIds
+    );
+
+    // 建立 system_id -> result_summary 的映射
+    const statusMap = new Map<string, string | null>();
+    for (const record of latestRecords) {
+      let overallStatus: string | null = null;
+      if (record.result_summary) {
+        try {
+          const parsed = JSON.parse(record.result_summary);
+          overallStatus = parsed.overallStatus || null;
+        } catch {
+          // 忽略解析失败
+        }
+      }
+      statusMap.set(record.system_id, overallStatus);
+    }
+
+    // 附加到每条系统数据上
+    const enrichedData = result.data.map((system: InformationSystem) => ({
+      ...system,
+      latestInspectionStatus: statusMap.get(system.id) ?? null,
+    }));
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        data: enrichedData,
+        total: result.total,
+        page,
+        per_page,
+      },
+    });
+  }
 
   return NextResponse.json({
     success: true,
@@ -337,35 +389,6 @@ async function handleWebAppsByServer(
 // 根据节点类型返回其直接子节点
 // ============================================
 
-interface GraphNode {
-  id: string;
-  node_type: string;
-  name: string;
-  status?: string;
-  key_fields: Record<string, string | undefined>;
-}
-
-function assetToGraphNode(asset: ITAsset): GraphNode {
-  const a = asset as any;
-  return {
-    id: asset.id,
-    node_type: asset.asset_type,
-    name: asset.name,
-    status: asset.status,
-    key_fields: {
-      domain: a.domain,
-      ip: a.ip || a.ip_address,
-      ip_address: a.ip_address,
-      server_type: a.server_type,
-      system_id: asset.system_id,
-    },
-  };
-}
-
-function normalizeDomain(domain: string): string {
-  return domain.replace(/\.+$/, '').toLowerCase();
-}
-
 async function handleGraphChildren(
   searchParams: URLSearchParams,
   provider: any
@@ -380,199 +403,21 @@ async function handleGraphChildren(
     );
   }
 
-  const children: GraphNode[] = [];
-
-  if (nodeType === 'information_system') {
-    // 1. 子信息系统
-    const subSystems = await provider.querySystems({ parent: nodeId, page: 1, pageSize: 1000 });
-    for (const sys of subSystems.data) {
-      children.push({
-        id: sys.id,
-        node_type: 'information_system',
-        name: sys.name,
-        status: sys.status,
-        key_fields: {},
-      });
-    }
-
-    // 2. 直接关联的资产（系统已自动剔除 web_site_monitor/port_monitor/dns_record）
-    const assets = await provider.queryAssetsBySystemId(nodeId, { page: 1, pageSize: 1000 });
-    for (const asset of assets.data) {
-      if (asset.asset_type === 'dns_record') continue;
-      children.push(assetToGraphNode(asset));
-    }
-  } else if (nodeType === 'domain') {
-    const asset = await provider.queryAssetById(nodeId, 'domain' as AssetType);
-    if (asset) {
-      const domain = (asset as any).domain;
-      if (domain) {
-        // 1. DNS 记录（强关联）
-        const dnsResult = await provider.queryDNSRecords(domain);
-        for (const dns of dnsResult.data) {
-          // DNSRecordDetail 没有 host_record 字段，使用 record_value（记录值，如 IP/CNAME目标）
-          // fallback: 若 record_value 也为空则用 domain + record_type
-          const recordValue = dns.record_value || dns.domain;
-          children.push({
-            id: dns.id,
-            node_type: 'dns_record',
-            name: `${recordValue} (${dns.record_type})`,
-            status: 'active',
-            key_fields: {},
-          });
-        }
-        // 2. Web 站点监控（域名匹配）
-        const normalized = normalizeDomain(domain);
-        const wsmResult = await provider.queryAssets({
-          asset_type: 'web_site_monitor' as AssetType,
-          keyword: normalized,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of wsmResult.data) {
-          const itemDomain = ((item as any).domain || '').toString();
-          if (itemDomain && normalizeDomain(itemDomain) === normalized) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-      }
-    }
-  } else if (nodeType === 'physical_device' || nodeType === 'virtual_machine') {
-    const asset = await provider.queryAssetById(nodeId, nodeType as AssetType);
-    if (asset) {
-      const ip = (asset as any).ip || (asset as any).ip_address;
-      if (ip) {
-        // 1. Web 服务器（IP 精确匹配）
-        const wsResult = await provider.queryAssets({
-          asset_type: 'web_server' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of wsResult.data) {
-          if ((item as any).ip_address === ip) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-        // 2. 运维访问控制（IP 精确匹配）
-        const oacResult = await provider.queryAssets({
-          asset_type: 'ops_access_control' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of oacResult.data) {
-          if ((item as any).ip_address === ip) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-        // 3. 备份策略（通过 target_host 包含当前 IP）
-        const bkResult = await provider.queryAssets({
-          asset_type: 'backup' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of bkResult.data) {
-          const targetHost = (item as any).target_host || '';
-          const ipList = targetHost.split(',').map((s: string) => s.trim()).filter(Boolean);
-          if (ipList.includes(ip)) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-        // 4. 数据库（通过 host 字段 IP 匹配）
-        const dbResult = await provider.queryAssets({
-          asset_type: 'database' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of dbResult.data) {
-          if ((item as any).host === ip) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-      }
-    }
-  } else if (nodeType === 'web_server') {
-    const asset = await provider.queryAssetById(nodeId, 'web_server' as AssetType);
-    if (asset) {
-      const ip = (asset as any).ip_address;
-      const serverType = (asset as any).server_type;
-      if (ip && serverType) {
-        // 1. Web 应用（复合键关联）
-        const waResult = await provider.queryWebAppsByServer(ip, serverType);
-        for (const item of waResult.data) {
-          children.push(assetToGraphNode(item as unknown as ITAsset));
-        }
-        // 2. Web 站点监控（IP 精确匹配）
-        const wsmResult = await provider.queryAssets({
-          asset_type: 'web_site_monitor' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of wsmResult.data) {
-          if ((item as any).ip === ip) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-      }
-    }
-  } else if (nodeType === 'web_site_monitor') {
-    const asset = await provider.queryAssetById(nodeId, 'web_site_monitor' as AssetType);
-    if (asset) {
-      const ip = (asset as any).ip;
-      if (ip) {
-        // Web 服务器（IP 精确匹配）
-        const wsResult = await provider.queryAssets({
-          asset_type: 'web_server' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of wsResult.data) {
-          if ((item as any).ip_address === ip) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-      }
-    }
-  } else if (nodeType === 'port_monitor') {
-    const asset = await provider.queryAssetById(nodeId, 'port_monitor' as AssetType);
-    if (asset) {
-      const ip = (asset as any).ip;
-      if (ip) {
-        const wsResult = await provider.queryAssets({
-          asset_type: 'web_server' as AssetType,
-          keyword: ip,
-          page: 1,
-          pageSize: 100,
-        });
-        for (const item of wsResult.data) {
-          if ((item as any).ip_address === ip) {
-            children.push(assetToGraphNode(item));
-          }
-        }
-      }
-    }
-  }
-
-  // 全局去重：避免同一个节点被多个关联路径重复加入
-  const seen = new Set<string>();
-  const uniqueChildren: GraphNode[] = [];
-  const sep = '::';
-  for (const child of children) {
-    const gid = `${child.node_type}${sep}${child.id}`;
-    if (!seen.has(gid)) {
-      seen.add(gid);
-      uniqueChildren.push(child);
-    }
-  }
+  const children = await fetchGraphChildrenForNode(provider, nodeId, nodeType);
 
   return NextResponse.json({
     success: true,
-    data: { children: uniqueChildren },
+    data: { children },
   });
+}
+
+/** 图谱节点类型 */
+interface GraphNode {
+  id: string;
+  node_type: string;
+  name: string;
+  status?: string;
+  key_fields: Record<string, string | undefined>;
 }
 
 export const GET = createAppProtectedHandler(getHandler, appUrl);
