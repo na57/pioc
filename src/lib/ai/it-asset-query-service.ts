@@ -95,7 +95,7 @@ const providerAPICapabilities = `
 - 参数（可选）：
   - keyword: 关键词搜索
   - system_id: 所属系统ID
-  - asset_type: 资产类型（physical_device/web_server/domain/dns_record等）
+  - asset_type: 资产类型（physical_device/virtual_machine/web_server/domain/dns_record/database/web_site_monitor/port_monitor/backup/third_party_service/ops_access_control/data_source/web_app等）
   - category: 资产分类（infrastructure/network/data/application/software/operations/external）
   - status: 资产状态
   - page: 页码（默认1）
@@ -107,7 +107,14 @@ const providerAPICapabilities = `
   - "统计资产总数"
   - "物理设备按类型分别统计数量"
   - "有哪些Web服务器？"
+  - "有哪些虚拟机？"
+  - "有哪些数据库？"
+  - "有哪些Web应用？"
   - "Web应用按站点类型统计"
+  - "数据库有哪些类型？"
+  - "查询所有监控资产"
+  - "查询某系统下的所有资产"
+  - "有哪些第三方服务？"
 
 ### 4. queryAssetById - 根据ID查询资产详情
 - 功能：获取单个资产的详细信息
@@ -162,10 +169,18 @@ const providerAPICapabilities = `
 1. **当前支持的数据**：
    - 信息系统（InformationSystem）：完整支持
    - 物理设备（PhysicalDevice）：完整支持，asset_type 为 "physical_device"
-   - Web 服务器（WebServer）：完整支持，中台称 "Web 应用"，asset_type 为 "web_server"，所属分层为 "application"
+   - 虚拟机（VirtualMachine）：完整支持，asset_type 为 "virtual_machine"，中台称"虚拟机"
+   - Web 服务器（WebServer）：完整支持，asset_type 为 "web_server"，中台称"Web 应用"，所属分层为 "application"
+   - Web 应用（WebApp）：完整支持，asset_type 为 "web_app"，与 Web 服务器通过 IP+ServerType 复合键关联
    - 域名资产（Domain）：完整支持，asset_type 为 "domain"
    - DNS记录（DNSRecord）：完整支持
-   - 其他资产类型（数据库、中间件、容器等）：暂不支持，会返回空结果
+   - 数据库（Database）：完整支持，asset_type 为 "database"，通过 system_id 关联所属信息系统，通过 host 关联虚拟机/物理设备
+   - Web 站点监控（WebSiteMonitor）：完整支持，asset_type 为 "web_site_monitor"
+   - 端口监控（PortMonitor）：完整支持，asset_type 为 "port_monitor"
+   - 备份策略（Backup）：完整支持，asset_type 为 "backup"
+   - 第三方服务（ThirdPartyService）：完整支持，asset_type 为 "third_party_service"
+   - 运维权限（OpsAccessControl）：完整支持，asset_type 为 "ops_access_control"
+   - 数据源（DataSource）：完整支持，asset_type 为 "data_source"
 
 2. **查询策略**：
    - 对于统计类查询（如"总数"、"平均"等），先获取数据，再在回答中计算
@@ -176,9 +191,18 @@ const providerAPICapabilities = `
    - InformationSystem 主要字段：id, code, name, description, owner, owner_department, status, parent_id, parent_name
    - ITAsset 主要字段：id, system_id, asset_type, category, name, status, description
    - PhysicalDevice（物理设备）特有字段：device_type（设备类型，如服务器/交换机/防火墙/路由器等）, brand, model, sn, ip_address, management_ip, manufacturer, warranty_expiry, department, owner, owner_employee_id, system_name
+   - VirtualMachine（虚拟机）特有字段：device_type（设备类型，如虚拟机/云主机等）, ip_address（IP地址）, cpu_cores（CPU核数）, memory_gb（内存GB）, disk_gb（磁盘GB）, os（操作系统）, department（所属部门）, owner（负责人）
    - WebServer（Web 服务器 / Web 应用）抽象字段：server_type（Web服务器类型）, ip_address（IP地址）, purpose（用途）
    - WebServer provider 扩展字段（存放在 metadata 中）：agent_id（AgentID）, site_type（站点类型）, app_version（应用版本）, version（版本）, listen_ports（监听端口）, source（来源）, config_file（配置文件）
+   - Domain（域名资产）特有字段：domain_name（域名）, registration_date（注册日期）, expiry_date（到期日期）, registration_agency（注册机构）, domain_owner（域名负责人）
    - DNSRecordDetail 主要字段：id, domain, record_type, record_value, ttl, domain_status
+   - Database（数据库）特有字段：db_type（数据库类型，MySQL/PostgreSQL/Oracle/MongoDB等）, host（主机地址/连接IP）, port（端口号）, version（版本号）, instance_name（实例名称）, metadata.sjklx（数据库类型原始值）, metadata.fzrxm（负责人姓名）, metadata.dwh（单位号）
+   - WebSiteMonitor（Web站点监控）特有字段：url（监控URL）, ip（IP地址）, check_interval（检查间隔秒数）, timeout（超时秒数）, status（监控状态）
+   - PortMonitor（端口监控）特有字段：ip（IP地址）, port（端口号）, protocol（协议）, check_interval（检查间隔秒数）, timeout（超时秒数）, status（监控状态）
+   - Backup（备份策略）特有字段：backup_name（备份策略名称）, backup_type（备份类型）, target_host（目标主机/多个IP用逗号分隔）, backup_time（备份时间）, backup_cycle（备份周期）, retention_days（保留天数）
+   - ThirdPartyService（第三方服务）特有字段：service_name（服务名称）, service_type（服务类型）, vendor（供应商）, contact_person（联系人）, contact_phone（联系电话）, service_expiry（服务到期日期）
+   - OpsAccessControl（运维权限）特有字段：account_type（账号类型）, account（账号）, system_name（所属系统）, permission（权限说明）, owner（负责人）
+   - DataSource（数据源）特有字段：source_name（数据源名称）, source_type（数据源类型）, db_type（数据库类型）, host（主机地址）, port（端口号）, database_name（数据库名）
 
 4. **状态映射**：
    - InformationSystemStatus: active(活跃), inactive(停用), planning(规划中)
