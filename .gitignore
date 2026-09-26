@@ -145,3 +145,7 @@ vite.config.ts.timestamp-*
 .DS_Store
 .workbuddy/memory/2026-09-23.md
 scripts/build-itam-standard-pdf.py
+.workbuddy/memory/2026-09-25.md
+.workbuddy/memory/2026-09-26.md
+scripts/itam-batch-inspect.ts
+scripts/itam-stats.ts

@@ -17,7 +17,7 @@ import {
   Col,
   Tabs,
 } from 'antd';
-import { SearchOutlined, DatabaseOutlined, AppstoreOutlined, RobotOutlined, BarChartOutlined, ApartmentOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { SearchOutlined, DatabaseOutlined, AppstoreOutlined, RobotOutlined, BarChartOutlined, ApartmentOutlined, SafetyCertificateOutlined, FieldTimeOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import FriendlyTime from '@/components/FriendlyTime';
@@ -28,6 +28,7 @@ import ResourceGraph from './components/ResourceGraph';
 import ActionButton from '@/app/tags/components/ActionButton';
 import { AIChatPanel } from '@/components/ai-chat';
 import ComplianceInspectionDrawer from './components/ComplianceInspectionDrawer';
+import InspectionSchedulePanel from './components/InspectionSchedulePanel';
 import type { InformationSystem, AssetCategory } from '@/lib/services/it-asset-center';
 import { CATEGORY_LABELS } from '@/lib/services/it-asset-center';
 
@@ -644,6 +645,16 @@ export default function ItAssetCenterPage() {
               </span>
             ),
             children: aiChatPanel,
+          },
+          {
+            key: 'schedules',
+            label: (
+              <span>
+                <FieldTimeOutlined style={{ marginRight: 4 }} />
+                巡检计划
+              </span>
+            ),
+            children: <InspectionSchedulePanel />,
           },
           {
             key: 'graph',
