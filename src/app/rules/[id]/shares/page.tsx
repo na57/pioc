@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Space, Spin, Input, Tag, Typography, App } from 'antd';
+import { Table, Button, Space, Spin, Input, Tag, Typography, App } from 'antd';
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -151,60 +151,61 @@ export default function SharesPage() {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Card
-        title={
-          <Space>
-            <ShareAltOutlined />
-            <span>管理分享</span>
-            {rule && (
-              <Tag color="blue">{rule.name}</Tag>
-            )}
-          </Space>
-        }
-        extra={
+    <div>
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <Space>
+          <ShareAltOutlined />
+          <span>管理分享</span>
+          {rule && (
+            <Tag color="blue">{rule.name}</Tag>
+          )}
+        </Space>
+        <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/rules')}>
             返回
           </Button>
-        }
-      >
-        {rule && (
-          <div style={{ marginBottom: '24px' }}>
-            <Text type="secondary">
-              创建者：<Tag color="green">{rule.creator_name}</Tag>
-            </Text>
-          </div>
-        )}
+        </Space>
+      </div>
 
-        <div style={{ marginBottom: '24px' }}>
-          <Space>
-            <Input
-              style={{ width: 300 }}
-              placeholder="输入用户ID或用户名进行分享"
-              value={targetUserId}
-              onChange={(e) => setTargetUserId(e.target.value)}
-              onPressEnter={handleAddShare}
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAddShare}
-              loading={adding}
-              disabled={!targetUserId}
-            >
-              添加
-            </Button>
-          </Space>
+      {rule && (
+        <div style={{ marginBottom: 16 }}>
+          <Text type="secondary">
+            创建者：<Tag color="green">{rule.creator_name}</Tag>
+          </Text>
         </div>
+      )}
 
-        <Table
-          columns={columns}
-          dataSource={shares}
-          rowKey="id"
-          pagination={false}
-          locale={{ emptyText: '暂无分享记录' }}
-        />
-      </Card>
+      {/* 操作工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
+        <Space>
+          <Input
+            style={{ width: 300 }}
+            placeholder="输入用户ID或用户名进行分享"
+            value={targetUserId}
+            onChange={(e) => setTargetUserId(e.target.value)}
+            onPressEnter={handleAddShare}
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleAddShare}
+            loading={adding}
+            disabled={!targetUserId}
+          >
+            添加
+          </Button>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <Table
+        columns={columns}
+        dataSource={shares}
+        rowKey="id"
+        pagination={false}
+        locale={{ emptyText: '暂无分享记录' }}
+      />
     </div>
   );
 }

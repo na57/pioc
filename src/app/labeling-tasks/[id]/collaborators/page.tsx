@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Space, Spin, Select, Tag, Typography, App } from 'antd';
+import { Table, Button, Space, Spin, Select, Tag, Typography, App } from 'antd';
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, TeamOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -174,58 +174,59 @@ export default function CollaboratorsPage() {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card
-        title={
-          <Space>
-            <TeamOutlined />
-            <span>管理协作者</span>
-            {task && (
-              <Tag color="blue">{task.name}</Tag>
-            )}
-          </Space>
-        }
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <Space>
+          <TeamOutlined />
+          <span style={{ fontSize: 18, fontWeight: 600 }}>管理协作者</span>
+          {task && (
+            <Tag color="blue">{task.name}</Tag>
+          )}
+        </Space>
+        <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/labeling-tasks')}>
             返回
           </Button>
-        }
-      >
-        {task && (
-          <div style={{ marginBottom: '24px' }}>
-            <Text type="secondary">
-              创建者：<Tag color="green">{task.creator_name}</Tag>
-            </Text>
-          </div>
-        )}
+        </Space>
+      </div>
 
+      {task && (
         <div style={{ marginBottom: '24px' }}>
-          <Space>
-            <Select
-              style={{ width: 300 }}
-              placeholder="选择用户添加为协作者"
-              value={selectedUserId}
-              onChange={setSelectedUserId}
-              options={availableUsers.map(user => ({
-                label: `${user.name || user.username} (${user.username})`,
-                value: user.id,
-              }))}
-              showSearch
-              filterOption={(input, option) =>
-                String(option?.label || '').toLowerCase().includes(input.toLowerCase())
-              }
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAddCollaborator}
-              loading={adding}
-              disabled={!selectedUserId}
-            >
-              添加
-            </Button>
-          </Space>
+          <Text type="secondary">
+            创建者：<Tag color="green">{task.creator_name}</Tag>
+          </Text>
         </div>
+      )}
 
+      <div style={{ marginBottom: 16 }}>
+        <Space>
+          <Select
+            style={{ width: 300 }}
+            placeholder="选择用户添加为协作者"
+            value={selectedUserId}
+            onChange={setSelectedUserId}
+            options={availableUsers.map(user => ({
+              label: `${user.name || user.username} (${user.username})`,
+              value: user.id,
+            }))}
+            showSearch
+            filterOption={(input, option) =>
+              String(option?.label || '').toLowerCase().includes(input.toLowerCase())
+            }
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleAddCollaborator}
+            loading={adding}
+            disabled={!selectedUserId}
+          >
+            添加
+          </Button>
+        </Space>
+      </div>
+
+      <div className="table-responsive">
         <Table
           columns={columns}
           dataSource={collaborators}
@@ -233,7 +234,7 @@ export default function CollaboratorsPage() {
           pagination={false}
           locale={{ emptyText: '暂无协作者' }}
         />
-      </Card>
+      </div>
     </div>
   );
 }

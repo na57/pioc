@@ -270,7 +270,8 @@ export default function SystemDetailPage() {
               </Card>
             )}
 
-            <Card title="关联资产" style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 500, fontSize: 16, marginBottom: 16 }}>关联资产</div>
+            <div className="table-responsive">
               <Table
                 columns={assetColumns}
                 dataSource={allAssets}
@@ -287,7 +288,7 @@ export default function SystemDetailPage() {
                 }}
                 locale={{ emptyText: <Empty description="暂无关联资产" /> }}
               />
-            </Card>
+            </div>
           </div>
         )}
       </Spin>

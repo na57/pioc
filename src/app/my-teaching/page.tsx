@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  Card,
   Table,
   Select,
   Pagination,
@@ -276,7 +275,8 @@ export default function MyTeachingPage() {
 
   return (
     <div>
-      <Card style={{ marginBottom: 24 }}>
+      {/* 筛选栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <span>学年学期：</span>
           <Select
@@ -296,41 +296,40 @@ export default function MyTeachingPage() {
             ))}
           </Select>
         </div>
-      </Card>
+      </div>
 
-      <Card>
-        <Spin spinning={loading}>
-          {teachingData.length === 0 && !loading ? (
-            <Empty description="暂无授课信息" />
-          ) : (
-            <>
-              <Table
-                columns={columns}
-                dataSource={teachingData}
-                rowKey={(record) => {
-                  const key = `${record.JXBH || ''}-${record.KCDM || ''}-${record.SKBJH || ''}-${record.JSGH || ''}-${record.XNXQDM || ''}-${record.SKZC || ''}-${record.SKXQ || ''}-${record.KSJC || ''}`;
-                  return key;
-                }}
-                pagination={false}
-                scroll={{ x: 1200 }}
-                size="small"
+      {/* 表格直接置于白色画布，不再套卡片外框 */}
+      <Spin spinning={loading}>
+        {teachingData.length === 0 && !loading ? (
+          <Empty description="暂无授课信息" />
+        ) : (
+          <>
+            <Table
+              columns={columns}
+              dataSource={teachingData}
+              rowKey={(record) => {
+                const key = `${record.JXBH || ''}-${record.KCDM || ''}-${record.SKBJH || ''}-${record.JSGH || ''}-${record.XNXQDM || ''}-${record.SKZC || ''}-${record.SKXQ || ''}-${record.KSJC || ''}`;
+                return key;
+              }}
+              pagination={false}
+              scroll={{ x: 1200 }}
+              size="small"
+            />
+            <div style={{ marginTop: 16, textAlign: 'right' }}>
+              <Pagination
+                current={currentPage}
+                pageSize={pageSize}
+                total={total}
+                onChange={handlePageChange}
+                showSizeChanger
+                showQuickJumper
+                showTotal={(total) => `共 ${total} 条`}
+                pageSizeOptions={['10', '20', '50', '100']}
               />
-              <div style={{ marginTop: 16, textAlign: 'right' }}>
-                <Pagination
-                  current={currentPage}
-                  pageSize={pageSize}
-                  total={total}
-                  onChange={handlePageChange}
-                  showSizeChanger
-                  showQuickJumper
-                  showTotal={(total) => `共 ${total} 条`}
-                  pageSizeOptions={['10', '20', '50', '100']}
-                />
-              </div>
-            </>
-          )}
-        </Spin>
-      </Card>
+            </div>
+          </>
+        )}
+      </Spin>
 
       {/* 课程详情弹窗 */}
       <Modal

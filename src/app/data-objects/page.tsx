@@ -12,7 +12,6 @@ import {
   Input,
   Select,
   App,
-  Card,
   Typography,
   Steps,
   Radio,
@@ -716,20 +715,31 @@ export default function DataObjectsPage() {
 
   return (
     <div>
-      <Card
-        title={<Title level={4} style={{ margin: 0 }}>数据对象管理</Title>}
-        extra={
+      {/* 标题行：白色画布上不套卡片 */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <Title level={4} style={{ margin: 0 }}>数据对象管理</Title>
+        <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             创建数据对象
           </Button>
-        }
-      >
-        {/* 搜索区域 */}
+        </Space>
+      </div>
+
+      {/* 筛选工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <Form
           form={searchForm}
           layout="inline"
           onFinish={handleSearch}
-          style={{ marginBottom: 24 }}
         >
           <Form.Item name="name" label="名称">
             <Input placeholder="请输入名称" allowClear prefix={<SearchOutlined />} />
@@ -758,7 +768,10 @@ export default function DataObjectsPage() {
             </Space>
           </Form.Item>
         </Form>
+      </div>
 
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive">
         <Table
           columns={columns}
           dataSource={dataObjects}
@@ -781,7 +794,7 @@ export default function DataObjectsPage() {
           }}
           scroll={{ x: 1000 }}
         />
-      </Card>
+      </div>
 
       {/* 创建/编辑弹窗 */}
       <Modal

@@ -16,7 +16,6 @@ import {
   theme,
   Tooltip,
   Grid,
-  Card,
 } from 'antd';
 import {
   EditOutlined,
@@ -247,27 +246,28 @@ export default function AppsPage() {
 
   return (
     <div>
-      <Card
-        title={<span style={{ fontSize: isMobile ? 18 : 24 }}>应用管理</span>}
-        styles={{ body: { padding: isMobile ? 0 : 24 } }}
-      >
-        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
-          <Table
-            columns={columns}
-            dataSource={apps}
-            rowKey="id"
-            loading={loading}
-            pagination={{
-              pageSize: 10,
-              size: isMobile ? 'small' : undefined,
-              showSizeChanger: !isMobile,
-              showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
-            }}
-            scroll={{ x: isMobile ? 400 : undefined }}
-            size={isMobile ? 'small' : 'middle'}
-          />
-        </div>
-      </Card>
+      {/* 标题行：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: isMobile ? 18 : 24 }}>应用管理</span>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+        <Table
+          columns={columns}
+          dataSource={apps}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            pageSize: 10,
+            size: isMobile ? 'small' : undefined,
+            showSizeChanger: !isMobile,
+            showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
+          }}
+          scroll={{ x: isMobile ? 400 : undefined }}
+          size={isMobile ? 'small' : 'middle'}
+        />
+      </div>
       <Modal
         title="编辑应用"
         open={modalVisible}

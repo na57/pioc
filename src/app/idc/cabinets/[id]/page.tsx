@@ -525,28 +525,29 @@ export default function CabinetDetailPage() {
         </Col>
       </Row>
 
-      <Card
-        title={`设备列表 (${realDeviceCount})`}
-        styles={{ body: { padding: isMobile ? 0 : 24 } }}
-        extra={
-          cabinet.status === 1 && (
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: 16 }}>{`设备列表 (${realDeviceCount})`}</span>
+        <Space>
+          {cabinet.status === 1 && (
             <Button type="primary" icon={<PlusOutlined />} onClick={handleAddDevice} size={isMobile ? 'small' : 'middle'}>
               {isMobile ? '上架' : '上架设备'}
             </Button>
-          )
-        }
-      >
-        <div className="table-responsive" style={{ margin: isMobile ? '0 -12px' : 0 }}>
-          <Table
-            dataSource={devices.filter(d => isRealDevice(d.deviceType))}
-            columns={deviceColumns}
-            rowKey="id"
-            pagination={false}
-            size={isMobile ? 'small' : 'middle'}
-            scroll={{ x: isMobile ? 400 : undefined, y: 400 }}
-          />
-        </div>
-      </Card>
+          )}
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive" style={{ margin: isMobile ? '0 -12px' : 0 }}>
+        <Table
+          dataSource={devices.filter(d => isRealDevice(d.deviceType))}
+          columns={deviceColumns}
+          rowKey="id"
+          pagination={false}
+          size={isMobile ? 'small' : 'middle'}
+          scroll={{ x: isMobile ? 400 : undefined, y: 400 }}
+        />
+      </div>
     </>
   );
 

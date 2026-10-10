@@ -20,6 +20,7 @@ import {
   Tooltip,
   Badge,
   Tabs,
+  Typography,
 } from 'antd';
 import {
   EyeOutlined,
@@ -35,6 +36,8 @@ import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 import AIChatPanel from '@/app/data-objects/components/AIChatPanel';
 import SchemaEditor from '@/app/data-objects/components/SchemaEditor';
+
+const { Text } = Typography;
 
 interface DataObject {
   id: number;
@@ -314,9 +317,19 @@ export default function DataObjectQueryPage() {
         </Space>
       ),
       children: (
-        <Card
-          title={dataObject.name}
-          extra={
+        <>
+          {/* 标题行：白色画布上不套卡片 */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 16,
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <Text strong style={{ fontSize: 16 }}>{dataObject.name}</Text>
             <Space>
               <Tooltip title="筛选">
                 <Badge count={getActiveFilterCount()} size="small">
@@ -340,8 +353,8 @@ export default function DataObjectQueryPage() {
                 onClick={() => router.push('/data-objects')}
               />
             </Space>
-          }
-        >
+          </div>
+
           <Alert
             title={`显示模板: ${dataObject.display_template} | 主键字段: ${dataObject.primary_key}`}
             type="info"
@@ -443,7 +456,7 @@ export default function DataObjectQueryPage() {
           ) : (
             <Empty description="暂无数据" />
           )}
-        </Card>
+        </>
       ),
     },
     {

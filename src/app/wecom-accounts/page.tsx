@@ -132,8 +132,8 @@ export default function WecomAccountsPage() {
 
   return (
     <div>
-      {/* 筛选栏 */}
-      <Card style={{ marginBottom: 16 }}>
+      {/* 筛选工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <Space wrap>
           <Input
             placeholder="搜索账号名称"
@@ -174,7 +174,7 @@ export default function WecomAccountsPage() {
             新建账号
           </Button>
         </Space>
-      </Card>
+      </div>
 
       {/* 账号卡片列表 */}
       <Spin spinning={loading}>

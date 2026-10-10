@@ -10,7 +10,6 @@ import {
   Input,
   App,
   Popconfirm,
-  Card,
   Transfer,
   theme,
   Grid,
@@ -317,32 +316,33 @@ export default function RolesPage() {
 
   return (
     <div>
-      <Card
-        title={<span style={{ fontSize: isMobile ? 18 : 24 }}>角色管理</span>}
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: isMobile ? 18 : 24 }}>角色管理</span>
+        <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} size={isMobile ? 'small' : 'middle'}>
             {isMobile ? '添加' : '添加角色'}
           </Button>
-        }
-        styles={{ body: { padding: isMobile ? 12 : 24 } }}
-      >
-        <div className="table-responsive">
-          <Table
-            columns={columns}
-            dataSource={roles}
-            rowKey="id"
-            loading={loading}
-            pagination={{
-              pageSize: 10,
-              size: isMobile ? 'small' : undefined,
-              showSizeChanger: !isMobile,
-              showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
-            }}
-            scroll={{ x: isMobile ? 500 : undefined }}
-            size={isMobile ? 'small' : 'middle'}
-          />
-        </div>
-      </Card>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+        <Table
+          columns={columns}
+          dataSource={roles}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            pageSize: 10,
+            size: isMobile ? 'small' : undefined,
+            showSizeChanger: !isMobile,
+            showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
+          }}
+          scroll={{ x: isMobile ? 500 : undefined }}
+          size={isMobile ? 'small' : 'middle'}
+        />
+      </div>
       <Modal
         title={editingRole ? '编辑角色' : '添加角色'}
         open={modalVisible}

@@ -251,35 +251,32 @@ function IdcManagementPanel() {
         </Col>
       </Row>
 
-      <Card
-        title={<span style={{ fontSize: isMobile ? 16 : 18 }}>机房列表</span>}
-        extra={
-          <Button 
-            type="primary" 
-            icon={<PlusOutlined />} 
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: isMobile ? 16 : 18 }}>机房列表</span>
+        <Space>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
             onClick={handleAdd}
             size={isMobile ? 'small' : 'middle'}
           >
             {isMobile ? '新增' : '新增机房'}
           </Button>
-        }
-        styles={{ 
-          body: { 
-            padding: isMobile ? 0 : 24,
-          } 
-        }}
-      >
-        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
-          <Table
-            dataSource={rooms}
-            columns={columns}
-            rowKey="id"
-            pagination={false}
-            scroll={{ x: isMobile ? 300 : undefined }}
-            size={isMobile ? 'small' : 'middle'}
-          />
-        </div>
-      </Card>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+        <Table
+          dataSource={rooms}
+          columns={columns}
+          rowKey="id"
+          pagination={false}
+          scroll={{ x: isMobile ? 300 : undefined }}
+          size={isMobile ? 'small' : 'middle'}
+        />
+      </div>
 
       <Modal
         title={editingRoom ? '编辑机房' : '新增机房'}

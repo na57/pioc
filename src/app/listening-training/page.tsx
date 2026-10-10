@@ -913,7 +913,7 @@ export default function ListeningTrainingPage() {
 
   // 渲染词本页面内容
   const renderVocabularyContent = () => (
-    <Card>
+    <>
       <div style={{ marginBottom: 16 }}>
         <Space wrap>
           <Select
@@ -968,12 +968,12 @@ export default function ListeningTrainingPage() {
           ))}
         </Row>
       </Spin>
-    </Card>
+    </>
   );
 
   // 渲染词书管理页面内容
   const renderWordbooksContent = () => (
-    <Card>
+    <>
       <div style={{ marginBottom: 16 }}>
         <Space>
           <Button type="primary" onClick={() => setUploadModalVisible(true)}>
@@ -1007,24 +1007,26 @@ export default function ListeningTrainingPage() {
           </Col>
         ))}
       </Row>
-    </Card>
+    </>
   );
 
   // 渲染设置页面内容
   const renderSettingsContent = () => (
-    <Card
-      title="学习设置"
-      loading={settingsLoading}
-      extra={
-        <Button
-          type="primary"
-          onClick={saveUserSettings}
-          disabled={!settingsChanged}
-        >
-          保存设置
-        </Button>
-      }
-    >
+    <>
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <Title level={5} style={{ margin: 0 }}>学习设置</Title>
+        <Space>
+          <Button
+            type="primary"
+            onClick={saveUserSettings}
+            disabled={!settingsChanged}
+          >
+            保存设置
+          </Button>
+        </Space>
+      </div>
+      <Spin spinning={settingsLoading}>
       <Form layout="vertical" style={{ maxWidth: 600 }}>
         <Form.Item label="每日学习数量">
           <InputNumber
@@ -1123,13 +1125,14 @@ export default function ListeningTrainingPage() {
           </Text>
         </Form.Item>
       </Form>
-    </Card>
+      </Spin>
+    </>
   );
 
   // 渲染复习计划页面内容
   const renderScheduleContent = () => (
     <Spin spinning={scheduleLoading} description="加载中...">
-      <Card>
+      <>
         <div style={{ marginBottom: 16 }}>
           <Space>
             <CalendarOutlined />
@@ -1249,7 +1252,7 @@ export default function ListeningTrainingPage() {
             <Text type="secondary">暂无复习计划数据</Text>
           </div>
         )}
-      </Card>
+      </>
     </Spin>
   );
 

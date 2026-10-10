@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Tag, Space, Modal, Form, Input, Select, App } from 'antd';
+import { Table, Button, Tag, Space, Modal, Form, Input, Select, App } from 'antd';
 import { PlusOutlined, DeleteOutlined, TeamOutlined, PlayCircleOutlined, FlagOutlined, BarChartOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -235,9 +235,10 @@ export default function LabelingTasksPage() {
 
   return (
     <div>
-      <Card
-        title="打标作业"
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: 18 }}>打标作业</span>
+        <Space>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -245,8 +246,11 @@ export default function LabelingTasksPage() {
           >
             创建作业
           </Button>
-        }
-      >
+        </Space>
+      </div>
+
+      {/* 作业列表直接置于白色画布，不再套卡片外框 */}
+      <div className="table-responsive">
         <Table
           columns={columns}
           dataSource={tasks}
@@ -254,7 +258,7 @@ export default function LabelingTasksPage() {
           loading={loading}
           pagination={{ pageSize: 10 }}
         />
-      </Card>
+      </div>
 
       <Modal
         title="创建打标作业"

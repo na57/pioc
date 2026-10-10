@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Card,
   Table,
   Input,
   Select,
@@ -275,8 +274,9 @@ export default function CourseCenterPage() {
     <div>
       <Title level={isMobile ? 4 : 2}>课程中心</Title>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space orientation={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+      {/* 筛选栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
+        <Space orientation={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }} wrap>
           <Select
             value={courseType}
             onChange={handleCourseTypeChange}
@@ -363,30 +363,29 @@ export default function CourseCenterPage() {
             重置
           </Button>
         </Space>
-      </Card>
+      </div>
 
-      <Card styles={{ body: { padding: isMobile ? 0 : 24 } }}>
-        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
-          <Table
-            columns={columns}
-            dataSource={courses}
-            rowKey="kch"
-            loading={loading}
-            size={isMobile ? 'small' : 'middle'}
-            scroll={{ x: isMobile ? 400 : undefined }}
-            pagination={{
-              ...pagination,
-              size: isMobile ? 'small' : undefined,
-              showSizeChanger: !isMobile,
-              showQuickJumper: !isMobile,
-              showTotal: isMobile ? undefined : (total) => `共 ${total} 条记录`,
-              onChange: (page, pageSize) => {
-                setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 10 }));
-              },
-            }}
-          />
-        </div>
-      </Card>
+      {/* 表格直接置于白色画布，不再套卡片外框 */}
+      <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+        <Table
+          columns={columns}
+          dataSource={courses}
+          rowKey="kch"
+          loading={loading}
+          size={isMobile ? 'small' : 'middle'}
+          scroll={{ x: isMobile ? 400 : undefined }}
+          pagination={{
+            ...pagination,
+            size: isMobile ? 'small' : undefined,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
+            showTotal: isMobile ? undefined : (total) => `共 ${total} 条记录`,
+            onChange: (page, pageSize) => {
+              setPagination(prev => ({ ...prev, current: page, pageSize: pageSize || 10 }));
+            },
+          }}
+        />
+      </div>
     </div>
   );
 }

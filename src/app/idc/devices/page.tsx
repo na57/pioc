@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Space, Tag, Modal, Form, Input, InputNumber, Select, App } from 'antd';
+import { Table, Button, Space, Tag, Modal, Form, Input, InputNumber, Select, App } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
@@ -213,25 +213,27 @@ export default function DevicesPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Card
-        title="设备管理"
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: 16 }}>设备管理</span>
+        <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             设备上架
           </Button>
-        }
-      >
-        <Table
-          dataSource={devices}
-          columns={columns}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            ...pagination,
-            onChange: (page, pageSize) => setPagination({ current: page, pageSize: pageSize || 10, total: pagination.total }),
-          }}
-        />
-      </Card>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <Table
+        dataSource={devices}
+        columns={columns}
+        rowKey="id"
+        loading={loading}
+        pagination={{
+          ...pagination,
+          onChange: (page, pageSize) => setPagination({ current: page, pageSize: pageSize || 10, total: pagination.total }),
+        }}
+      />
 
       <Modal
         title={editingDevice ? '编辑设备' : '设备上架'}

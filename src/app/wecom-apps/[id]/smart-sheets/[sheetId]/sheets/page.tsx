@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  Card,
   Button,
   Space,
   Tag,
@@ -185,16 +184,16 @@ export default function SheetManagementPage() {
         </Title>
       </div>
 
-      {/* 操作栏 */}
-      <Card style={{ marginBottom: 16 }}>
+      {/* 操作工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
             新建工作表
           </Button>
         </Space>
-      </Card>
+      </div>
 
-      {/* 工作表列表 */}
+      {/* 工作表列表：表格直接置于白色画布，外层保留 Spin */}
       <Spin spinning={loading}>
         {sheets.length === 0 && !loading ? (
           <Empty description="暂无工作表" style={{ marginTop: 64 }} />

@@ -161,8 +161,8 @@ export default function WecomAppsPage() {
 
   return (
     <div>
-      {/* 筛选栏 */}
-      <Card style={{ marginBottom: 16 }}>
+      {/* 筛选工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <Space wrap>
           <Select
             placeholder="所属账号"
@@ -219,7 +219,7 @@ export default function WecomAppsPage() {
             新建应用
           </Button>
         </Space>
-      </Card>
+      </div>
 
       {/* 应用卡片列表 */}
       <Spin spinning={loading}>

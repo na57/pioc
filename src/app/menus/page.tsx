@@ -15,7 +15,6 @@ import {
   Select,
   TreeSelect,
   theme,
-  Card,
   Typography,
   Tooltip,
 } from 'antd';
@@ -361,28 +360,30 @@ export default function MenusPage() {
 
   return (
     <div>
-      <Card
-        title={<Title level={4} style={{ margin: 0 }}>菜单管理</Title>}
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <Title level={4} style={{ margin: 0 }}>菜单管理</Title>
+        <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             添加菜单组
           </Button>
-        }
-        variant="borderless"
-      >
-        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
-          菜单组用于组织菜单结构，可以包含子菜单组或应用。应用是从应用管理中选择的已有应用。
-        </Text>
-        <Table
-          columns={columns}
-          dataSource={treeData}
-          rowKey="key"
-          loading={loading}
-          pagination={false}
-          size="middle"
-          defaultExpandAllRows
-        />
-      </Card>
+        </Space>
+      </div>
+
+      <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+        菜单组用于组织菜单结构，可以包含子菜单组或应用。应用是从应用管理中选择的已有应用。
+      </Text>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <Table
+        columns={columns}
+        dataSource={treeData}
+        rowKey="key"
+        loading={loading}
+        pagination={false}
+        size="middle"
+        defaultExpandAllRows
+      />
 
       {/* 菜单组弹窗 */}
       <Modal

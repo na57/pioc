@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, Input, Select, Tag, Space, Tooltip, DatePicker, Switch, App } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, Tag, Space, Tooltip, DatePicker, Switch, App } from 'antd';
 import { PlusOutlined, CopyOutlined, DeleteOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import FriendlyTime from '@/components/FriendlyTime';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -260,10 +260,11 @@ export default function ApiKeysPage() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <Card
-        title="API密钥管理"
-        extra={
+    <div>
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontWeight: 500, fontSize: 16 }}>API密钥管理</span>
+        <Space>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -271,16 +272,17 @@ export default function ApiKeysPage() {
           >
             创建API密钥
           </Button>
-        }
-      >
-        <Table
-          columns={columns}
-          dataSource={keys}
-          loading={loading}
-          rowKey="id"
-          scroll={{ x: 1400 }}
-        />
-      </Card>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <Table
+        columns={columns}
+        dataSource={keys}
+        loading={loading}
+        rowKey="id"
+        scroll={{ x: 1400 }}
+      />
 
       {/* 创建密钥弹窗 */}
       <Modal

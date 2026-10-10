@@ -14,7 +14,6 @@ import {
   Select,
   App,
   Switch,
-  Card,
   Typography,
   Descriptions,
   Tooltip,
@@ -340,14 +339,27 @@ export default function DataSourcesPage() {
 
   return (
     <div>
-      <Card
-        title={<Title level={4} style={{ margin: 0 }}>数据源管理</Title>}
-        extra={
+      {/* 标题行：白色画布上不套卡片 */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <Title level={4} style={{ margin: 0 }}>数据源管理</Title>
+        <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             新增数据源
           </Button>
-        }
-      >
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive">
         <Table
           columns={columns}
           dataSource={dataSources}
@@ -356,7 +368,7 @@ export default function DataSourcesPage() {
           pagination={{ pageSize: 10 }}
           scroll={{ x: 700 }}
         />
-      </Card>
+      </div>
 
       {/* 新增/编辑数据源弹窗 */}
       <Modal

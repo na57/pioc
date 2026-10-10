@@ -8,7 +8,6 @@ import {
   Select,
   Button,
   Space,
-  Card,
   Tag,
   Avatar,
   App,
@@ -248,7 +247,8 @@ export default function TeacherCenterPage() {
 
   return (
     <div>
-      <Card style={{ marginBottom: 16 }}>
+      {/* 筛选栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <Space orientation="horizontal" size="middle" wrap>
           <Input
             placeholder="搜索姓名或工号"
@@ -298,7 +298,7 @@ export default function TeacherCenterPage() {
             搜索
           </Button>
         </Space>
-      </Card>
+      </div>
 
       <Table
         columns={columns}

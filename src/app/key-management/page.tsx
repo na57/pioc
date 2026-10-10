@@ -12,7 +12,6 @@ import {
   Select,
   App,
   Popconfirm,
-  Card,
   Typography,
   Tooltip,
   Descriptions,
@@ -300,23 +299,25 @@ export default function KeyManagementPage() {
 
   return (
     <div>
-      <Card
-        title={<Title level={4} style={{ margin: 0 }}>密钥管理</Title>}
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <Title level={4} style={{ margin: 0 }}>密钥管理</Title>
+        <Space>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             新增密钥
           </Button>
-        }
-      >
-        <Table
-          columns={columns}
-          dataSource={keys}
-          rowKey="id"
-          loading={loading}
-          pagination={{ pageSize: 10 }}
-          scroll={{ x: 800 }}
-        />
-      </Card>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <Table
+        columns={columns}
+        dataSource={keys}
+        rowKey="id"
+        loading={loading}
+        pagination={{ pageSize: 10 }}
+        scroll={{ x: 800 }}
+      />
 
       {/* 创建/编辑密钥模态框 */}
       <Modal

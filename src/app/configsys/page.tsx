@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Card, Button, Input, Table, Tag, Space, App, Modal, Form, Select } from 'antd';
+import { Button, Input, Table, Tag, Space, App, Modal, Form, Select } from 'antd';
 import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -323,19 +323,11 @@ export default function ConfigSysPage() {
   ];
 
   return (
-    <Card
-      title="配置管理"
-      extra={
+    <div>
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <span style={{ fontSize: 18 }}>配置管理</span>
         <Space>
-          <Search
-            placeholder="搜索配置名称"
-            allowClear
-            onSearch={(value) => {
-              setKeyword(value);
-              setPage(1);
-            }}
-            style={{ width: 250 }}
-          />
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -344,20 +336,36 @@ export default function ConfigSysPage() {
             新建配置
           </Button>
         </Space>
-      }
-    >
-      <Table
-        dataSource={configs}
-        columns={columns}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          current: page,
-          pageSize,
-          total,
-          onChange: (p) => setPage(p),
-        }}
-      />
+      </div>
+
+      {/* 筛选行 */}
+      <div style={{ marginBottom: 16 }}>
+        <Search
+          placeholder="搜索配置名称"
+          allowClear
+          onSearch={(value) => {
+            setKeyword(value);
+            setPage(1);
+          }}
+          style={{ width: 250 }}
+        />
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive">
+        <Table
+          dataSource={configs}
+          columns={columns}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            onChange: (p) => setPage(p),
+          }}
+        />
+      </div>
 
       <Modal
         title="新建配置"
@@ -570,6 +578,6 @@ export default function ConfigSysPage() {
           />
         </div>
       </Modal>
-    </Card>
+    </div>
   );
 }

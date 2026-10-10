@@ -946,8 +946,8 @@ export default function CourseDetailPage() {
               ),
               children: (
                 <Spin spinning={teachingClassesLoading}>
-                  {/* 筛选栏 */}
-                  <Card style={{ marginBottom: 16 }}>
+                  {/* 筛选栏：白色画布上不套卡片，控件自身边框即结构 */}
+                  <div style={{ marginBottom: 16 }}>
                     <Space wrap>
                       <Select
                         placeholder="选择学期"
@@ -979,7 +979,7 @@ export default function CourseDetailPage() {
                         重置筛选
                       </Button>
                     </Space>
-                  </Card>
+                  </div>
 
                   {/* 教学班表格 */}
                   <Table

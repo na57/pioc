@@ -228,25 +228,24 @@ export default function TaskResultsPage() {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card
-        title={
-          <Space>
-            <FlagOutlined />
-            <span>{task.name} - 打标结果</span>
-            {task.status === 1 ? (
-              <Badge status="processing" text="进行中" />
-            ) : (
-              <Badge status="default" text="已结束" />
-            )}
-          </Space>
-        }
-        extra={
+      {/* 标题行 + 操作：白色画布上不套卡片 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+        <Space>
+          <FlagOutlined />
+          <span style={{ fontSize: 18, fontWeight: 600 }}>{task.name} - 打标结果</span>
+          {task.status === 1 ? (
+            <Badge status="processing" text="进行中" />
+          ) : (
+            <Badge status="default" text="已结束" />
+          )}
+        </Space>
+        <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/labeling-tasks')}>
             返回列表
           </Button>
-        }
-      >
-        {task.description && (
+        </Space>
+      </div>
+      {task.description && (
           <div style={{ marginBottom: '16px' }}>
             <Text type="secondary">{task.description}</Text>
           </div>
@@ -312,8 +311,9 @@ export default function TaskResultsPage() {
           </Card>
         )}
 
-        {/* 打标结果列表 */}
-        <Card title="打标明细">
+        {/* 打标结果列表：裸标题行 + 裸表格，不再套卡片 */}
+        <div style={{ marginBottom: 16, fontSize: 16, fontWeight: 600 }}>打标明细</div>
+        <div className="table-responsive">
           <Table
             rowKey="id"
             columns={columns}
@@ -330,8 +330,7 @@ export default function TaskResultsPage() {
             }}
             scroll={{ x: 800 }}
           />
-        </Card>
-      </Card>
+        </div>
     </div>
   );
 }

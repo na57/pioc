@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  Card,
   Button,
   Table,
   Input,
@@ -293,9 +292,9 @@ export default function TagsPage() {
 
         {/* 右侧标签列表 */}
         <Col xs={24} sm={24} md={18} lg={19} xl={20}>
-          <Card>
-            {/* 筛选栏 */}
-            <Space wrap style={{ marginBottom: 16 }}>
+          {/* 筛选工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+          <div style={{ marginBottom: 16 }}>
+            <Space wrap>
               <Input
                 placeholder="搜索标签名称"
                 value={filters.name}
@@ -324,25 +323,25 @@ export default function TagsPage() {
                 新建标签
               </Button>
             </Space>
+          </div>
 
-            {/* 标签表格 */}
-            <Table
-              columns={columns}
-              dataSource={tags}
-              rowKey="id"
-              loading={loading}
-              pagination={{
-                current: pagination.page,
-                pageSize: pagination.pageSize,
-                total: pagination.total,
-                showSizeChanger: true,
-                showTotal: total => `共 ${total} 条`,
-                onChange: (page, pageSize) => {
-                  setPagination(prev => ({ ...prev, page, pageSize: pageSize || 20 }));
-                },
-              }}
-            />
-          </Card>
+          {/* 标签表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+          <Table
+            columns={columns}
+            dataSource={tags}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: pagination.page,
+              pageSize: pagination.pageSize,
+              total: pagination.total,
+              showSizeChanger: true,
+              showTotal: total => `共 ${total} 条`,
+              onChange: (page, pageSize) => {
+                setPagination(prev => ({ ...prev, page, pageSize: pageSize || 20 }));
+              },
+            }}
+          />
         </Col>
       </Row>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Space, Spin, Input, Tag, Typography, App } from 'antd';
+import { Table, Button, Space, Spin, Input, Tag, Typography, App } from 'antd';
 import { PlusOutlined, DeleteOutlined, ArrowLeftOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -166,54 +166,66 @@ export default function SharesPage() {
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card
-        title={
-          <Space>
-            <ShareAltOutlined />
-            <span>管理分享</span>
-            {dataSource && (
-              <Tag color="blue">
-                <DbIcon type={dataSource.type} />
-                {dataSource.name}
-              </Tag>
-            )}
-          </Space>
-        }
-        extra={
+      {/* 标题行：白色画布上不套卡片 */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 16,
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <Space>
+          <ShareAltOutlined />
+          <Text strong style={{ fontSize: 16 }}>管理分享</Text>
+          {dataSource && (
+            <Tag color="blue">
+              <DbIcon type={dataSource.type} />
+              {dataSource.name}
+            </Tag>
+          )}
+        </Space>
+        <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/data-sources')}>
             返回
           </Button>
-        }
-      >
-        {dataSource && (
-          <div style={{ marginBottom: '24px' }}>
-            <Text type="secondary">
-              创建者：<Tag color="green">{dataSource.creator_name}</Tag>
-            </Text>
-          </div>
-        )}
+        </Space>
+      </div>
 
-        <div style={{ marginBottom: '24px' }}>
-          <Space>
-            <Input
-              style={{ width: 300 }}
-              placeholder="输入用户ID或用户名进行分享"
-              value={targetUserId}
-              onChange={(e) => setTargetUserId(e.target.value)}
-              onPressEnter={handleAddShare}
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAddShare}
-              loading={adding}
-              disabled={!targetUserId}
-            >
-              添加
-            </Button>
-          </Space>
+      {dataSource && (
+        <div style={{ marginBottom: 16 }}>
+          <Text type="secondary">
+            创建者：<Tag color="green">{dataSource.creator_name}</Tag>
+          </Text>
         </div>
+      )}
 
+      {/* 添加分享控件行：白色画布上不套卡片 */}
+      <div style={{ marginBottom: 16 }}>
+        <Space>
+          <Input
+            style={{ width: 300 }}
+            placeholder="输入用户ID或用户名进行分享"
+            value={targetUserId}
+            onChange={(e) => setTargetUserId(e.target.value)}
+            onPressEnter={handleAddShare}
+          />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleAddShare}
+            loading={adding}
+            disabled={!targetUserId}
+          >
+            添加
+          </Button>
+        </Space>
+      </div>
+
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <div className="table-responsive">
         <Table
           columns={columns}
           dataSource={shares}
@@ -221,7 +233,7 @@ export default function SharesPage() {
           pagination={false}
           locale={{ emptyText: '暂无分享记录' }}
         />
-      </Card>
+      </div>
     </div>
   );
 }
