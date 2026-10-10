@@ -17,7 +17,7 @@ import { iconMapping } from '@/lib/icons';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSystemConfig } from '@/hooks/useSystemConfig';
 
-const { Header, Content, Footer } = Layout;
+const { Header, Content, Footer, Sider } = Layout;
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
@@ -43,6 +43,14 @@ interface MenuItem {
   children?: MenuItem[];
 }
 
+// 应用级菜单项（应用自己的侧边导航，与系统菜单相互独立）
+interface AppMenuItem {
+  id: number;
+  name: string;
+  path: string;
+  icon: string | null;
+}
+
 interface AppLayoutProps {
   children: React.ReactNode;
   title?: string;
@@ -56,7 +64,8 @@ function AppLayout({ children }: AppLayoutProps) {
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [menus, setMenus] = useState<MenuItem[]>([]);
-  const [allApps, setAllApps] = useState<{ name: string; url: string }[]>([]);
+  const [allApps, setAllApps] = useState<{ id: number; name: string; url: string }[]>([]);
+  const [appMenus, setAppMenus] = useState<AppMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuLoading, setMenuLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -105,15 +114,80 @@ function AppLayout({ children }: AppLayoutProps) {
 
   const fetchAllApps = async () => {
     try {
-      const response = await fetch('/api/apps');
+      // 使用当前用户有权限访问的应用列表（含 id，用于匹配应用级菜单）
+      const response = await fetch('/api/apps/my');
       const data = await response.json();
       if (data.success && Array.isArray(data.data)) {
-        setAllApps(data.data.map((app: { name: string; url: string }) => ({ name: app.name, url: app.url })));
+        setAllApps(
+          data.data.map((app: { id: number; name: string; url: string }) => ({
+            id: app.id,
+            name: app.name,
+            url: app.url,
+          }))
+        );
       }
     } catch {
       // 静默失败，不影响主流程
     }
   };
+
+  // Next.js 在同 pathname 仅 query 变化时不会重渲染本布局组件，
+  // 通过拦截 history.pushState/replaceState 并监听 popstate 感知 query 变化，
+  // 驱动应用级菜单高亮与 URL（含 ?tab=xxx）保持同步
+  const [currentSearch, setCurrentSearch] = useState('');
+
+  useEffect(() => {
+    const syncSearch = () => setCurrentSearch(window.location.search);
+    syncSearch();
+    const originalPush = history.pushState.bind(history);
+    const originalReplace = history.replaceState.bind(history);
+    history.pushState = (...args) => {
+      originalPush(...args);
+      syncSearch();
+    };
+    history.replaceState = (...args) => {
+      originalReplace(...args);
+      syncSearch();
+    };
+    window.addEventListener('popstate', syncSearch);
+    return () => {
+      history.pushState = originalPush;
+      history.replaceState = originalReplace;
+      window.removeEventListener('popstate', syncSearch);
+    };
+  }, []);
+
+  // 根据当前路径匹配所在应用（最长前缀优先）
+  const currentApp = React.useMemo(() => {
+    return (
+      [...allApps]
+        .filter((app) => app.url && app.url !== '/')
+        .sort((a, b) => b.url.length - a.url.length)
+        .find((app) => pathname === app.url || pathname.startsWith(app.url + '/')) ?? null
+    );
+  }, [allApps, pathname]);
+
+  // 加载当前应用的应用级菜单
+  useEffect(() => {
+    if (!currentApp) {
+      setAppMenus([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/apps/${currentApp.id}/menus`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) {
+          setAppMenus(data.success && Array.isArray(data.data) ? data.data : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAppMenus([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentApp?.id]);
 
   const handleLogout = async () => {
     try {
@@ -158,13 +232,12 @@ function AppLayout({ children }: AppLayoutProps) {
     });
   };
 
-  // 将菜单数据转换为 Ant Design Menu 组件需要的格式
+  // 将菜单数据转换为 Ant Design Menu 组件需要的格式（含 children 嵌套，横向菜单以下拉展示）
   const convertToMenuItems = (items: MenuItem[]): MenuProps['items'] => {
     const filteredItems = filterEmptyMenuGroups(items);
 
     return filteredItems.map(item => {
       const iconName = item.app_id && item.app_icon ? item.app_icon : item.icon;
-      const menuPath = item.app_id && item.app_url ? item.app_url : item.path;
       const menuItem: any = {
         key: `menu-${item.id}`,
         icon: iconName ? iconMapping[iconName] : null,
@@ -179,25 +252,24 @@ function AppLayout({ children }: AppLayoutProps) {
     });
   };
 
-  // 获取选中的菜单项
+  // 获取当前路由对应的菜单链（优先匹配最深层的菜单项）
   const getSelectedKeys = (): string[] => {
-    const keys: string[] = [];
-
     const findPath = (items: MenuItem[], parentKeys: string[] = []): string[] => {
       for (const item of items) {
         const currentKey = `menu-${item.id}`;
         const currentKeys = [...parentKeys, currentKey];
         const menuPath = item.app_id && item.app_url ? item.app_url : item.path;
 
-        if (menuPath && pathname.startsWith(menuPath)) {
-          return currentKeys;
-        }
-
+        // 先递归匹配子菜单，保证选中链到达最深的菜单项
         if (item.children) {
           const childKeys = findPath(item.children, currentKeys);
           if (childKeys.length > 0) {
             return childKeys;
           }
+        }
+
+        if (menuPath && menuPath !== '/' && pathname.startsWith(menuPath)) {
+          return currentKeys;
         }
       }
       return [];
@@ -208,20 +280,36 @@ function AppLayout({ children }: AppLayoutProps) {
 
   const handleNavClick = ({ key }: { key: string }) => {
     const menuId = key.replace('menu-', '');
-    const findMenuPath = (items: MenuItem[]): string | null => {
+    const findMenu = (items: MenuItem[]): MenuItem | null => {
       for (const item of items) {
         if (item.id.toString() === menuId) {
-          return item.app_id && item.app_url ? item.app_url : item.path;
+          return item;
         }
         if (item.children) {
-          const path = findMenuPath(item.children);
-          if (path) return path;
+          const found = findMenu(item.children);
+          if (found) return found;
         }
       }
       return null;
     };
 
-    const menuPath = findMenuPath(menus);
+    // 获取菜单项的有效跳转路径；纯分组项（自身无路径）跳转到第一个子菜单
+    const getEffectivePath = (item: MenuItem): string | null => {
+      if (item.children && item.children.length > 0) {
+        for (const child of item.children) {
+          const childPath = getEffectivePath(child);
+          if (childPath) return childPath;
+        }
+      }
+      const path = item.app_id && item.app_url ? item.app_url : item.path;
+      return path || null;
+    };
+
+    const menuItem = findMenu(menus);
+    if (!menuItem) return;
+
+    const directPath = menuItem.app_id && menuItem.app_url ? menuItem.app_url : menuItem.path;
+    const menuPath = directPath || getEffectivePath(menuItem);
     if (menuPath) {
       router.push(menuPath);
       setMobileMenuOpen(false); // 移动端关闭菜单
@@ -320,8 +408,50 @@ function AppLayout({ children }: AppLayoutProps) {
   };
 
   const navMenuItems = convertToMenuItems(menus);
-  const selectedKeys = getSelectedKeys();
+  const selectedChain = getSelectedKeys();
   const currentPageTitle = getCurrentPageTitle();
+
+  // 应用级侧边菜单（仅当前应用存在已启用菜单时显示）
+  const appMenuItems: MenuProps['items'] = appMenus.map((m) => ({
+    key: `app-menu-${m.id}`,
+    icon: m.icon ? iconMapping[m.icon] ?? null : null,
+    label: m.name,
+  }));
+
+  // 应用级菜单选中项：菜单路径可能带查询参数（如 /xxx?tab=stats），需与完整 URL 匹配
+  const appMenuSelectedKeys = (() => {
+    const params = new URLSearchParams(currentSearch);
+    // 带 query 的菜单项：pathname 一致且菜单 query 参数为 URL query 的子集
+    //（URL 可附加筛选参数，如 ?tab=assets&category=infrastructure 仍命中 ?tab=assets 菜单）
+    const queryMatch = appMenus.find((m) => {
+      if (!m.path.includes('?')) return false;
+      const [basePath, baseQuery = ''] = m.path.split('?');
+      if (basePath !== pathname) return false;
+      const menuParams = new URLSearchParams(baseQuery);
+      return [...menuParams.entries()].every(([k, v]) => params.get(k) === v);
+    });
+    if (queryMatch) return [`app-menu-${queryMatch.id}`];
+    // URL 带 tab 参数但无菜单项与之匹配时不高亮；
+    // 无 tab 参数时 query 视为页面筛选参数，按 pathname 匹配无 query 的菜单项
+    if (params.get('tab')) return [];
+    const plainMenus = appMenus.filter((m) => !m.path.includes('?'));
+    const exact = plainMenus.find((m) => m.path === pathname);
+    if (exact) return [`app-menu-${exact.id}`];
+    const prefix = plainMenus
+      .filter((m) => m.path !== '/' && pathname.startsWith(m.path + '/'))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    return prefix ? [`app-menu-${prefix.id}`] : [];
+  })();
+
+  const handleAppMenuClick = ({ key }: { key: string }) => {
+    const menuId = parseInt(key.replace('app-menu-', ''), 10);
+    const menu = appMenus.find((m) => m.id === menuId);
+    if (menu) {
+      router.push(menu.path);
+    }
+  };
+
+  const showSider = !isMobile && !!currentApp && appMenus.length > 0;
 
   // 设置浏览器标签页标题：应用名 - 系统名
   useEffect(() => {
@@ -388,7 +518,7 @@ function AppLayout({ children }: AppLayoutProps) {
                 onClick={() => setMobileMenuOpen(true)}
               />
             )}
-            {/* 品牌名：移动端为节省空间只显示当前应用名，隐藏品牌名 */}
+            {/* 品牌名：移动端为节省空间隐藏，仅显示当前应用名 */}
             {!isMobile && (
               <Title
                 level={4}
@@ -407,18 +537,18 @@ function AppLayout({ children }: AppLayoutProps) {
                 {systemConfig.name}
               </Title>
             )}
-            {/* 当前应用/菜单名，点击返回首页 */}
-            {currentPageTitle && (
+            {/* 移动端显示当前应用/菜单名，点击返回首页 */}
+            {isMobile && currentPageTitle && (
               <Text
                 strong
                 style={{
-                  fontSize: isMobile ? 15 : 16,
+                  fontSize: 15,
                   cursor: 'pointer',
-                  color: isMobile ? token.colorPrimary : token.colorText,
+                  color: token.colorPrimary,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  maxWidth: isMobile ? 160 : 240,
+                  maxWidth: 160,
                 }}
                 onClick={() => router.push('/dashboard')}
               >
@@ -426,17 +556,17 @@ function AppLayout({ children }: AppLayoutProps) {
               </Text>
             )}
 
-            {/* 桌面端导航菜单 */}
+            {/* 桌面端系统菜单：完整菜单树，下级菜单以下拉展示 */}
             {!isMobile && (
               menuLoading ? (
                 <Skeleton.Button active style={{ width: 400, height: 40 }} />
               ) : (
                 <Menu
                   mode="horizontal"
-                  selectedKeys={selectedKeys}
+                  selectedKeys={selectedChain}
                   items={navMenuItems}
                   onClick={handleNavClick}
-                  style={{ borderBottom: 'none', minWidth: 400, background: 'transparent', flex: 1 }}
+                  style={{ borderBottom: 'none', background: 'transparent', flex: 1, minWidth: 0 }}
                 />
               )
             )}
@@ -464,6 +594,51 @@ function AppLayout({ children }: AppLayoutProps) {
           </Space>
         </Header>
 
+        <Layout>
+          {/* 桌面端侧边栏：当前应用的应用级菜单（未配置则隐藏） */}
+          {showSider && currentApp && (
+            <Sider
+              width={208}
+              style={{
+                background: token.colorBgContainer,
+                borderRight: `1px solid ${token.colorBorderSecondary}`,
+                position: 'sticky',
+                top: 64,
+                height: 'calc(100vh - 64px)',
+                overflow: 'auto',
+              }}
+            >
+              <div style={{
+                padding: '16px 16px 12px',
+                borderBottom: `1px solid ${token.colorBorderSecondary}`,
+              }}>
+                <Text strong style={{ fontSize: 15 }}>{currentApp.name}</Text>
+              </div>
+              <Menu
+                mode="inline"
+                selectedKeys={appMenuSelectedKeys}
+                items={appMenuItems}
+                onClick={handleAppMenuClick}
+                style={{ borderInlineEnd: 'none', paddingTop: 8 }}
+              />
+            </Sider>
+          )}
+
+          <Content style={{
+            padding: getContentPadding(),
+            background: token.colorBgLayout,
+            minHeight: 'calc(100vh - 64px - 70px)',
+          }}>
+            <div style={{
+              maxWidth: getContentMaxWidth(),
+              margin: '0 auto',
+              width: '100%',
+            }}>
+              {children}
+            </div>
+          </Content>
+        </Layout>
+
         {/* 移动端抽屉菜单 */}
         <Drawer
           title="菜单导航"
@@ -480,27 +655,13 @@ function AppLayout({ children }: AppLayoutProps) {
           ) : (
             <Menu
               mode="inline"
-              selectedKeys={selectedKeys}
+              selectedKeys={selectedChain}
               items={navMenuItems}
               onClick={handleNavClick}
               style={{ borderRight: 'none' }}
             />
           )}
         </Drawer>
-
-        <Content style={{
-          padding: getContentPadding(),
-          background: token.colorBgLayout,
-          minHeight: 'calc(100vh - 64px - 70px)',
-        }}>
-          <div style={{
-            maxWidth: getContentMaxWidth(),
-            margin: '0 auto',
-            width: '100%',
-          }}>
-            {children}
-          </div>
-        </Content>
 
         <Footer style={{
           textAlign: 'center',

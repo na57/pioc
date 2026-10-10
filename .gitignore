@@ -149,3 +149,7 @@ scripts/build-itam-standard-pdf.py
 .workbuddy/memory/2026-09-26.md
 scripts/itam-batch-inspect.ts
 scripts/itam-stats.ts
+/.next.bak-20260926
+/.next.devcache-2
+/.workbuddy
+scripts/itam-compliance-stats.ts

@@ -96,6 +96,16 @@ export default function ItAssetCenterPage() {
   } | null>(null);
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
+  // URL 中的 tab 参数（侧边栏应用菜单切换、浏览器前进后退时同步激活的面板）
+  const urlTab = searchParams.get('tab');
+  useEffect(() => {
+    const params = searchParamsRef.current;
+    const hasAssetFilters = Boolean(
+      params.get('asset_type') || params.get('category') || params.get('system_id')
+    );
+    setActiveTab(params.get('tab') || (hasAssetFilters ? 'assets' : 'management'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
   // 合规巡检抽屉状态
   const [inspectionDrawer, setInspectionDrawer] = useState<{
     open: boolean;
@@ -587,13 +597,15 @@ export default function ItAssetCenterPage() {
       <Tabs
         defaultActiveKey="management"
         activeKey={activeTab}
+        // 导航已移至左侧应用菜单，隐藏页内 tab 栏
+        tabBarStyle={{ display: 'none' }}
         onChange={(key) => {
           setActiveTab(key);
           const newParams = new URLSearchParams(searchParams.toString());
-          if (key === 'assets' || key === 'graph') {
-            newParams.set('tab', key);
-          } else {
+          if (key === 'management') {
             newParams.delete('tab');
+          } else {
+            newParams.set('tab', key);
           }
           router.replace(`${pathname}?${newParams.toString()}`, { scroll: false });
         }}

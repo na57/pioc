@@ -323,8 +323,34 @@ function getAssetTypeLabel(type: string): string {
   return labels[type] || type;
 }
 
+/**
+ * 资产模型中自身定义了「责任人／所属部门」字段的资产类型。
+ *
+ * 只有这些类型的资产可以被逐资产判定责任归属；其余类型的资产不在模型中携带责任字段，
+ * 其责任由所属信息系统（或子系统）继承，不应在本层判定，否则会让大模型把"字段不存在"
+ * 误判为"责任人缺失"，产生大量假阳性。
+ *
+ * 若后续为更多资产类型补充责任字段，只需在此集合中登记即可。
+ */
+const ASSET_TYPES_WITH_OWNER_FIELD = new Set<AssetType>([
+  'physical_device',
+  'domain',
+  'microservice',
+]);
+
 function formatAssetDetail(asset: ITAsset): string {
   const parts: string[] = [];
+  const anyAsset = asset as any;
+
+  // 责任信息：模型中有该字段的类型，缺失时显式输出"未指定"，便于合规规则稳定判定；
+  // 其余类型若数据源实际带回了责任人，也一并输出。
+  if (ASSET_TYPES_WITH_OWNER_FIELD.has(asset.asset_type)) {
+    parts.push(`负责人: ${anyAsset.owner || '未指定'}`);
+    parts.push(`部门: ${anyAsset.department || '未指定'}`);
+  } else if (anyAsset.owner) {
+    parts.push(`负责人: ${anyAsset.owner}`);
+    if (anyAsset.department) parts.push(`部门: ${anyAsset.department}`);
+  }
 
   // 根据类型提取关键字段
   switch (asset.asset_type) {
