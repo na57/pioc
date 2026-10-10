@@ -6,7 +6,7 @@ import type { ButtonProps } from 'antd';
 
 interface ActionButtonProps extends Omit<ButtonProps, 'icon'> {
   icon: React.ReactNode;
-  tooltip?: string;
+  tooltip?: React.ReactNode;
   confirmTitle?: string;
   confirmDescription?: string;
   onConfirm?: () => void;

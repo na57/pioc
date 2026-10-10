@@ -78,6 +78,7 @@ export default function AIChatPanel({
   // 自定义样式
   cardStyle,
   messageContainerStyle,
+  borderless = false,
 }: AIChatPanelProps) {
   const { message } = App.useApp();
   const [inputMessage, setInputMessage] = useState('');
@@ -410,7 +411,14 @@ export default function AIChatPanel({
 
   return (
     <Card
-      style={{ height: 'auto', minHeight: 'auto', ...cardStyle }}
+      variant={borderless ? 'borderless' : 'outlined'}
+      style={{
+        height: 'auto',
+        minHeight: 'auto',
+        // 无边框模式：圆角裁剪内部灰色会话区，嵌入同色画布
+        ...(borderless ? { borderRadius: 8, overflow: 'hidden' } : {}),
+        ...cardStyle,
+      }}
       styles={{ body: { height: 'auto', padding: 0, display: 'flex', flexDirection: 'column' } }}
     >
       {/* 消息列表 */}

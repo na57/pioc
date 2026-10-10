@@ -137,17 +137,25 @@ function AppLayout({ children }: AppLayoutProps) {
   const [currentSearch, setCurrentSearch] = useState('');
 
   useEffect(() => {
-    const syncSearch = () => setCurrentSearch(window.location.search);
+    const syncSearch = () => {
+      const search = window.location.search;
+      // 同值不更新，避免无意义的重渲染
+      setCurrentSearch((prev) => (prev === search ? prev : search));
+    };
     syncSearch();
+    // history 方法可能在 React 提交阶段（含 antd cssinjs 的 useInsertionEffect）
+    // 被同步调用，此时不能在同一调用栈内 setState，否则报
+    // "useInsertionEffect must not schedule updates"，延迟到微任务中执行
+    const scheduleSync = () => window.queueMicrotask(syncSearch);
     const originalPush = history.pushState.bind(history);
     const originalReplace = history.replaceState.bind(history);
     history.pushState = (...args) => {
       originalPush(...args);
-      syncSearch();
+      scheduleSync();
     };
     history.replaceState = (...args) => {
       originalReplace(...args);
-      syncSearch();
+      scheduleSync();
     };
     window.addEventListener('popstate', syncSearch);
     return () => {
@@ -462,20 +470,12 @@ function AppLayout({ children }: AppLayoutProps) {
     }
   }, [currentPageTitle, systemConfig.name]);
 
-  // 响应式内容内边距
+  // 白色同色画布：内容填满宽度，仅保留少量呼吸边距（层级靠卡片发丝边框区分）
   const getContentPadding = () => {
-    if (isMobile) return '8px';
-    if (!screens.lg) return '16px';
-    return '24px 48px';
+    if (isMobile) return '12px';
+    return screens.lg ? '16px 24px' : '12px 16px';
   };
-
-  // 响应式内容最大宽度
-  const getContentMaxWidth = () => {
-    if (isMobile) return '100%';
-    if (!screens.lg) return '960px';
-    if (!screens.xl) return '1200px';
-    return '1400px';
-  };
+  const getContentMaxWidth = () => '100%';
 
   if (loading) {
     return (
@@ -500,7 +500,7 @@ function AppLayout({ children }: AppLayoutProps) {
           justifyContent: 'space-between',
           padding: isMobile ? '0 16px' : '0 24px',
           background: token.colorBgContainer,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
+          borderBottom: `1px solid ${token.colorBorderSecondary}`,
           position: 'sticky',
           top: 0,
           zIndex: 100,
@@ -666,6 +666,7 @@ function AppLayout({ children }: AppLayoutProps) {
         <Footer style={{
           textAlign: 'center',
           background: token.colorBgContainer,
+          borderTop: `1px solid ${token.colorBorderSecondary}`,
           padding: isMobile ? '16px' : '24px 50px',
           marginTop: 'auto',
         }}>

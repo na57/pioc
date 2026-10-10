@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Card,
   Table,
   Input,
   Button,
@@ -343,7 +342,8 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
     <div>
       {showTitle && null}
 
-      <Card style={{ marginBottom: 16 }}>
+      {/* 筛选工具栏：白色画布上不套卡片，控件自身边框即结构 */}
+      <div style={{ marginBottom: 16 }}>
         <Space orientation={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }} wrap>
           <FilterSelect
             value={selectedSystemId}
@@ -412,34 +412,33 @@ export default function AssetListPanel({ initialFilters, showTitle = false }: As
             重置
           </Button>
         </Space>
-      </Card>
+      </div>
 
-      <Card styles={{ body: { padding: isMobile ? 0 : 24 } }}>
-        <Spin spinning={loading} description="加载中...">
-          <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
-            <Table
-              columns={columns}
-              dataSource={assets}
-              rowKey="id"
-              loading={loading}
-              size={isMobile ? 'small' : 'middle'}
-              scroll={{ x: isMobile ? 500 : undefined }}
-              pagination={{
-                ...pagination,
-                size: isMobile ? 'small' : undefined,
-                showSizeChanger: !isMobile,
-                showQuickJumper: !isMobile,
-                showTotal: isMobile ? undefined : (total) => `共 ${total} 个资产`,
-                onChange: (page, pageSize) => {
-                  setPagination((prev) => ({ ...prev, current: page, pageSize: pageSize || 10 }));
-                  syncUrl({ page, pageSize: pageSize || 10 });
-                },
-              }}
-              locale={{ emptyText: <Empty description="暂无资产" /> }}
-            />
-          </div>
-        </Spin>
-      </Card>
+      {/* 表格直接置于白色画布：表头底色 + 行分隔线已足够，不再套卡片外框 */}
+      <Spin spinning={loading} description="加载中...">
+        <div className="table-responsive" style={{ margin: isMobile ? '-12px 0' : 0 }}>
+          <Table
+            columns={columns}
+            dataSource={assets}
+            rowKey="id"
+            loading={loading}
+            size={isMobile ? 'small' : 'middle'}
+            scroll={{ x: isMobile ? 500 : undefined }}
+            pagination={{
+              ...pagination,
+              size: isMobile ? 'small' : undefined,
+              showSizeChanger: !isMobile,
+              showQuickJumper: !isMobile,
+              showTotal: isMobile ? undefined : (total) => `共 ${total} 个资产`,
+              onChange: (page, pageSize) => {
+                setPagination((prev) => ({ ...prev, current: page, pageSize: pageSize || 10 }));
+                syncUrl({ page, pageSize: pageSize || 10 });
+              },
+            }}
+            locale={{ emptyText: <Empty description="暂无资产" /> }}
+          />
+        </div>
+      </Spin>
     </div>
   );
 }

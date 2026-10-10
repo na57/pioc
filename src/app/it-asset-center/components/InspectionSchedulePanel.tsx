@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Card,
   Table,
   Button,
   Space,
@@ -533,56 +532,52 @@ export default function InspectionSchedulePanel() {
 
   return (
     <div>
-      {/* 顶部操作栏 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Space orientation="horizontal" size={8}>
-              <FieldTimeOutlined style={{ fontSize: 18, color: '#1890ff' }} />
-              <Text strong style={{ fontSize: 16 }}>巡检计划管理</Text>
-              <Text type="secondary">
-                共 {total} 个计划
-              </Text>
-            </Space>
-          </Col>
-          <Col>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleOpenCreate}
-            >
-              创建巡检计划
-            </Button>
-          </Col>
-        </Row>
-      </Card>
+      {/* 顶部操作栏：白色画布上不套卡片 */}
+      <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+        <Col>
+          <Space orientation="horizontal" size={8}>
+            <FieldTimeOutlined style={{ fontSize: 18, color: '#1890ff' }} />
+            <Text strong style={{ fontSize: 16 }}>巡检计划管理</Text>
+            <Text type="secondary">
+              共 {total} 个计划
+            </Text>
+          </Space>
+        </Col>
+        <Col>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={handleOpenCreate}
+          >
+            创建巡检计划
+          </Button>
+        </Col>
+      </Row>
 
-      {/* 计划列表 */}
-      <Card styles={{ body: { padding: 24 } }}>
-        <Spin spinning={loading} description="加载中...">
-          <Table
-            columns={columns}
-            dataSource={schedules}
-            rowKey="id"
-            loading={loading}
-            size="middle"
-            scroll={{ x: 1100 }}
-            pagination={{
-              current: page,
-              pageSize,
-              total,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (t) => `共 ${t} 个计划`,
-              onChange: (p, ps) => {
-                setPage(p);
-                setPageSize(ps || 10);
-              },
-            }}
-            locale={{ emptyText: <Empty description="暂无巡检计划，点击上方按钮创建" /> }}
-          />
-        </Spin>
-      </Card>
+      {/* 计划列表直接置于白色画布，不再套卡片外框 */}
+      <Spin spinning={loading} description="加载中...">
+        <Table
+          columns={columns}
+          dataSource={schedules}
+          rowKey="id"
+          loading={loading}
+          size="middle"
+          scroll={{ x: 1100 }}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (t) => `共 ${t} 个计划`,
+            onChange: (p, ps) => {
+              setPage(p);
+              setPageSize(ps || 10);
+            },
+          }}
+          locale={{ emptyText: <Empty description="暂无巡检计划，点击上方按钮创建" /> }}
+        />
+      </Spin>
 
       {/* 创建/编辑弹窗 */}
       <Modal

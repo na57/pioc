@@ -110,6 +110,8 @@ export interface AIChatPanelProps {
   cardStyle?: React.CSSProperties;
   /** 消息列表容器样式 */
   messageContainerStyle?: React.CSSProperties;
+  /** 无边框模式：去除外层卡片边框，直接嵌入同色画布（扁平布局） */
+  borderless?: boolean;
 }
 
 export interface EntityCandidate {

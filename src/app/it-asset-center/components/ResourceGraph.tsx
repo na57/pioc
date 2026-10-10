@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
 import {
-  Card,
   Spin,
   Empty,
   App,
@@ -14,7 +13,7 @@ import {
   Space,
   Button,
 } from 'antd';
-import { FilterOutlined, FullscreenOutlined, ExpandOutlined, DownloadOutlined } from '@ant-design/icons';
+import { FilterOutlined, FullscreenOutlined, ExpandOutlined, DownloadOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ActionButton from '@/app/tags/components/ActionButton';
@@ -973,8 +972,18 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
   };
 
   return (
-    <Card
-      title={
+    <div>
+      {/* 图谱工具栏：白色画布上不套卡片，发丝底线分隔 */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+        paddingBottom: 12,
+        marginBottom: 12,
+        borderBottom: '1px solid #f0f0f0',
+      }}>
         <Space orientation="horizontal" size="middle" wrap>
           <span>资源图谱</span>
           {!loading && allTopSystems.length > 0 && (
@@ -1151,9 +1160,19 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
               }, 100);
             }}
           />
+          <ActionButton
+            icon={<QuestionCircleOutlined />}
+            tooltip={
+              <div style={{ maxWidth: 300, lineHeight: 1.9 }}>
+                <div><strong>顶部筛选</strong>：在右上角下拉框中按名称搜索并多选顶层信息系统，清空则显示全部</div>
+                <div><strong>点击节点</strong>：加载并展开其直接关联资源；再次点击已加载节点可折叠/展开</div>
+                <div><strong>拖拽节点</strong>：可自由拖动调整位置，松开后该节点将固定在新位置</div>
+                <div><strong>画布操作</strong>：按住空白处拖拽平移图谱，鼠标滚轮缩放视图</div>
+                <div><strong>悬停节点</strong>：高亮显示其所有邻接节点和关联关系</div>
+              </div>
+            }
+          />
         </Space>
-      }
-      extra={
         <Space orientation="horizontal" size="middle" wrap>
           <Select
             mode="multiple"
@@ -1224,10 +1243,8 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
             />
           )}
         </Space>
-      }
-      styles={{ body: { padding: 16 } }}
-    >
-        <Spin spinning={loading} description="加载信息系统中...">
+      </div>
+      <Spin spinning={loading} description="加载信息系统中...">
           {!loading && graphData.length === 0 ? (
             <Empty description="暂无信息系统数据" />
           ) : !loading && displaySystemCount === 0 ? (
@@ -1250,7 +1267,7 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
               <ReactECharts
                 ref={chartRef}
                 option={option}
-                style={{ height: '640px', width: '100%' }}
+                style={{ height: 'calc(100vh - 190px)', minHeight: 560, width: '100%' }}
                 onChartReady={onChartReady}
                 lazyUpdate={true}
                 notMerge={false}
@@ -1277,16 +1294,6 @@ export default function ResourceGraph({ focusSystem }: ResourceGraphProps) {
             </div>
           )}
         </Spin>
-        <div style={{ marginTop: 12, padding: '8px 12px', background: '#fafafa', borderRadius: 6 }}>
-          <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.8 }}>
-            💡 <strong>操作提示</strong>：<br />
-            · <strong>顶部筛选</strong>：在右上角下拉框中按名称搜索并多选顶层信息系统，清空则显示全部<br />
-            · 点击节点：加载并展开其直接关联资源；再次点击已加载节点可折叠/展开<br />
-            · 拖拽节点：可自由拖动调整位置，松开后该节点将固定在新位置<br />
-            · 画布操作：按住空白处拖拽平移整个图谱，鼠标滚轮缩放视图<br />
-            · 悬停节点：高亮显示其所有邻接节点和关联关系
-          </Text>
-        </div>
-    </Card>
+    </div>
   );
 }
