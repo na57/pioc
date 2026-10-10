@@ -1,26 +1,28 @@
+# 依赖安装阶段
+FROM node:22-alpine AS deps
+
+WORKDIR /app
+
+# 复制依赖文件并按 lockfile 安装（含开发依赖，构建阶段需要）
+COPY package*.json ./
+RUN npm ci
+
 # 构建阶段
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# 复制依赖文件
-COPY package*.json ./
-
-# 安装所有依赖（包括开发依赖，用于构建）
-RUN npm install
-
-# 复制源代码
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # 复制配置文件
 COPY config/config.yaml.example config/config.yaml
 
-# 构建应用
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 RUN npm run build
 
-# 生产阶段
+# 生产阶段：仅包含 Next.js standalone 产物，不含 npm 与开发依赖
 FROM node:22-alpine AS runner
 
 WORKDIR /app
@@ -30,40 +32,24 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV HOSTNAME="0.0.0.0"
 
-# 修复安全漏洞：更新 npm 内置的依赖包
-RUN cd /usr/local/lib/node_modules/npm/node_modules && \
-    npm pack brace-expansion@2.0.3 && \
-    npm pack picomatch@4.0.4 && \
-    npm pack ip-address@10.1.1 && \
-    npm pack @sigstore/core@3.2.1 && \
-    npm pack tar@7.5.19 && \
-    rm -rf brace-expansion picomatch ip-address @sigstore/core tar && \
-    mkdir -p brace-expansion picomatch ip-address @sigstore/core tar && \
-    tar -xzf brace-expansion-2.0.3.tgz -C brace-expansion --strip-components=1 && \
-    tar -xzf picomatch-4.0.4.tgz -C picomatch --strip-components=1 && \
-    tar -xzf ip-address-10.1.1.tgz -C ip-address --strip-components=1 && \
-    tar -xzf sigstore-core-3.2.1.tgz -C @sigstore/core --strip-components=1 && \
-    tar -xzf tar-7.5.19.tgz -C tar --strip-components=1 && \
-    rm -f *.tgz
+# 安全加固：
+# 1. 升级系统包（修复 zlib 等基础镜像 CVE）
+# 2. 安装 sharp/mongodb 运行时所需的最小原生库
+# 3. 删除基础镜像自带的 npm（standalone 以 node server.js 启动，无需 npm，
+#    同时消除 npm 内部依赖（pacote/tar/ip-address 等）的 Trivy 告警与攻击面）
+RUN apk upgrade --no-cache \
+    && apk add --no-cache libstdc++ \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-# 创建非root用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# 使用官方镜像内建的非 root 用户 node(uid 1000)
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/config ./config
 
-# 复制 package.json
-COPY --from=builder /app/package*.json ./
-
-# 复制 builder 阶段安装的生产依赖（不需要重新安装）
-COPY --from=builder /app/node_modules ./node_modules
-
-# 复制构建产物
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/config ./config
-
-# 切换到非root用户
-USER nextjs
+USER node
 
 EXPOSE 8080
 
-CMD ["npm", "start"]
+# 直接以 node 启动 standalone server，镜像内不依赖 npm
+CMD ["node", "server.js"]

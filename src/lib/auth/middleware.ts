@@ -57,11 +57,13 @@ export function createProtectedHandler(
 }
 
 // 创建带应用权限检查的保护处理器
+// 注意：Next.js 16.3+ 要求路由 handler 的 context.params 为必填的 Promise，
+// 因此返回函数的 context 类型必须声明为必填 params（Next 对无动态段路由也会传入空 params）
 export function createAppProtectedHandler(
   handler: (request: NextRequest, session: { userId: number; username: string; email: string; name: string }, params?: Promise<{ [key: string]: string }>) => Promise<NextResponse>,
   appUrl: string
 ) {
-  return async (request: NextRequest, { params }: { params?: Promise<{ [key: string]: string }> }) => {
+  return async (request: NextRequest, context: { params: Promise<{ [key: string]: string }> }) => {
     const session = await getSession();
 
     if (!session) {
@@ -80,7 +82,7 @@ export function createAppProtectedHandler(
       );
     }
 
-    return handler(request, session, params);
+    return handler(request, session, context?.params);
   };
 }
 

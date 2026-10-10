@@ -88,10 +88,10 @@ jobs:
           IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
           echo "Using image tag: $IMAGE_TAG"
           
-          # Pull and validate the image
+          # Pull and validate the image (standalone 镜像不含 npm，直接以 node 启动 server.js)
           docker pull $IMAGE_TAG
           docker run --rm $IMAGE_TAG node -v
-          docker run --rm $IMAGE_TAG npm -v
+          docker run --rm $IMAGE_TAG ls /app/server.js
           echo "Docker image validation successful"
 
       - name: Clean up Docker build cache
