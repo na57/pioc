@@ -50,6 +50,8 @@ export class YnuDataProvider implements IItAssetDataProvider {
   // API Token 缓存
   private accessToken: string | null = null;
   private tokenExpiresAt: number = 0;
+  // 信息系统 id -> 名称缓存（用于解析列表中的上级系统名称，随 provider 单例存活）
+  private systemNameCache = new Map<string, string>();
 
   // ============================================
   // 认证与通用请求
@@ -1886,12 +1888,55 @@ export class YnuDataProvider implements IItAssetDataProvider {
 
       let systems: InformationSystem[] = (result?.data || []).map((raw: any) => this.transformSystem(raw));
 
-      // 解析上级系统名称：通过 id -> name 映射表填充 parent_name
+      // 解析上级系统名称：
+      // 1) 本页数据构建 id -> name 映射，并顺带写入实例缓存（随翻页逐步补全）
+      // 2) 本页与缓存都未命中的父 id，用一次 WYBS in 批量查询补齐
+      // 3) 仍未命中时才回退显示 id
       if (systems.length > 0) {
-        const idToNameMap = new Map(systems.map((s) => [s.id, s.name]));
+        const idToNameMap = new Map<string, string>();
+        systems.forEach((s) => {
+          if (s.id && s.name) {
+            idToNameMap.set(s.id, s.name);
+            this.systemNameCache.set(s.id, s.name);
+          }
+        });
+
+        const missingParentIds = [
+          ...new Set(
+            systems
+              .map((s) => s.parent_id?.trim())
+              .filter(
+                (pid): pid is string =>
+                  !!pid && !idToNameMap.has(pid) && !this.systemNameCache.has(pid)
+              )
+          ),
+        ];
+
+        if (missingParentIds.length > 0) {
+          const parentList = await this.fetchList(
+            '/open_api/customization/tdwsgxggfwxxxtbaxxmx/full',
+            {
+              WYBS: { in: missingParentIds },
+              page: 1,
+              per_page: missingParentIds.length,
+            }
+          );
+          parentList.forEach((raw: any) => {
+            const pid = String(raw.WYBS ?? raw.wybs ?? '').trim();
+            const pname = raw.XXXTMC ?? raw.xxxtmc;
+            if (pid && pname) {
+              this.systemNameCache.set(pid, pname);
+            }
+          });
+        }
+
         systems = systems.map((s) => ({
           ...s,
-          parent_name: s.parent_id ? idToNameMap.get(s.parent_id) || s.parent_id : undefined,
+          parent_name: s.parent_id
+            ? idToNameMap.get(s.parent_id) ||
+              this.systemNameCache.get(s.parent_id) ||
+              s.parent_id
+            : undefined,
         }));
       }
 
@@ -1955,20 +2000,32 @@ export class YnuDataProvider implements IItAssetDataProvider {
       const list = result?.data || [];
       const system = list[0] ? this.transformSystem(list[0]) : null;
 
-      // 解析上级系统名称
+      // 自身写入名称缓存
+      if (system?.id && system.name) {
+        this.systemNameCache.set(system.id, system.name);
+      }
+
+      // 解析上级系统名称：优先读缓存，未命中再查询并回填缓存
       if (system?.parent_id) {
-        try {
-          const parentResult = await this.callApi('/open_api/customization/tdwsgxggfwxxxtbaxxmx/full', {
-            WYBS: system.parent_id,
-            page: 1,
-            per_page: 1,
-          });
-          const parentData = parentResult?.data?.[0];
-          if (parentData) {
-            system.parent_name = parentData.XXXTMC ?? parentData.xxxtmc ?? system.parent_id;
+        const cachedParentName = this.systemNameCache.get(system.parent_id);
+        if (cachedParentName) {
+          system.parent_name = cachedParentName;
+        } else {
+          try {
+            const parentResult = await this.callApi('/open_api/customization/tdwsgxggfwxxxtbaxxmx/full', {
+              WYBS: system.parent_id,
+              page: 1,
+              per_page: 1,
+            });
+            const parentData = parentResult?.data?.[0];
+            const parentName = parentData?.XXXTMC ?? parentData?.xxxtmc;
+            if (parentData && parentName) {
+              system.parent_name = parentName;
+              this.systemNameCache.set(system.parent_id, parentName);
+            }
+          } catch {
+            // 静默失败，parent_name 保持为 ID
           }
-        } catch {
-          // 静默失败，parent_name 保持为 ID
         }
       }
 
