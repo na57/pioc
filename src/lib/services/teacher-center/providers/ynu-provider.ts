@@ -73,6 +73,10 @@ export class YnuDataProvider implements ITeacherDataProvider {
   // API Token 缓存
   private accessToken: string | null = null;
   private tokenExpiresAt: number = 0;
+  // 进行中的 Token 请求（单飞锁，避免并发请求各自获取 token 导致旧 token 被顶掉）
+  private tokenRequest: Promise<string> | null = null;
+  // 进行中的教师全量基础信息请求（departments/statuses 共用，避免并发重复拉取 10000 条）
+  private baseListRequest: Promise<any[]> | null = null;
 
   // ============================================
   // API 方法
@@ -81,14 +85,20 @@ export class YnuDataProvider implements ITeacherDataProvider {
   /**
    * 获取 Access Token
    * 调用其他接口前需要先获取 token，有效期 7200 秒
+   * @param forceRefresh 强制重新获取（用于业务请求因 token 失效失败后的重试场景）
    */
-  private async getAccessToken(): Promise<string> {
-    // 检查缓存的 token 是否有效（提前 60 秒过期）
-    if (this.accessToken && Date.now() < this.tokenExpiresAt - 60000) {
+  private async getAccessToken(forceRefresh = false): Promise<string> {
+    // 已有进行中的 token 请求时直接复用（强制刷新场景也不例外），防止并发重复获取
+    if (this.tokenRequest) {
+      return this.tokenRequest;
+    }
+
+    // 非强制刷新时，检查缓存的 token 是否有效（提前 60 秒过期）
+    if (!forceRefresh && this.accessToken && Date.now() < this.tokenExpiresAt - 60000) {
       return this.accessToken;
     }
 
-    try {
+    this.tokenRequest = (async () => {
       const response = await fetch(
         `${API_BASE_URL}/open_api/authentication/get_access_token?key=${API_KEY}&secret=${API_SECRET}`,
         {
@@ -106,17 +116,21 @@ export class YnuDataProvider implements ITeacherDataProvider {
       const data = await response.json();
 
       if (data.code !== 10000) {
-        throw new Error(`获取 Token 失败: ${data.message || data.description}`);
+        throw new Error(`获取 Token 失败 [code=${data.code}]: ${data.message || data.description}`);
       }
 
       this.accessToken = data.result.access_token;
       // 设置过期时间（毫秒）
-      this.tokenExpiresAt = Date.now() + parseInt(data.result.expires_in) * 1000;
+      this.tokenExpiresAt = Date.now() + parseInt(data.result.expires_in, 10) * 1000;
 
       return this.accessToken ?? '';
-    } catch (error) {
-      console.error('获取 Access Token 失败:', error);
-      throw error;
+    })();
+
+    try {
+      return await this.tokenRequest;
+    } finally {
+      // 无论成功失败都清空单飞锁：成功后走 token 缓存，失败后允许下次重新获取
+      this.tokenRequest = null;
     }
   }
 
@@ -124,9 +138,14 @@ export class YnuDataProvider implements ITeacherDataProvider {
    * 调用数据中台 API
    * @param endpoint API 端点路径
    * @param params 查询参数（作为 body 传递）
+   * @param allowTokenRetry 鉴权失败时是否允许刷新 token 后重试一次（内部使用，防止无限重试）
    * @returns API 响应数据
    */
-  private async callApi(endpoint: string, params?: Record<string, unknown>): Promise<any> {
+  private async callApi(
+    endpoint: string,
+    params?: Record<string, unknown>,
+    allowTokenRetry = true
+  ): Promise<any> {
     const token = await this.getAccessToken();
 
     const url = new URL(`${API_BASE_URL}${endpoint}`);
@@ -150,18 +169,41 @@ export class YnuDataProvider implements ITeacherDataProvider {
       body: JSON.stringify(filteredParams),
     });
 
-    if (!response.ok) {
-      throw new Error(`API 调用失败: ${response.status} ${response.statusText}`);
+    // 网关偶发返回 HTML 错误页（502/限流等），先取文本再解析，失败时短暂等待后重试一次
+    const rawText = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      if (allowTokenRetry) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        return this.callApi(endpoint, params, false);
+      }
+      throw new Error(
+        `API 返回非 JSON 响应 [HTTP ${response.status}]: ${rawText.slice(0, 200)}`
+      );
     }
 
-    const data = await response.json();
+    if (!response.ok) {
+      // 401/403 通常是 token 失效：强制刷新 token 后重试一次
+      if (allowTokenRetry && (response.status === 401 || response.status === 403)) {
+        await this.getAccessToken(true);
+        return this.callApi(endpoint, params, false);
+      }
+      throw new Error(`API 调用失败: ${response.status} ${response.statusText}`);
+    }
 
     if (data.code !== 10000) {
       // 查询结果为空（20013 Records not found）不算错误，视为空结果返回
       if (Number(data.code) === 20013) {
         return { data: [], total: 0 };
       }
-      throw new Error(`API 返回错误: ${data.message || data.description}`);
+      // 其他错误码（最常见的是 token 过期/失效）：强制刷新 token 后重试一次
+      if (allowTokenRetry) {
+        await this.getAccessToken(true);
+        return this.callApi(endpoint, params, false);
+      }
+      throw new Error(`API 返回错误 [code=${data.code}]: ${data.message || data.description}`);
     }
 
     return data.result;
@@ -222,67 +264,31 @@ export class YnuDataProvider implements ITeacherDataProvider {
 
     try {
       const trimmedKeyword = keyword?.trim();
-      const commonParams: Record<string, unknown> = {
+      const queryParams: Record<string, unknown> = {
         DWH: department || undefined,
         DQZTM: status || undefined,
+        page,
+        per_page: pageSize,
       };
 
-      let teachers: Teacher[] = [];
-
+      // 数据中台对字段直接传值是精确匹配语义，模糊查询必须显式使用 like 操作符；
+      // 姓名与工号之间为 OR 关系，与部门/状态等顶层筛选条件按 AND 组合（已实测验证）
       if (trimmedKeyword) {
-        // 分别按工号和姓名查询，合并结果（单个查询无结果属于正常情况，使用 fetchList 吞掉异常）
-        const byGhTeachersRaw = await this.fetchList('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
-          ...commonParams,
-          GH: trimmedKeyword,
-          page: 1,
-          per_page: 100,
-        });
-        const byXmTeachersRaw = await this.fetchList('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
-          ...commonParams,
-          XM: trimmedKeyword,
-          page: 1,
-          per_page: 100,
-        });
-
-        const byGhTeachers = byGhTeachersRaw.map(this.transformTeacher);
-        const byXmTeachers = byXmTeachersRaw.map(this.transformTeacher);
-
-        // 按工号去重合并
-        const teacherMap = new Map<string, Teacher>();
-        [...byGhTeachers, ...byXmTeachers].forEach((t) => {
-          if (t.gh) {
-            teacherMap.set(t.gh, t);
-          }
-        });
-        teachers = Array.from(teacherMap.values());
-      } else {
-        // 无关键词时正常分页查询
-        const result = await this.callApi('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
-          ...commonParams,
-          page,
-          per_page: pageSize,
-        });
-        teachers = (result.data || []).map(this.transformTeacher);
+        queryParams.or = [
+          { XM: { like: `%${trimmedKeyword}%` } },
+          { GH: { like: `%${trimmedKeyword}%` } },
+        ];
       }
 
-      // 本地过滤（确保包含 keyword）
-      let filteredTeachers = teachers;
-      if (trimmedKeyword) {
-        const lowerKeyword = trimmedKeyword.toLowerCase();
-        filteredTeachers = teachers.filter((t: Teacher) =>
-          t.xm?.toLowerCase().includes(lowerKeyword) ||
-          t.gh?.toLowerCase().includes(lowerKeyword)
-        );
-      }
-
-      // 有关键词时在合并结果上重新分页
-      const finalTeachers = trimmedKeyword
-        ? filteredTeachers.slice((page - 1) * pageSize, page * pageSize)
-        : filteredTeachers;
+      const result = await this.callApi(
+        '/open_api/customization/tdwsgxjgjzgjbxxmx/full',
+        queryParams
+      );
+      const teachers = (result.data || []).map(this.transformTeacher);
 
       return {
-        data: finalTeachers,
-        total: filteredTeachers.length,
+        data: teachers,
+        total: parseInt(result.total, 10) || 0,
       };
     } catch (error) {
       console.error('查询教师列表失败:', error);
@@ -400,15 +406,36 @@ export class YnuDataProvider implements ITeacherDataProvider {
   // ============================================
 
   /**
+   * 拉取教师全量基础信息（in-flight 去重）
+   * 部门列表和状态列表都基于同一份全量数据提取，页面加载时两个请求并发到达，
+   * 共享同一个进行中的请求，避免向数据中台并发发起两次 per_page=10000 的大查询。
+   * 不做长期缓存，请求结束后即释放，下次调用重新拉取。
+   */
+  private fetchAllTeacherBaseInfo(): Promise<any[]> {
+    if (!this.baseListRequest) {
+      const request = this.callApi(
+        '/open_api/customization/tdwsgxjgjzgjbxxmx/full',
+        { page: 1, per_page: 10000 }
+      ).then((result) => result?.data || []);
+
+      this.baseListRequest = request;
+      // 完成后释放 in-flight 标记（成功/失败都允许下次重新发起）
+      request.finally(() => {
+        if (this.baseListRequest === request) {
+          this.baseListRequest = null;
+        }
+      });
+    }
+
+    return this.baseListRequest;
+  }
+
+  /**
    * 查询部门列表（用于筛选）
    */
   async queryDepartments(): Promise<Department[]> {
     try {
-      const result = await this.callApi('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
-        page: 1,
-        per_page: 10000,
-      });
-      const list = result?.data || [];
+      const list = await this.fetchAllTeacherBaseInfo();
       const departmentMap = new Map<string, Department>();
 
       list.forEach((raw: any) => {
@@ -433,11 +460,7 @@ export class YnuDataProvider implements ITeacherDataProvider {
    */
   async queryStatuses(): Promise<Status[]> {
     try {
-      const result = await this.callApi('/open_api/customization/tdwsgxjgjzgjbxxmx/full', {
-        page: 1,
-        per_page: 10000,
-      });
-      const list = result?.data || [];
+      const list = await this.fetchAllTeacherBaseInfo();
       const statusMap = new Map<string, Status>();
 
       list.forEach((raw: any) => {
