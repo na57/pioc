@@ -22,13 +22,11 @@ import {
   DeleteOutlined,
   LockOutlined,
   AppstoreOutlined,
-  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { iconMapping, iconOptions, useIcons } from '@/lib/icons';
 import type { TableProps } from 'antd';
 import FriendlyTime from '@/components/FriendlyTime';
 import ActionButton from '@/app/tags/components/ActionButton';
-import AppMenusDrawer from './components/AppMenusDrawer';
 
 const { useBreakpoint } = Grid;
 
@@ -69,7 +67,6 @@ export default function AppsPage() {
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingApp, setEditingApp] = useState<App | null>(null);
-  const [menusApp, setMenusApp] = useState<App | null>(null);
   const [form] = Form.useForm();
   const { token } = theme.useToken();
   const { getIcon } = useIcons();
@@ -216,14 +213,9 @@ export default function AppsPage() {
     {
       title: '操作',
       key: 'action',
-      width: 130,
+      width: 100,
       render: (_, record) => (
         <Space size="small">
-          <ActionButton
-            icon={<UnorderedListOutlined />}
-            tooltip="应用菜单"
-            onClick={() => setMenusApp(record)}
-          />
           <ActionButton
             icon={<EditOutlined />}
             tooltip="编辑"
@@ -316,11 +308,6 @@ export default function AppsPage() {
           </Form.Item>
         </Form>
       </Modal>
-      <AppMenusDrawer
-        open={!!menusApp}
-        app={menusApp}
-        onClose={() => setMenusApp(null)}
-      />
     </div>
   );
 }

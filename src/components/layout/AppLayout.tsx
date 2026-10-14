@@ -14,6 +14,7 @@ import {
   MenuOutlined,
 } from '@ant-design/icons';
 import { iconMapping } from '@/lib/icons';
+import { getAppSideMenus, type AppSideMenu } from '@/lib/app-menus';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSystemConfig } from '@/hooks/useSystemConfig';
 
@@ -43,14 +44,6 @@ interface MenuItem {
   children?: MenuItem[];
 }
 
-// 应用级菜单项（应用自己的侧边导航，与系统菜单相互独立）
-interface AppMenuItem {
-  id: number;
-  name: string;
-  path: string;
-  icon: string | null;
-}
-
 interface AppLayoutProps {
   children: React.ReactNode;
   title?: string;
@@ -65,7 +58,6 @@ function AppLayout({ children }: AppLayoutProps) {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [allApps, setAllApps] = useState<{ id: number; name: string; url: string }[]>([]);
-  const [appMenus, setAppMenus] = useState<AppMenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuLoading, setMenuLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -175,27 +167,8 @@ function AppLayout({ children }: AppLayoutProps) {
     );
   }, [allApps, pathname]);
 
-  // 加载当前应用的应用级菜单
-  useEffect(() => {
-    if (!currentApp) {
-      setAppMenus([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/apps/${currentApp.id}/menus`)
-      .then((response) => response.json())
-      .then((data) => {
-        if (!cancelled) {
-          setAppMenus(data.success && Array.isArray(data.data) ? data.data : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAppMenus([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentApp?.id]);
+  // 当前应用的侧边菜单：代码内置（src/lib/app-menus.ts），未注册的应用返回空数组
+  const appMenus: AppSideMenu[] = getAppSideMenus(currentApp?.url);
 
   const handleLogout = async () => {
     try {
@@ -419,9 +392,9 @@ function AppLayout({ children }: AppLayoutProps) {
   const selectedChain = getSelectedKeys();
   const currentPageTitle = getCurrentPageTitle();
 
-  // 应用级侧边菜单（仅当前应用存在已启用菜单时显示）
+  // 应用级侧边菜单（当前应用在代码中注册了菜单时显示），key 直接使用菜单路径
   const appMenuItems: MenuProps['items'] = appMenus.map((m) => ({
-    key: `app-menu-${m.id}`,
+    key: m.path,
     icon: m.icon ? iconMapping[m.icon] ?? null : null,
     label: m.name,
   }));
@@ -438,24 +411,23 @@ function AppLayout({ children }: AppLayoutProps) {
       const menuParams = new URLSearchParams(baseQuery);
       return [...menuParams.entries()].every(([k, v]) => params.get(k) === v);
     });
-    if (queryMatch) return [`app-menu-${queryMatch.id}`];
+    if (queryMatch) return [queryMatch.path];
     // URL 带 tab 参数但无菜单项与之匹配时不高亮；
     // 无 tab 参数时 query 视为页面筛选参数，按 pathname 匹配无 query 的菜单项
     if (params.get('tab')) return [];
     const plainMenus = appMenus.filter((m) => !m.path.includes('?'));
     const exact = plainMenus.find((m) => m.path === pathname);
-    if (exact) return [`app-menu-${exact.id}`];
+    if (exact) return [exact.path];
     const prefix = plainMenus
       .filter((m) => m.path !== '/' && pathname.startsWith(m.path + '/'))
       .sort((a, b) => b.path.length - a.path.length)[0];
-    return prefix ? [`app-menu-${prefix.id}`] : [];
+    return prefix ? [prefix.path] : [];
   })();
 
   const handleAppMenuClick = ({ key }: { key: string }) => {
-    const menuId = parseInt(key.replace('app-menu-', ''), 10);
-    const menu = appMenus.find((m) => m.id === menuId);
-    if (menu) {
-      router.push(menu.path);
+    // key 即菜单路径（见 appMenuItems）
+    if (appMenus.some((m) => m.path === key)) {
+      router.push(key);
     }
   };
 
