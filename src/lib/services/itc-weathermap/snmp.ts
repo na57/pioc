@@ -42,6 +42,8 @@ export interface VarBind {
   oid: string;
   tag: number;
   num: number;
+  /** Counter64 的精确值（num 超过 2^53 时会丢精度，计数器差分必须用 big） */
+  big?: bigint;
   str: string;
   isStr: boolean;
   missing: boolean;
@@ -286,8 +288,17 @@ export class SNMPClient {
   }
 
   private decUint(b: Buffer): number {
+    // 不能用位移：<< 会把结果强制成 32 位有符号整数，Counter32 超过 2^31 时会变负数
     let v = 0;
-    for (const x of b) v = (v << 8) | x;
+    for (const x of b) v = v * 256 + x;
+    return v;
+  }
+
+  /** Counter64 精确解码（最多 8 字节无符号） */
+  private decBigUint(b: Buffer): bigint {
+    let v = BigInt(0);
+    const base = BigInt(256);
+    for (const x of b) v = v * base + BigInt(x);
     return v;
   }
 
@@ -415,9 +426,14 @@ export class SNMPClient {
           case TAG_COUNTER32:
           case TAG_GAUGE32:
           case TAG_TIMETICKS:
-          case TAG_COUNTER64:
             v.num = this.decUint(valTLV.content);
             break;
+          case TAG_COUNTER64: {
+            const big = this.decBigUint(valTLV.content);
+            v.big = big;
+            v.num = Number(big);
+            break;
+          }
           case TAG_OCTET_STRING:
             v.str = valTLV.content.toString('utf-8');
             v.isStr = true;

@@ -13,7 +13,7 @@
  * - 预热期结束或已有流量数据后切换到正常周期轮询，失败设备每轮继续重连。
  */
 
-import { SNMPClient, OID_IF_NAME, OID_HC_IN, OID_HC_OUT, OID_HIGH_SPEED, OID_OPER_STATUS } from './snmp';
+import { SNMPClient, VarBind, OID_IF_NAME, OID_HC_IN, OID_HC_OUT, OID_HIGH_SPEED, OID_OPER_STATUS } from './snmp';
 import {
   loadYamlConfig,
   getLinksForView,
@@ -64,16 +64,50 @@ const MAX_WARMUP_ROUNDS = 4; // 预热轮最多次数（5/10/15/20s）
 const FIRST_PROBE_TIMEOUT_MS = 1200; // 首轮快速探测：短超时、0 重试
 const REQUEST_TIMEOUT_MS = 1500; // 常规请求超时（重试 1 次，最差 3s）
 
+// HCI（浪潮 CN9300H）聚合口按协商速率归类的阈值（Mbps）
+const HCI_PEER_SPEED_MIN = 80000; // ≥80G：交换机间集群互联（agg55）
+const HCI_UPLINK_SPEED_MIN = 10000; // 10G：上联核心（agg48）
+const HCI_DOWN_SPEED_MIN = 10000; // 其余 ≥10G：下行服务器（25G agg）
+
+/** Counter64 差分异常上限（超过视为计数器回绕/重置，该轮速率记 0） */
+const COUNTER_DELTA_MAX = BigInt('4600000000000000000');
+
+/** 取 VarBind 的 64 位无符号计数器值；缺失返回 null */
+function counterOf(vb: VarBind | undefined): bigint | null {
+  if (!vb || vb.missing) return null;
+  return vb.big ?? BigInt(vb.num);
+}
+
+/** 两次采样的字节差分转 bps（number），回绕/负值/异常跳变归零 */
+function deltaToBps(cur: bigint, prev: bigint, dt: number): number {
+  const d = cur - prev;
+  if (d < BigInt(0) || d > COUNTER_DELTA_MAX) return 0;
+  return (Number(d) * 8) / dt;
+}
+
 // ========== 运行时状态（按视图隔离） ==========
+
+/**
+ * HCI 视图逻辑链路 → 真实聚合口（aggN）的映射。
+ * 一条逻辑链路可能由多个聚合口承载（下行 = 多个 25G agg 之和）。
+ */
+interface LogicalPort {
+  key: string; // 对应 topology.ts 中的逻辑键，如 uplink:sw10 / down:sw10 / peerlink:sw10
+  name: string; // 展示名（参与的 agg 名）
+  ifIndices: number[]; // 承载该逻辑链路的聚合口 ifIndex
+  speed: number; // 协商速率之和（Mbps），用于利用率分母
+}
 
 interface DeviceRuntime {
   config: DeviceConfig;
   client: SNMPClient;
   connected: boolean;
   discovered: boolean;
-  ifIndexMap: Map<string, number>; // 端口key -> ifIndex
-  ifNameMap: Map<string, string>; // 端口key -> ifName
-  prevCounters: Map<string, { in: number; out: number }>;
+  ifIndexMap: Map<string, number>; // core 视图：端口key -> ifIndex
+  ifNameMap: Map<string, string>; // core 视图：端口key -> ifName
+  prevCounters: Map<string, { in: bigint; out: bigint }>;
+  logicalPorts: LogicalPort[]; // HCI 视图：逻辑链路映射
+  aggPrev: Map<number, { in: bigint; out: bigint }>; // HCI 视图：聚合口计数器基线
 }
 
 interface ViewRuntime {
@@ -154,6 +188,8 @@ export async function initializeCollector(viewId: string = 'core', force: boolea
         ifIndexMap: new Map(),
         ifNameMap: new Map(),
         prevCounters: new Map(),
+        logicalPorts: [],
+        aggPrev: new Map(),
       };
     });
 
@@ -313,7 +349,7 @@ async function collectView(viewId: string, firstRound: boolean): Promise<void> {
   const now = new Date();
   const dt = rt.prevTime ? (now.getTime() - rt.prevTime.getTime()) / 1000 : 0;
   const collected = await Promise.all(
-    reachable.map((d) => collectDevice(d, links, dt).catch((err) => {
+    reachable.map((d) => collectDevice(viewId, d, links, dt).catch((err) => {
       console.warn(`[ITCWeathermap:${viewId}] 设备 ${d.config.ip} 采集失败:`, err);
       return null;
     })),
@@ -333,7 +369,7 @@ async function collectView(viewId: string, firstRound: boolean): Promise<void> {
     missing.push(...result.missing);
   }
 
-  // 没有发现任何端口（如 HCI 视图的逻辑口尚未映射到真实 BAGG 口）不算错误
+  // 没有任何可用端口数据时不标记 ready（等待下一轮发现/恢复）
   const noPorts = portData.size === 0;
   rt.snapshot = {
     ready: !noPorts,
@@ -360,18 +396,28 @@ async function probeDevice(
   fast: boolean,
 ): Promise<boolean> {
   const opts = fast ? { timeout: FIRST_PROBE_TIMEOUT_MS, retries: 0, noFallback: true } : undefined;
+  const isHci = viewId === 'hyperconverged';
   try {
-    await discoverPorts(d, links, opts);
-    if (d.ifIndexMap.size === 0) throw new Error('未发现任何目标端口');
+    if (isHci) {
+      await discoverHciPorts(d, opts);
+    } else {
+      await discoverCorePorts(d, links, opts);
+      if (d.ifIndexMap.size === 0) throw new Error('未发现任何目标端口');
+    }
     d.connected = true;
     d.discovered = true;
-    console.log(`[ITCWeathermap:${viewId}] 设备已连接: ${d.config.ip} (${d.config.name})，发现端口 ${d.ifIndexMap.size} 个`);
+    const found = isHci
+      ? d.logicalPorts.map((lp) => `${lp.key}(${lp.ifIndices.length}口)`)
+      : [...d.ifIndexMap.keys()];
+    console.log(`[ITCWeathermap:${viewId}] 设备已连接: ${d.config.ip} (${d.config.name})，发现 ${found.length} 条链路: ${found.join(', ')}`);
     return true;
   } catch (err) {
     d.connected = false;
     d.discovered = false;
     d.ifIndexMap.clear();
     d.ifNameMap.clear();
+    d.logicalPorts = [];
+    d.aggPrev.clear();
     console.warn(`[ITCWeathermap:${viewId}] 设备不可达: ${d.config.ip} (${d.config.name}) -`, (err as Error).message);
     return false;
   }
@@ -387,18 +433,95 @@ interface DeviceCollectResult {
  * 单台设备的一轮采集（必要时 discover → get 指标 → 差分）
  */
 async function collectDevice(
+  viewId: string,
   d: DeviceRuntime,
   links: ReturnType<typeof getLinksForView>,
   dt: number,
 ): Promise<DeviceCollectResult> {
   if (!d.discovered) {
-    await discoverPorts(d, links);
+    if (viewId === 'hyperconverged') await discoverHciPorts(d);
+    else await discoverCorePorts(d, links);
     d.discovered = true;
   }
+  return viewId === 'hyperconverged'
+    ? collectHciDevice(d, dt)
+    : collectCoreDevice(d, links, dt);
+}
 
+/**
+ * HCI 设备采集：对每条逻辑链路的成员聚合口批量取 HC 计数器，
+ * 先逐口与上一轮基线差分、再求和，避免成员口上下线导致的差分跳变。
+ */
+async function collectHciDevice(d: DeviceRuntime, dt: number): Promise<DeviceCollectResult> {
   const portData = new Map<string, PortData>();
   const missing: string[] = [];
-  const currentCounters = new Map<string, { in: number; out: number }>();
+
+  if (d.logicalPorts.length === 0) {
+    return { deviceId: d.config.id, portData, missing };
+  }
+
+  // 全部逻辑链路口的并集，一次批量取数
+  const allIndices = [...new Set(d.logicalPorts.flatMap((lp) => lp.ifIndices))].sort((a, b) => a - b);
+  const [inResult, outResult, operResult] = await Promise.all([
+    d.client.get(allIndices.map((i) => `${OID_HC_IN}.${i}`)),
+    d.client.get(allIndices.map((i) => `${OID_HC_OUT}.${i}`)),
+    d.client.get(allIndices.map((i) => `${OID_OPER_STATUS}.${i}`)),
+  ]);
+
+  const nextPrev = new Map<number, { in: bigint; out: bigint }>();
+
+  for (const lp of d.logicalPorts) {
+    let inBps = 0;
+    let outBps = 0;
+    let anyUp = false;
+    let gotCounter = false;
+
+    for (const ifIndex of lp.ifIndices) {
+      const inCur = counterOf(inResult.get(`${OID_HC_IN}.${ifIndex}`));
+      const outCur = counterOf(outResult.get(`${OID_HC_OUT}.${ifIndex}`));
+      const operVB = operResult.get(`${OID_OPER_STATUS}.${ifIndex}`);
+      if (operVB && !operVB.missing && operVB.num === 1) anyUp = true;
+      if (inCur === null || outCur === null) continue;
+
+      gotCounter = true;
+      nextPrev.set(ifIndex, { in: inCur, out: outCur });
+      const prev = d.aggPrev.get(ifIndex);
+      if (prev && dt > 0) {
+        inBps += deltaToBps(inCur, prev.in, dt);
+        outBps += deltaToBps(outCur, prev.out, dt);
+      }
+    }
+
+    if (!gotCounter) {
+      missing.push(`${d.config.id}:${lp.key}`);
+      continue;
+    }
+
+    portData.set(lp.key, {
+      port: lp.key,
+      name: lp.name,
+      inBps,
+      outBps,
+      speed: lp.speed,
+      oper: anyUp ? 1 : 2,
+    });
+  }
+
+  d.aggPrev = nextPrev;
+  return { deviceId: d.config.id, portData, missing };
+}
+
+/**
+ * core 设备采集：物理口逐一取数并与上一轮基线差分
+ */
+async function collectCoreDevice(
+  d: DeviceRuntime,
+  links: ReturnType<typeof getLinksForView>,
+  dt: number,
+): Promise<DeviceCollectResult> {
+  const portData = new Map<string, PortData>();
+  const missing: string[] = [];
+  const currentCounters = new Map<string, { in: bigint; out: bigint }>();
 
   if (d.ifIndexMap.size === 0) {
     return { deviceId: d.config.id, portData, missing };
@@ -418,33 +541,29 @@ async function collectDevice(
   ]);
 
   for (const [key, ifIndex] of d.ifIndexMap) {
-    const inVB = inResult.get(`${OID_HC_IN}.${ifIndex}`);
-    const outVB = outResult.get(`${OID_HC_OUT}.${ifIndex}`);
+    const inCur = counterOf(inResult.get(`${OID_HC_IN}.${ifIndex}`));
+    const outCur = counterOf(outResult.get(`${OID_HC_OUT}.${ifIndex}`));
     const speedVB = speedResult.get(`${OID_HIGH_SPEED}.${ifIndex}`);
     const operVB = operResult.get(`${OID_OPER_STATUS}.${ifIndex}`);
 
-    if (!inVB || !outVB || inVB.missing || outVB.missing) {
+    if (inCur === null || outCur === null) {
       missing.push(`${d.config.id}:${key}`);
       continue;
     }
 
-    currentCounters.set(key, { in: inVB.num, out: outVB.num });
+    currentCounters.set(key, { in: inCur, out: outCur });
 
     const speed = speedVB && !speedVB.missing ? speedVB.num : 0;
     const oper = operVB && !operVB.missing ? operVB.num : 0;
     const linkConfig = links.find((l) => l.port === key);
 
-    // 与本设备上一轮基线差分
+    // 与本设备上一轮基线差分（Counter64 精确 bigint 运算）
     let inBps = 0;
     let outBps = 0;
     const prev = d.prevCounters.get(key);
     if (prev && dt > 0) {
-      let din = inVB.num - prev.in;
-      let dout = outVB.num - prev.out;
-      if (din > 4.6e18) din = 0;
-      if (dout > 4.6e18) dout = 0;
-      inBps = (din * 8) / dt;
-      outBps = (dout * 8) / dt;
+      inBps = deltaToBps(inCur, prev.in, dt);
+      outBps = deltaToBps(outCur, prev.out, dt);
     }
 
     portData.set(key, {
@@ -464,10 +583,10 @@ async function collectDevice(
 }
 
 /**
- * 发现端口：WALK ifName，匹配本视图链路中声明的物理口（x/x/x/x）
+ * core 视图端口发现：WALK ifName，匹配本视图链路中声明的物理口（x/x/x/x）
  * walk 整体失败（超时/不支持）时抛错，由调用方判定设备不可达
  */
-async function discoverPorts(
+async function discoverCorePorts(
   d: DeviceRuntime,
   links: ReturnType<typeof getLinksForView>,
   opts?: { timeout?: number; retries?: number; noFallback?: boolean },
@@ -499,6 +618,79 @@ async function discoverPorts(
     d.ifIndexMap.set(portKey, ifIndex);
     d.ifNameMap.set(portKey, vb.str);
   }
+}
+
+/**
+ * HCI 视图端口发现（浪潮 CN9300H）：
+ * 只取聚合口 aggN（不碰成员物理口，避免流量双算），按协商速率归类到
+ * topology.ts 声明的逻辑链路：
+ *   ≥80G agg            → peerlink:<id>（交换机间集群互联）
+ *   10G~25G 之间的 agg  → uplink:<id>  （上联核心）
+ *   其余 ≥10G 的 agg    → down:<id>    （下行服务器，多口求和）
+ * walk 失败（无任何 ifName）才判定不可达；分类不到某类链路时该类缺省。
+ */
+async function discoverHciPorts(
+  d: DeviceRuntime,
+  opts?: { timeout?: number; retries?: number; noFallback?: boolean },
+): Promise<void> {
+  const vbs = await d.client.walk(OID_IF_NAME, 4000, opts);
+  if (vbs.length === 0) throw new Error('ifName WALK 无结果');
+
+  // 收集所有聚合口 aggN 的 ifIndex
+  const aggEntries: { ifIndex: number; name: string }[] = [];
+  for (const vb of vbs) {
+    if (!vb.isStr || !/^agg\d+$/.test(vb.str)) continue;
+    const oidParts = vb.oid.split('.');
+    const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
+    if (Number.isFinite(ifIndex)) aggEntries.push({ ifIndex, name: vb.str });
+  }
+  if (aggEntries.length === 0) throw new Error('未发现任何聚合口(agg)');
+
+  // 批量读取协商速率
+  const speedResult = await d.client.get(
+    aggEntries.map((e) => `${OID_HIGH_SPEED}.${e.ifIndex}`),
+  );
+  const groups: Record<'peer' | 'uplink' | 'down', { ifIndex: number; name: string; speed: number }[]> = {
+    peer: [], uplink: [], down: [],
+  };
+  for (const e of aggEntries) {
+    const vb = speedResult.get(`${OID_HIGH_SPEED}.${e.ifIndex}`);
+    const speed = vb && !vb.missing ? vb.num : 0;
+    if (speed >= HCI_PEER_SPEED_MIN) groups.peer.push({ ...e, speed });
+    else if (speed >= HCI_UPLINK_SPEED_MIN && speed < 25000) groups.uplink.push({ ...e, speed });
+    else if (speed >= HCI_DOWN_SPEED_MIN) groups.down.push({ ...e, speed });
+  }
+
+  const id = d.config.id;
+  const logical: LogicalPort[] = [];
+  if (groups.uplink.length > 0) {
+    logical.push({
+      key: `uplink:${id}`,
+      name: `${groups.uplink.map((g) => g.name).join('、')}（上联核心）`,
+      ifIndices: groups.uplink.map((g) => g.ifIndex),
+      speed: groups.uplink.reduce((s, g) => s + g.speed, 0),
+    });
+  }
+  if (groups.peer.length > 0) {
+    logical.push({
+      key: `peerlink:${id}`,
+      name: `${groups.peer.map((g) => g.name).join('、')}（集群互联）`,
+      ifIndices: groups.peer.map((g) => g.ifIndex),
+      speed: groups.peer.reduce((s, g) => s + g.speed, 0),
+    });
+  }
+  if (groups.down.length > 0) {
+    const totalSpeed = groups.down.reduce((s, g) => s + g.speed, 0);
+    logical.push({
+      key: `down:${id}`,
+      name: `${groups.down.length} 个 25G 聚合（下行服务器）：${groups.down.map((g) => g.name).join('、')}`,
+      ifIndices: groups.down.map((g) => g.ifIndex),
+      speed: totalSpeed,
+    });
+  }
+
+  d.logicalPorts = logical;
+  d.aggPrev.clear();
 }
 
 /**
