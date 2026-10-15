@@ -32,6 +32,7 @@ import {
 import { formatFriendlyTime } from '@/components/FriendlyTime';
 import ActionButton from '@/app/tags/components/ActionButton';
 import SnmpStatusBadge from './components/SnmpStatusBadge';
+import { useSvgFlowAnimation } from './components/useSvgFlowAnimation';
 
 const { Title, Text } = Typography;
 
@@ -98,6 +99,8 @@ function ITCWeathermapContent() {
   const [apiData, setApiData] = useState<ApiResp | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [activeTab, setActiveTab] = useState('topology');
+  // SVG 在隐藏页面/Tab 中插入时光点动画会卡在 paused，用 hook 兜底启动
+  const svgWrapRef = useSvgFlowAnimation<HTMLDivElement>(apiData?.svg);
 
   // 从 URL 参数初始化
   useEffect(() => {
@@ -358,6 +361,7 @@ function ITCWeathermapContent() {
 
           {/* SVG 拓扑图 */}
           <div
+            ref={svgWrapRef}
             dangerouslySetInnerHTML={{ __html: apiData.svg }}
             style={{
               width: '100%',

@@ -16,6 +16,24 @@ export interface TopoNode {
   height: number;
   kind: NodeKind;
   peer?: string;
+  /** 节点吞吐标注取数用的逻辑链路 key（HCI 下行业务节点） */
+  metricKey?: string;
+}
+
+/**
+ * HCI 下行业务分类定义（依据《超融合业务组.md》§5，纳总 2026-10-15 端口规划表 + SNMP 实测）。
+ * 交换机 48 口全光，端口号 [N] 与接口 aggN / eth-0-N 一一对应（agg ifIndex=2048+N，
+ * eth ifIndex=N，两者计数器实测 1:1）；同一台服务器双归到配对两台交换机的同号端口。
+ */
+export interface HciCategoryDef {
+  /** 逻辑链路后缀：down:<交换机id>:<key> */
+  key: string;
+  /** 业务节点名 */
+  name: string;
+  /** 该分类包含的端口号 [N] */
+  ports: number[];
+  /** 链路明细「对端」列 */
+  peer: string;
 }
 
 export interface TopoLink {
@@ -129,44 +147,225 @@ export const coreView: TopoView = {
 // 超融合视图
 // =====================================================================
 
-const hciNodes: TopoNode[] = [
+// 图书馆 HCI 对（交换机1·yewu1=sw10 / 交换机2·yewu2=sw13）下行业务分类（文档 §5.1/§5.3）
+const hciLibraryCategories: HciCategoryDef[] = [
+  { key: 'compute2', name: '二路计算节点', ports: [1, 2, 3, 4, 5, 6, 7, 8], peer: '二路服务器1–8（另一归 yewu2）' },
+  { key: 'compute4', name: '四路计算节点', ports: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18], peer: '四路服务器1–10（另一归 yewu2）' },
+  { key: 'rds', name: 'RDS 存储', ports: [19, 20], peer: 'RDS 存储 ×2（另一归 yewu2）' },
+  { key: 'access', name: '其他接入', ports: [21], peer: 'Access VLAN2011（无设备名，非双归）' },
+  { key: 'security', name: '安全设备', ports: [30], peer: 'B08 深信服 S6520（另一归 yewu2）' },
+  { key: 'test', name: '算力测试', ports: [33, 34], peer: '算力测试服务器 ×2（另一归 yewu2）' },
+  { key: 'oob', name: '带外管理', ports: [47], peer: '图书馆带外交换机（非双归）' },
+];
+
+// 礼贤楼 HCI 对（交换机3·yewu3=sw14 / 交换机4·yewu4=sw15）下行业务分类（文档 §5.2/§5.3）
+const hciLxlCategories: HciCategoryDef[] = [
+  { key: 'compute2', name: '二路计算节点', ports: [1, 2, 3, 4, 5, 6, 7, 8, 16, 19], peer: '二路服务器1–10（另一归 yewu4）' },
+  { key: 'compute4', name: '四路计算节点', ports: [9, 10, 11, 12, 13, 14, 15], peer: '四路服务器1–7（另一归 yewu4）' },
+  { key: 'rds', name: 'RDS 存储', ports: [17, 18], peer: 'RDS 存储 ×2（另一归 yewu4）' },
+  { key: 'ai', name: '智算节点', ports: [21, 22, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39], peer: '阿里智算×2 + 浪潮智算×11（另一归 yewu4）' },
+  { key: 'aistore', name: '智算存储', ports: [40, 41, 42], peer: '智算存储 ×3（另一归 yewu4）' },
+  { key: 'oob', name: '带外管理', ports: [47], peer: '带外服务器（非双归）' },
+];
+
+/** 每台交换机 → 下行业务分类（collector 按此把端口计数器归类） */
+export const hciDownCategories: Record<string, HciCategoryDef[]> = {
+  sw10: hciLibraryCategories,
+  sw13: hciLibraryCategories,
+  sw14: hciLxlCategories,
+  sw15: hciLxlCategories,
+};
+
+/** 交换机在图书馆/礼贤楼对中的另一归（双归对端） */
+export const hciPairPeer: Record<string, string> = {
+  sw10: 'yewu2', sw13: 'yewu1',
+  sw14: 'yewu4', sw15: 'yewu3',
+};
+
+/** 交换机展示名（明细表逐口行用） */
+export const hciSwitchMeta: Record<string, { label: string }> = {
+  sw10: { label: 'yewu1' },
+  sw14: { label: 'yewu3' },
+  sw13: { label: 'yewu2' },
+  sw15: { label: 'yewu4' },
+};
+
+/** 图书馆对四路服务器端口错位：端口 [N] → 四路服务器号（文档 §5.3） */
+const LIB_COMPUTE4_SERVER: Record<number, number> = {
+  9: 8, 10: 9, 11: 10, 12: 5, 13: 6, 14: 7, 15: 2, 16: 3, 17: 4, 18: 1,
+};
+
+/**
+ * 逐端口对端文案（链路明细表「对端」列用），依据文档 §5.1/§5.2/§5.3：
+ * 同号端口在配对两台交换机上接同一台设备（双归），[N] 后的设备名按端口规划表还原。
+ */
+export function hciPortPeer(swId: string, catKey: string, port: number): string {
+  const isLib = swId === 'sw10' || swId === 'sw13';
+  const other = hciPairPeer[swId];
+  switch (catKey) {
+    case 'compute2': {
+      const n = isLib ? port : port <= 8 ? port : port === 16 ? 9 : 10;
+      return `二路服务器${n}（另一归 ${other}）`;
+    }
+    case 'compute4': {
+      const n = isLib ? LIB_COMPUTE4_SERVER[port] : port - 8;
+      return `四路服务器${n}（另一归 ${other}）`;
+    }
+    case 'rds': {
+      const n = isLib ? port - 18 : port - 16; // 图书馆 [19][20] / 礼贤 [17][18] → RDS 1/2
+      return `RDS 存储${n}（另一归 ${other}）`;
+    }
+    case 'access':
+      return 'Access VLAN2011（无设备名，非双归）';
+    case 'security':
+      return `B08 深信服 S6520（另一归 ${other}）`;
+    case 'test':
+      return `算力测试服务器${port - 32}（另一归 ${other}）`;
+    case 'ai':
+      if (port === 21) return `阿里智算服务器1（另一归 ${other}）`;
+      if (port === 22) return `阿里智算服务器2（另一归 ${other}）`;
+      return `浪潮智算服务器${port - 28}（另一归 ${other}）`;
+    case 'aistore':
+      return `智算存储${port - 39}（另一归 ${other}）`;
+    case 'oob':
+      if (swId === 'sw10') return '图书馆D05带外交换机（非双归）';
+      if (swId === 'sw13') return '图书馆B08带外交换机（非双归）';
+      if (swId === 'sw14') return '带外（规划未用）';
+      return '带外服务器（非双归）';
+    default:
+      return '';
+  }
+}
+
+const hciHeadNodes: TopoNode[] = [
   { id: 'core1', name: 'CG-TSG-S12510', description: '图书馆 TSG · 接口前缀 1/x/x/x', x: 375, y: 92, width: 300, height: 66, kind: 'core' },
   { id: 'core2', name: 'CG-XZL-S12510', description: '礼贤楼 LXL · 接口前缀 2/x/x/x', x: 915, y: 92, width: 300, height: 66, kind: 'core' },
+  // 同机楼对相邻排列：图书馆对（yewu1/yewu2）左、礼贤楼对（yewu3/yewu4）右。
+  // 下联按对就近、集群互联短；代价是两条上联在对间空档形成一处有序 X 交叉。
   { id: 'sw10', name: 'cg-tsg-d06-yewu1', description: '10.10.251.10', x: 250, y: 322, width: 212, height: 64, kind: 'sw' },
-  { id: 'sw14', name: 'cg-lxl2-b02-yewu3', description: '10.10.251.14', x: 500, y: 322, width: 212, height: 64, kind: 'sw' },
-  { id: 'sw13', name: 'cg-tsg-d07-yewu2', description: '10.10.251.13', x: 790, y: 322, width: 212, height: 64, kind: 'sw' },
-  { id: 'sw15', name: 'cg-lxl2-b03-yewu4', description: '10.10.251.15', x: 1040, y: 322, width: 212, height: 64, kind: 'sw' },
-  { id: 'zone10', name: '服务器区 d06', description: '超融合节点', x: 250, y: 566, width: 212, height: 58, kind: 'zone' },
-  { id: 'zone14', name: '服务器区 b02', description: '超融合节点', x: 500, y: 566, width: 212, height: 58, kind: 'zone' },
-  { id: 'zone13', name: '服务器区 d07', description: '超融合节点', x: 790, y: 566, width: 212, height: 58, kind: 'zone' },
-  { id: 'zone15', name: '服务器区 b03', description: '超融合节点', x: 1040, y: 566, width: 212, height: 58, kind: 'zone' },
+  { id: 'sw13', name: 'cg-tsg-d07-yewu2', description: '10.10.251.13', x: 500, y: 322, width: 212, height: 64, kind: 'sw' },
+  { id: 'sw14', name: 'cg-lxl2-b02-yewu3', description: '10.10.251.14', x: 800, y: 322, width: 212, height: 64, kind: 'sw' },
+  { id: 'sw15', name: 'cg-lxl2-b03-yewu4', description: '10.10.251.15', x: 1050, y: 322, width: 212, height: 64, kind: 'sw' },
 ];
+
+function portsLabel(ports: number[]): string {
+  // 压缩连续端口：[1,2,3,4,5,6,7,8] → [1]–[8]；[1..8,16,19] → [1]–[8]、[16]、[19]
+  const parts: string[] = [];
+  let start = ports[0];
+  let prev = ports[0];
+  const flush = () => {
+    parts.push(start === prev ? `[${start}]` : `[${start}]–[${prev}]`);
+  };
+  for (let i = 1; i < ports.length; i += 1) {
+    const p = ports[i];
+    if (p === prev + 1) { prev = p; continue; }
+    flush();
+    start = p; prev = p;
+  }
+  flush();
+  return parts.join('、');
+}
+
+// 交换机顺序（下联落点排序、明细遍历用）
+const hciSwitches = [
+  { id: 'sw10', x: 250, label: 'yewu1' },
+  { id: 'sw13', x: 500, label: 'yewu2' },
+  { id: 'sw14', x: 800, label: 'yewu3' },
+  { id: 'sw15', x: 1050, label: 'yewu4' },
+];
+
+// 下行业务节点：同类业务全组合并为一个节点（跨机房/跨交换机双归的同一类设备）。
+// 位置按所接交换机重心分三组，二部图交叉最小化：
+//   图书馆专属（接 sw10/sw13，重心 375）→ 全四台共享（重心 650）→ 礼贤楼专属（接 sw14/sw15，重心 925）
+const HCI_DN_W = 118;
+const HCI_DN_H = 54;
+const HCI_DN_Y = 498;
+const hciMergedOrder: { key: string; x: number }[] = [
+  { key: 'access', x: 122 },
+  { key: 'security', x: 244 },
+  { key: 'test', x: 366 },
+  { key: 'compute2', x: 490 },
+  { key: 'compute4', x: 612 },
+  { key: 'rds', x: 734 },
+  { key: 'oob', x: 856 },
+  { key: 'ai', x: 978 },
+  { key: 'aistore', x: 1100 },
+];
+
+const hciCategoryName = new Map<string, string>();
+for (const cats of Object.values(hciDownCategories)) {
+  for (const c of cats) {
+    if (!hciCategoryName.has(c.key)) hciCategoryName.set(c.key, c.name);
+  }
+}
+
+/** 合并节点静态说明（渲染时按 · 拆成两行）：按机楼对统计端口数 */
+function hciMergedDescription(key: string): string {
+  const libN = hciDownCategories.sw10.find((c) => c.key === key)?.ports.length;
+  const lxlN = hciDownCategories.sw14.find((c) => c.key === key)?.ports.length;
+  const parts: string[] = [];
+  if (libN) parts.push(`图书馆 ${libN} 口`);
+  if (lxlN) parts.push(`礼贤 ${lxlN} 口`);
+  return parts.join(' · ');
+}
+
+const hciDownNodes: TopoNode[] = hciMergedOrder.map(({ key, x }) => ({
+  id: `dn_${key}`,
+  name: hciCategoryName.get(key)!,
+  description: hciMergedDescription(key),
+  x,
+  y: HCI_DN_Y,
+  width: HCI_DN_W,
+  height: HCI_DN_H,
+  kind: 'zone',
+}));
+
+// 下行链路仍按「交换机 × 业务分类」逐段取数（key 不变），只是两端改为共享业务节点
+const hciDownLinks: TopoLink[] = [];
+for (const sw of hciSwitches) {
+  const cats = hciDownCategories[sw.id];
+  cats.forEach((cat, i) => {
+    const peerText = cat.key === 'oob'
+      ? cat.peer
+      : cat.peer.replace('yewu2', hciPairPeer[sw.id]).replace('yewu4', hciPairPeer[sw.id]);
+    hciDownLinks.push({
+      a: `dn_${cat.key}`,
+      b: sw.id,
+      port: `down:${sw.id}:${cat.key}`,
+      description: `${sw.label} 下行 · ${cat.name} ×${cat.ports.length}（${portsLabel(cat.ports)}）`,
+      peer: peerText,
+      geometry: 'hci-down',
+      speed: 0,
+      row: 0,
+      order: i,
+    });
+  });
+}
+
+const hciNodes: TopoNode[] = [...hciHeadNodes, ...hciDownNodes];
 
 const hciLinks: TopoLink[] = [
   // 上联 sw → core
-  { a: 'sw10', b: 'core1', port: 'uplink:sw10', description: 'cg-tsg-d06-yewu1 → CG-TSG-S12510', geometry: 'hci-up', speed: 10000, row: 0, order: 0 },
-  { a: 'sw14', b: 'core1', port: 'uplink:sw14', description: 'cg-lxl2-b02-yewu3 → CG-TSG-S12510', geometry: 'hci-up', speed: 10000, row: 1, order: 0 },
-  { a: 'sw13', b: 'core2', port: 'uplink:sw13', description: 'cg-tsg-d07-yewu2 → CG-XZL-S12510', geometry: 'hci-up', speed: 10000, row: 0, order: 0 },
-  { a: 'sw15', b: 'core2', port: 'uplink:sw15', description: 'cg-lxl2-b03-yewu4 → CG-XZL-S12510', geometry: 'hci-up', speed: 10000, row: 1, order: 0 },
-  // 下行 zone → sw
-  { a: 'zone10', b: 'sw10', port: 'down:sw10', description: '下行 → 服务器区（d06）', geometry: 'hci-down', speed: 0, row: 0, order: 0 },
-  { a: 'zone14', b: 'sw14', port: 'down:sw14', description: '下行 → 服务器区（b02）', geometry: 'hci-down', speed: 0, row: 0, order: 0 },
-  { a: 'zone13', b: 'sw13', port: 'down:sw13', description: '下行 → 服务器区（d07）', geometry: 'hci-down', speed: 0, row: 0, order: 0 },
-  { a: 'zone15', b: 'sw15', port: 'down:sw15', description: '下行 → 服务器区（b03）', geometry: 'hci-down', speed: 0, row: 0, order: 0 },
+  { a: 'sw10', b: 'core1', port: 'uplink:sw10', description: 'cg-tsg-d06-yewu1 → CG-TSG-S12510', peer: 'CG-TSG-S12510 · 1/0/0/16（10G）', geometry: 'hci-up', speed: 10000, row: 0, order: 0 },
+  { a: 'sw14', b: 'core1', port: 'uplink:sw14', description: 'cg-lxl2-b02-yewu3 → CG-TSG-S12510', peer: 'CG-TSG-S12510 · 1/0/0/17（10G）', geometry: 'hci-up', speed: 10000, row: 1, order: 0 },
+  { a: 'sw13', b: 'core2', port: 'uplink:sw13', description: 'cg-tsg-d07-yewu2 → CG-XZL-S12510', peer: 'CG-XZL-S12510 · 2/0/0/16（10G，待机）', geometry: 'hci-up', speed: 10000, row: 0, order: 0 },
+  { a: 'sw15', b: 'core2', port: 'uplink:sw15', description: 'cg-lxl2-b03-yewu4 → CG-XZL-S12510', peer: 'CG-XZL-S12510 · 2/0/0/17（10G）', geometry: 'hci-up', speed: 10000, row: 1, order: 0 },
+  // 下行：同类业务合并为共享节点，逐交换机分段（agg/eth 实测计数器归类，见 hciDownCategories）
+  ...hciDownLinks,
   // 交换机间跨核心互联
-  { a: 'sw10', b: 'sw13', port: 'peerlink:sw10', description: 'cg-tsg-d06-yewu1 ↔ cg-tsg-d07-yewu2', geometry: 'hci-peer', speed: 80000, row: 0, order: 0 },
-  { a: 'sw14', b: 'sw15', port: 'peerlink:sw14', description: 'cg-lxl2-b02-yewu3 ↔ cg-lxl2-b03-yewu4', geometry: 'hci-peer', speed: 80000, row: 0, order: 0 },
+  { a: 'sw10', b: 'sw13', port: 'peerlink:sw10', description: 'cg-tsg-d06-yewu1 ↔ cg-tsg-d07-yewu2', peer: 'cg-tsg-d07-yewu2 · agg55（80G）', geometry: 'hci-peer', speed: 80000, row: 0, order: 0 },
+  { a: 'sw14', b: 'sw15', port: 'peerlink:sw14', description: 'cg-lxl2-b02-yewu3 ↔ cg-lxl2-b03-yewu4', peer: 'cg-lxl2-b03-yewu4 · agg55（80G）', geometry: 'hci-peer', speed: 80000, row: 0, order: 0 },
 ];
 
 export const hyperconvergedView: TopoView = {
   id: 'hyperconverged',
   title: '超融合业务',
-  description: '4 台浪潮 CN9300H-48Y8C 双归上联核心 · 下行超融合服务器区 · 交换机间集群互联',
-  deviceIds: ['sw10', 'sw14', 'sw13', 'sw15'],
+  description: '4 台浪潮 CN9300H-48Y8C 双归上联核心 · 同类下行业务合并显示（计算/存储/安全/测试/智算/带外），逐端口流量见链路明细 · 交换机间集群互联',
+  deviceIds: ['sw10', 'sw13', 'sw14', 'sw15'],
   canvasWidth: 1280,
-  canvasHeight: 700,
+  canvasHeight: 555,
   nodeStylePreset: 'hci',
-  nodeOrder: ['core1', 'core2', 'sw10', 'sw14', 'sw13', 'sw15', 'zone10', 'zone14', 'zone13', 'zone15'],
+  nodeOrder: ['core1', 'core2', 'sw10', 'sw13', 'sw14', 'sw15', ...hciDownNodes.map((n) => n.id)],
   nodes: hciNodes,
   links: hciLinks,
 };

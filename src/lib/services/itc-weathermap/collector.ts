@@ -21,6 +21,7 @@ import {
   getDeviceConfigsForView,
   DeviceConfig,
 } from './config-loader';
+import { hciDownCategories } from './topology';
 
 // 类型定义
 export interface PortData {
@@ -65,9 +66,9 @@ const FIRST_PROBE_TIMEOUT_MS = 1200; // 首轮快速探测：短超时、0 重�
 const REQUEST_TIMEOUT_MS = 1500; // 常规请求超时（重试 1 次，最差 3s）
 
 // HCI（浪潮 CN9300H）聚合口按协商速率归类的阈值（Mbps）
-const HCI_PEER_SPEED_MIN = 80000; // ≥80G：交换机间集群互联（agg55）
+const HCI_PEER_SPEED_MIN = 80000; // ≥80G：交换机间集群互联（agg55，已含 eth55+eth56）
 const HCI_UPLINK_SPEED_MIN = 10000; // 10G：上联核心（agg48）
-const HCI_DOWN_SPEED_MIN = 10000; // 其余 ≥10G：下行服务器（25G agg）
+// 下行端口不再按速率阈值粗分，改按 topology.hciDownCategories 的静态端口表逐口归类
 
 /** Counter64 差分异常上限（超过视为计数器回绕/重置，该轮速率记 0） */
 const COUNTER_DELTA_MAX = BigInt('4600000000000000000');
@@ -88,14 +89,16 @@ function deltaToBps(cur: bigint, prev: bigint, dt: number): number {
 // ========== 运行时状态（按视图隔离） ==========
 
 /**
- * HCI 视图逻辑链路 → 真实聚合口（aggN）的映射。
- * 一条逻辑链路可能由多个聚合口承载（下行 = 多个 25G agg 之和）。
+ * HCI 视图逻辑链路 → 真实接口的映射。
+ * 一条逻辑链路可由多个物理端口承载（如下行业务分类 = 多个服务器口之和）。
+ * 端口号 [N] 与 aggN（ifIndex 2048+N）/ eth-0-N（ifIndex N）一一对应、计数器 1:1，
+ * 因此每个端口优先取 agg、无 agg 才回退取 eth，不会双算。
  */
 interface LogicalPort {
-  key: string; // 对应 topology.ts 中的逻辑键，如 uplink:sw10 / down:sw10 / peerlink:sw10
-  name: string; // 展示名（参与的 agg 名）
-  ifIndices: number[]; // 承载该逻辑链路的聚合口 ifIndex
-  speed: number; // 协商速率之和（Mbps），用于利用率分母
+  key: string; // 对应 topology.ts 中的逻辑键，如 uplink:sw10 / down:sw10:compute4 / peerlink:sw10
+  name: string; // 展示名（参与的 agg/eth 名，压缩区间）
+  ifIndices: number[]; // 承载该逻辑链路的接口 ifIndex（agg 优先，缺失时 eth）
+  speed: number; // UP 成员协商速率之和（Mbps），用于利用率分母
 }
 
 interface DeviceRuntime {
@@ -621,12 +624,51 @@ async function discoverCorePorts(
 }
 
 /**
- * HCI 视图端口发现（浪潮 CN9300H）：
- * 只取聚合口 aggN（不碰成员物理口，避免流量双算），按协商速率归类到
- * topology.ts 声明的逻辑链路：
- *   ≥80G agg            → peerlink:<id>（交换机间集群互联）
- *   10G~25G 之间的 agg  → uplink:<id>  （上联核心）
- *   其余 ≥10G 的 agg    → down:<id>    （下行服务器，多口求和）
+ * 把成员接口名（agg9 / eth-0-33）按前缀分组并把连续编号压缩成区间：
+ * [agg9..agg18] → 'agg9–18'；[eth-0-29..39] → 'eth-0-29–39'；多组用「、」连接。
+ */
+function compactMemberNames(names: string[]): string {
+  const groups = new Map<string, number[]>();
+  for (const n of names) {
+    const m = /^(.+?)(\d+)$/.exec(n);
+    if (!m) continue;
+    const pfx = m[1];
+    const arr = groups.get(pfx) ?? [];
+    arr.push(parseInt(m[2], 10));
+    groups.set(pfx, arr);
+  }
+  const parts: string[] = [];
+  for (const [pfx, nums0] of groups) {
+    const nums = [...new Set(nums0)].sort((a, b) => a - b);
+    const segs: string[] = [];
+    let start = nums[0];
+    let prev = nums[0];
+    const flush = () => segs.push(start === prev ? `${start}` : `${start}–${prev}`);
+    for (let i = 1; i < nums.length; i += 1) {
+      if (nums[i] === prev + 1) { prev = nums[i]; continue; }
+      flush();
+      start = nums[i];
+      prev = nums[i];
+    }
+    flush();
+    parts.push(`${pfx}${segs.join('/')}`);
+  }
+  return parts.join('、');
+}
+
+/**
+ * HCI 视图端口发现（浪潮 CN9300H）。
+ *
+ * 实测（2026-10-15）：端口号 [N] 同时存在聚合口 aggN（ifIndex 2048+N）和物理口
+ * eth-0-N（ifIndex N），二者 HC 计数器 1:1 完全相等；agg55(80G) 已含 eth55+eth56。
+ * 故每个端口**优先取 agg，仅在设备上不存在对应 agg 时回退取 eth**，杜绝双算。
+ * 无 agg 的业务口实测为：图书馆对 [21][33][34]、礼贤楼对 [29]–[42]、带外 [47]。
+ *
+ * 逻辑链路归类：
+ *   速率 ≥80G 的 agg     → peerlink:<id>（交换机间集群互联，agg55）
+ *   10G 的 agg           → uplink:<id>  （上联核心，agg48）
+ *   其余端口按 topology.hciDownCategories 静态端口表
+ *                        → down:<id>:<业务分类>（计算/存储/安全/测试/智算/带外）
  * walk 失败（无任何 ifName）才判定不可达；分类不到某类链路时该类缺省。
  */
 async function discoverHciPorts(
@@ -636,57 +678,114 @@ async function discoverHciPorts(
   const vbs = await d.client.walk(OID_IF_NAME, 4000, opts);
   if (vbs.length === 0) throw new Error('ifName WALK 无结果');
 
-  // 收集所有聚合口 aggN 的 ifIndex
-  const aggEntries: { ifIndex: number; name: string }[] = [];
+  // aggN / eth-0-N：端口号 [N] -> ifIndex
+  const aggIfIndex = new Map<number, number>();
+  const ethIfIndex = new Map<number, number>();
+  const aggEntries: { ifIndex: number; name: string; port: number }[] = [];
   for (const vb of vbs) {
-    if (!vb.isStr || !/^agg\d+$/.test(vb.str)) continue;
+    if (!vb.isStr) continue;
     const oidParts = vb.oid.split('.');
     const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
-    if (Number.isFinite(ifIndex)) aggEntries.push({ ifIndex, name: vb.str });
+    if (!Number.isFinite(ifIndex)) continue;
+    const mAgg = /^agg(\d+)$/.exec(vb.str);
+    if (mAgg) {
+      const port = parseInt(mAgg[1], 10);
+      aggIfIndex.set(port, ifIndex);
+      aggEntries.push({ ifIndex, name: vb.str, port });
+      continue;
+    }
+    const mEth = /^eth-0-(\d+)$/.exec(vb.str);
+    if (mEth) ethIfIndex.set(parseInt(mEth[1], 10), ifIndex);
   }
   if (aggEntries.length === 0) throw new Error('未发现任何聚合口(agg)');
 
-  // 批量读取协商速率
-  const speedResult = await d.client.get(
-    aggEntries.map((e) => `${OID_HIGH_SPEED}.${e.ifIndex}`),
-  );
-  const groups: Record<'peer' | 'uplink' | 'down', { ifIndex: number; name: string; speed: number }[]> = {
-    peer: [], uplink: [], down: [],
-  };
-  for (const e of aggEntries) {
-    const vb = speedResult.get(`${OID_HIGH_SPEED}.${e.ifIndex}`);
-    const speed = vb && !vb.missing ? vb.num : 0;
-    if (speed >= HCI_PEER_SPEED_MIN) groups.peer.push({ ...e, speed });
-    else if (speed >= HCI_UPLINK_SPEED_MIN && speed < 25000) groups.uplink.push({ ...e, speed });
-    else if (speed >= HCI_DOWN_SPEED_MIN) groups.down.push({ ...e, speed });
+  // 下行业务分类需要、但设备上没有 agg 的端口 → 回退用 eth
+  const neededEthPorts = new Set<number>();
+  for (const cat of hciDownCategories[d.config.id] ?? []) {
+    for (const p of cat.ports) {
+      if (!aggIfIndex.has(p) && ethIfIndex.has(p)) neededEthPorts.add(p);
+    }
   }
+  const ethEntries = [...neededEthPorts]
+    .sort((a, b) => a - b)
+    .map((p) => ({ ifIndex: ethIfIndex.get(p)!, name: `eth-0-${p}`, port: p }));
+  const probeEntries = [...aggEntries, ...ethEntries];
+
+  // 批量读取协商速率与 oper（分母只计 UP 成员）
+  const [speedResult, operResult] = await Promise.all([
+    d.client.get(probeEntries.map((e) => `${OID_HIGH_SPEED}.${e.ifIndex}`), opts),
+    d.client.get(probeEntries.map((e) => `${OID_OPER_STATUS}.${e.ifIndex}`), opts),
+  ]);
+  const speedOf = (ifIndex: number): number => {
+    const vb = speedResult.get(`${OID_HIGH_SPEED}.${ifIndex}`);
+    return vb && !vb.missing ? vb.num : 0;
+  };
+  const operOf = (ifIndex: number): number => {
+    const vb = operResult.get(`${OID_OPER_STATUS}.${ifIndex}`);
+    return vb && !vb.missing ? vb.num : 0;
+  };
+
+  // 上联 / 互联：仍按 agg 协商速率归类
+  const uplink = aggEntries.filter((e) => {
+    const s = speedOf(e.ifIndex);
+    return s >= HCI_UPLINK_SPEED_MIN && s < 25000;
+  }).map((e) => ({ ...e, speed: speedOf(e.ifIndex) }));
+  const peer = aggEntries.filter((e) => speedOf(e.ifIndex) >= HCI_PEER_SPEED_MIN)
+    .map((e) => ({ ...e, speed: speedOf(e.ifIndex) }));
 
   const id = d.config.id;
   const logical: LogicalPort[] = [];
-  if (groups.uplink.length > 0) {
+  if (uplink.length > 0) {
     logical.push({
       key: `uplink:${id}`,
-      name: `${groups.uplink.map((g) => g.name).join('、')}（上联核心）`,
-      ifIndices: groups.uplink.map((g) => g.ifIndex),
-      speed: groups.uplink.reduce((s, g) => s + g.speed, 0),
+      name: `${uplink.map((g) => g.name).join('、')}（上联核心）`,
+      ifIndices: uplink.map((g) => g.ifIndex),
+      speed: uplink.reduce((s, g) => s + g.speed, 0),
     });
   }
-  if (groups.peer.length > 0) {
+  if (peer.length > 0) {
     logical.push({
       key: `peerlink:${id}`,
-      name: `${groups.peer.map((g) => g.name).join('、')}（集群互联）`,
-      ifIndices: groups.peer.map((g) => g.ifIndex),
-      speed: groups.peer.reduce((s, g) => s + g.speed, 0),
+      name: `${peer.map((g) => g.name).join('、')}（集群互联）`,
+      ifIndices: peer.map((g) => g.ifIndex),
+      speed: peer.reduce((s, g) => s + g.speed, 0),
     });
   }
-  if (groups.down.length > 0) {
-    const totalSpeed = groups.down.reduce((s, g) => s + g.speed, 0);
+
+  // 下行：按静态端口表逐口归类（agg 优先、eth 兜底）
+  for (const cat of hciDownCategories[id] ?? []) {
+    const members: { port: number; ifIndex: number; name: string; speed: number; up: boolean }[] = [];
+    for (const p of cat.ports) {
+      const useAgg = aggIfIndex.has(p);
+      const ifIndex = useAgg ? aggIfIndex.get(p)! : ethIfIndex.get(p);
+      if (ifIndex === undefined) continue; // 设备上该端口不存在（如未插模块的口）
+      const speed = speedOf(ifIndex);
+      members.push({
+        port: p,
+        ifIndex,
+        name: useAgg ? `agg${p}` : `eth-0-${p}`,
+        speed,
+        up: operOf(ifIndex) === 1,
+      });
+    }
+    if (members.length === 0) continue;
+    // 分类聚合链路（SVG 上交换机 → 合并业务节点的那一段）
     logical.push({
-      key: `down:${id}`,
-      name: `${groups.down.length} 个 25G 聚合（下行服务器）：${groups.down.map((g) => g.name).join('、')}`,
-      ifIndices: groups.down.map((g) => g.ifIndex),
-      speed: totalSpeed,
+      key: `down:${id}:${cat.key}`,
+      name: compactMemberNames(members.map((m) => m.name)),
+      ifIndices: members.map((m) => m.ifIndex),
+      speed: members.filter((m) => m.up).reduce((s, m) => s + m.speed, 0),
     });
+    // 逐端口链路（链路明细表一行一个物理成员口，agg/eth 与上面共用同一 ifIndex，
+    // 采集端并集去重、基线按 ifIndex 复用，不增加 SNMP 请求、不会双算）
+    for (const m of members) {
+      logical.push({
+        key: `down:${id}:${cat.key}#${m.port}`,
+        name: m.name,
+        ifIndices: [m.ifIndex],
+        speed: m.speed,
+      });
+    }
   }
 
   d.logicalPorts = logical;

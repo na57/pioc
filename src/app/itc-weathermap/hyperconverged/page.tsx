@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
+import type { Key } from 'react';
 import {
   App,
   Row,
@@ -26,6 +27,7 @@ import {
 import { formatFriendlyTime } from '@/components/FriendlyTime';
 import ActionButton from '@/app/tags/components/ActionButton';
 import SnmpStatusBadge from '../components/SnmpStatusBadge';
+import { useSvgFlowAnimation } from '../components/useSvgFlowAnimation';
 
 const { Title, Text } = Typography;
 
@@ -42,6 +44,9 @@ interface PortTableRow {
   linkGeometry: string;
   row: number;
   order: number;
+  switchLabel: string;
+  category: string;
+  portNo: number;
 }
 
 interface DeviceState {
@@ -95,6 +100,8 @@ function HCIWeathermapContent() {
   const [loading, setLoading] = useState(true);
   const [apiData, setApiData] = useState<ApiResp | null>(null);
   const [forbidden, setForbidden] = useState(false);
+  // SVG 在隐藏页面插入时光点动画会卡在 paused（首屏不动、点刷新才动），用 hook 兜底
+  const svgWrapRef = useSvgFlowAnimation<HTMLDivElement>(apiData?.svg);
 
   const fetchSnapshot = useCallback(async (): Promise<ApiResp | null> => {
     try {
@@ -147,12 +154,35 @@ function HCIWeathermapContent() {
   const downCount = ports.filter((p) => p.oper >= 0 && p.oper !== 1).length;
   const hotCount = ports.filter((p) => p.utilization >= 30 && p.oper === 1).length;
 
+  const switchFilters = [...new Set(ports.map((p) => p.switchLabel).filter(Boolean))]
+    .map((v) => ({ text: v, value: v }));
+  const categoryFilters = [...new Set(ports.map((p) => p.category).filter(Boolean))]
+    .map((v) => ({ text: v, value: v }));
+
   const portColumns = [
+    {
+      title: '交换机',
+      dataIndex: 'switchLabel',
+      key: 'switchLabel',
+      width: 96,
+      filters: switchFilters,
+      onFilter: (value: Key | boolean, r: PortTableRow) => r.switchLabel === value,
+      render: (v: string) => <Text style={{ fontSize: 12 }}>{v || '—'}</Text>,
+    },
+    {
+      title: '业务分类',
+      dataIndex: 'category',
+      key: 'category',
+      width: 116,
+      filters: categoryFilters,
+      onFilter: (value: Key | boolean, r: PortTableRow) => r.category === value,
+      render: (v: string) => v ? <Tag style={{ marginInlineEnd: 0, fontSize: 12 }}>{v}</Tag> : '—',
+    },
     {
       title: '链路',
       dataIndex: 'description',
       key: 'description',
-      width: 260,
+      width: 250,
       ellipsis: true,
       render: (v: string, r: PortTableRow) => {
         const b = statusBadge(r.oper);
@@ -162,7 +192,7 @@ function HCIWeathermapContent() {
               title={b.text}
               style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: b.color, flexShrink: 0 }}
             />
-            <Text>{v}</Text>
+            <Text style={{ fontSize: 12.5 }}>{v}</Text>
           </span>
         );
       },
@@ -171,7 +201,7 @@ function HCIWeathermapContent() {
       title: '接口',
       dataIndex: 'ifName',
       key: 'ifName',
-      width: 200,
+      width: 110,
       ellipsis: true,
       render: (v: string) => (
         <Text style={{ fontSize: 12, color: '#5F5E5A' }}>
@@ -183,7 +213,7 @@ function HCIWeathermapContent() {
       title: '对端',
       dataIndex: 'peer',
       key: 'peer',
-      width: 160,
+      width: 240,
       ellipsis: true,
       render: (v: string) => <Text style={{ fontSize: 12 }}>{v || '—'}</Text>,
     },
@@ -237,7 +267,7 @@ function HCIWeathermapContent() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
           <Title level={4} style={{ margin: 0 }}>超融合业务</Title>
-          <Text type="secondary">4 台浪潮 CN9300H-48Y8C · 双归上联核心 · 下行超融合服务器区 · 交换机间集群互联</Text>
+          <Text type="secondary">4 台浪潮 CN9300H-48Y8C · 双归上联核心 · 同类下行业务合并显示（计算 / 存储 / 安全 / 测试 / 智算 / 带外），逐端口流量见链路明细 · 交换机间集群互联</Text>
         </div>
         <Space wrap size="middle" style={{ justifyContent: 'flex-end' }}>
           <SnmpStatusBadge
@@ -271,16 +301,18 @@ function HCIWeathermapContent() {
             trigger="hover"
             placement="bottomRight"
             content={
-              <ul style={{ paddingLeft: 18, margin: 0, maxWidth: 460, fontSize: 12.5, color: '#5F5E5A', lineHeight: 1.9 }}>
-                <li>本图以组内 4 台交换机为<b>中心</b>：向上双归上联两台核心，向下连接超融合服务器区。</li>
+              <ul style={{ paddingLeft: 18, margin: 0, maxWidth: 480, fontSize: 12.5, color: '#5F5E5A', lineHeight: 1.9 }}>
+                <li>本图以组内 4 台交换机为<b>中心</b>：向上双归上联两台核心；向下按纳总端口规划表把下联口<b>逐口归类</b>为二路 / 四路计算、RDS 存储、安全、算力测试、智算、智算存储、带外等业务（悬停链路可见端口号 [N]）。</li>
+                <li><b>图上同类业务合并成一个节点</b>（例如「二路计算节点」同时承接 4 台交换机双归下挂的二路服务器），节点上的数字是各交换机分支的合计，悬停节点可逐台查看；每个物理端口的流量 / 状态 / 对端设备请看下放的<b>链路明细表（一行一个端口）</b>。</li>
                 <li>所有流量均为 SNMP 直连 4 台交换机实测，两次采样取差值 ÷ 采样窗口，是瞬时值，会随业务波动。</li>
-                <li>上联单口 <b>10G</b>，服务器侧端口实测多为 <b>25G</b>，下行聚合带宽达数百 G；交换机间互联 <b>80G</b>。</li>
+                <li>交换机上 <code>aggN</code> 与物理口 <code>eth-0-N</code> 计数器实测 <b>1:1 完全相等</b>：每个端口优先取 agg，设备上没有 agg 的口（图书馆 [21][33][34]、礼贤楼 [29]–[42]、带外 [47]）才回退取 eth，<b>不会双算</b>；分支带宽只计当前 UP 成员。</li>
+                <li>上联单口 <b>10G</b>，服务器侧端口实测多为 <b>25G</b>（算力测试 [33][34] 为 10G）；交换机间互联 <b>80G</b>。显示 <b>Down</b> 的分支多为规划未连线或带外未接（如图书馆二路 1–5/7–8、礼贤楼智算存储 [42]）。</li>
                 <li>虚线 = 交换机间互联，配对经 LLDP <b>双向互证实测</b>：
                   <code>cg-tsg-d06-yewu1</code>↔<code>cg-tsg-d07-yewu2</code>、
                   <code>cg-lxl2-b02-yewu3</code>↔<code>cg-lxl2-b03-yewu4</code>。
                   <b>注意它是跨核心的</b>。
                 </li>
-                <li>如果<b>下行吞吐明显大于上联吞吐</b>，说明大量流量是<b>服务器之间的东西向流量</b>（HCI 存储复制 / 虚拟机迁移），在本机框内就转掉了，并没有走到核心 —— 这类流量只在交换机侧才看得到。</li>
+                <li>同一台服务器双网卡<b>双归</b>到配对两台交换机的同号端口（表中「另一归」即对端交换机）；如果<b>下行吞吐明显大于上联吞吐</b>，说明大量是<b>服务器之间的东西向流量</b>（HCI 存储复制 / 虚拟机迁移），在机框内就转掉了，并没有走到核心。</li>
               </ul>
             }
           >
@@ -312,7 +344,7 @@ function HCIWeathermapContent() {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col xs={24} sm={8}>
               <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-                <Statistic title="总链路" value={total} />
+                <Statistic title="链路总数（逐端口）" value={total} />
               </div>
             </Col>
             <Col xs={24} sm={8}>
@@ -329,6 +361,7 @@ function HCIWeathermapContent() {
 
           {/* SVG 拓扑图 */}
           <div
+            ref={svgWrapRef}
             dangerouslySetInnerHTML={{ __html: apiData.svg }}
             style={{
               width: '100%',
@@ -370,7 +403,8 @@ function HCIWeathermapContent() {
                     <div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:500">其它</div>
                     <div style="font-size:12px;color:#444;line-height:1.8">
                       白色光点流动 = 有流量，静止 = 空载<br/>
-                      虚线 = 交换机间集群互联（80G）
+                      虚线 = 交换机间集群互联（80G）<br/>
+                      同类下行业务合并为一个节点；分支粗细 = 该交换机该业务 UP 口容量，逐端口流量见明细表
                     </div>
                   </div>
                 </div>
@@ -380,7 +414,9 @@ function HCIWeathermapContent() {
 
           {/* ========== 链路明细 ========== */}
           <div style={{ marginTop: 20, marginBottom: 12 }}>
-            <Text strong style={{ color: '#2C2C2A' }}>链路明细（按利用率降序）</Text>
+            <Text strong style={{ color: '#2C2C2A' }}>
+              链路明细（{total} 行 · 下联按物理端口逐口列出 · 默认按利用率降序，可用列头按交换机/业务分类筛选）
+            </Text>
           </div>
           <Table
             dataSource={ports}

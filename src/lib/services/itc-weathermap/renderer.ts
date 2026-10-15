@@ -13,7 +13,7 @@ import {
   getNodeStylePresetForView,
   getViewMeta,
 } from './config-loader';
-import { TopoNode, TopoLink } from './topology';
+import { TopoNode, TopoLink, hciDownCategories, hciSwitchMeta, hciPortPeer } from './topology';
 
 // ========== 利用率颜色插值（5 段线性，与 Go 程序 utilColor 一致） ==========
 interface Stop { p: number; r: number; g: number; b: number }
@@ -207,6 +207,55 @@ function buildLinkPaths(
       paths.set(linkKey(l), arcPath(p0, ctrl, p1));
     });
 
+  // ---- hci-down：共享业务节点（底边单排）↔ 交换机（上排）的双边开槽扇出 ----
+  // 同类业务已合并为一个节点、一台节点双归多台交换机，故每段链路的两端都
+  // 「贴边等距开槽」：节点顶边按所接交换机 x 排序开槽，交换机底边按业务节点 x
+  // 排序开槽，两端垂直切线三次贝塞尔。交换机按机楼对相邻、业务节点按重心分组，
+  // 同对内链路不交叉；共享节点在两对之间形成有序织物带。
+  const downLinks = links.filter((l) => l.geometry === 'hci-down');
+  if (downLinks.length > 0) {
+    const slotPad = 10;
+    /** 某条边（节点/交换机）上，按对端 x 顺序给每条链路等距分配落点 */
+    const slotOn = (ownerId: string, pickOwner: (l: TopoLink) => string, pickOther: (l: TopoLink) => string) => {
+      const owner = nodes.get(ownerId)!;
+      const group = downLinks
+        .filter((l) => pickOwner(l) === ownerId)
+        .map((l) => ({ l, otherX: nodes.get(pickOther(l))!.x }))
+        .sort((p, q) => p.otherX - q.otherX || p.l.port.localeCompare(q.l.port));
+      const lo = owner.x - owner.width / 2 + slotPad;
+      const span = owner.width - slotPad * 2;
+      const m = new Map<string, number>();
+      group.forEach((item, i) => {
+        m.set(linkKey(item.l), lo + (span * (i + 0.5)) / group.length);
+      });
+      return m;
+    };
+    const nodeSlots = new Map<string, number>();
+    const swSlots = new Map<string, number>();
+    for (const n of nodesList) {
+      if (n.kind !== 'zone') continue;
+      for (const [k, v] of slotOn(n.id, (l) => l.a, (l) => l.b)) nodeSlots.set(k, v);
+    }
+    const swIds = [...new Set(downLinks.map((l) => l.b))];
+    for (const id of swIds) {
+      for (const [k, v] of slotOn(id, (l) => l.b, (l) => l.a)) swSlots.set(k, v);
+    }
+    for (const l of downLinks) {
+      const card = nodes.get(l.a)!;
+      const sw = nodes.get(l.b)!;
+      const sx = nodeSlots.get(linkKey(l))!;
+      const landX = swSlots.get(linkKey(l))!;
+      const sy = card.y - card.height / 2; // 节点顶边
+      const edgeY = sw.y + sw.height / 2; // 交换机底边
+      const dist = Math.max(1, sy - edgeY);
+      const k = Math.max(30, Math.min(90, dist * 0.5));
+      paths.set(
+        linkKey(l),
+        `M${f1(sx)} ${f1(sy)} C${f1(sx)} ${f1(sy - k)} ${f1(landX)} ${f1(edgeY + k)} ${f1(landX)} ${f1(edgeY)}`,
+      );
+    }
+  }
+
   // ---- 直线/专线类 ----
   for (const l of links) {
     const key = linkKey(l);
@@ -252,16 +301,6 @@ function buildLinkPaths(
         );
         break;
       }
-      case 'hci-down':
-        // a=zone(下), b=sw(上)：sw 底边 → zone 顶边（垂直直线）
-        paths.set(
-          key,
-          linePath(
-            { x: nb.x, y: nb.y + nb.height / 2 },
-            { x: na.x, y: na.y - na.height / 2 },
-          ),
-        );
-        break;
       default:
         paths.set(key, linePath({ x: na.x, y: na.y }, { x: nb.x, y: nb.y }));
     }
@@ -341,7 +380,10 @@ export function renderSVG(
     const down = oper >= 0 && oper !== 1;
     let color = '#B0B0B0';
     if (!down && !unreach) color = utilColor(util);
-    const w = widthFor(speed);
+    // hci-down 是多口聚合的逻辑分支（容量可达 250G），线宽单独收窄，避免 26 条分支过重
+    const w = l.geometry === 'hci-down'
+      ? Math.max(1.8, Math.min(6.5, 1.8 + (speed / 25000) * 0.5))
+      : widthFor(speed);
 
     let dash = '';
     if (l.geometry === 'irf' && l.row === 2) {
@@ -363,8 +405,24 @@ export function renderSVG(
     if (unreach) {
       tip += '设备未达（community 不对或不可达）';
     } else {
-      const dir = outBps > inBps ? '核心 → 对端（出为主）' : '对端 → 核心（入为主）';
-      tip += `${ifaceName}\n入 ${fmtBps(inBps)} ／ 出 ${fmtBps(outBps)} · 合计 ${fmtBps(inBps + outBps)}\n协商 ${fmtSpeed(speed)} · 主流量方向：${dir}\n利用率 ${util.toFixed(2)}%`;
+      let dirOut: string;
+      let dirIn: string;
+      if (l.geometry === 'hci-down') {
+        dirOut = '交换机 → 下行业务（出为主）';
+        dirIn = '下行业务 → 交换机（入为主）';
+      } else if (l.geometry === 'hci-up') {
+        dirOut = '交换机 → 核心（出为主）';
+        dirIn = '核心 → 交换机（入为主）';
+      } else if (l.geometry === 'hci-peer') {
+        dirOut = '本端 → 对端交换机（出为主）';
+        dirIn = '对端交换机 → 本端（入为主）';
+      } else {
+        dirOut = '核心 → 对端（出为主）';
+        dirIn = '对端 → 核心（入为主）';
+      }
+      const dir = outBps > inBps ? dirOut : dirIn;
+      const peerLine = l.peer ? `对端：${l.peer}\n` : '';
+      tip += `${ifaceName}\n${peerLine}入 ${fmtBps(inBps)} ／ 出 ${fmtBps(outBps)} · 合计 ${fmtBps(inBps + outBps)}\n协商 ${fmtSpeed(speed)} · 主流量方向：${dir}\n利用率 ${util.toFixed(2)}%`;
       if (down) tip += '\n端口 Down';
     }
 
@@ -400,7 +458,25 @@ export function renderSVG(
 
     const nx = n.x - n.width / 2;
     const ny = n.y - n.height / 2;
-    svg += `<rect x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" width="${n.width}" height="${n.height}" rx="9" fill="${st[0]}" stroke="${st[1]}" stroke-width="0.8"/>\n`;
+    // hci 合并业务节点：悬停展示逐交换机分支明细
+    let nodeTip = '';
+    if (preset === 'hci' && n.kind === 'zone') {
+      const branches = links
+        .filter((l) => l.geometry === 'hci-down' && l.a === id)
+        .map((l) => ({ l, swX: nodes.get(l.b)?.x ?? 0 }))
+        .sort((p, q) => p.swX - q.swX);
+      const lines = [n.name, n.description, ''];
+      for (const { l } of branches) {
+        const label = l.description.split(' 下行')[0];
+        const dd = data.get(l.port);
+        if (!dd) lines.push(`${label}：采集中…`);
+        else if (dd.oper !== 1) lines.push(`${label}：端口 Down`);
+        else lines.push(`${label}：入 ${fmtBps(dd.inBps)} ／ 出 ${fmtBps(dd.outBps)}`);
+      }
+      nodeTip = lines.join('\n');
+    }
+    const rectTitle = nodeTip ? `<title>${esc(nodeTip)}</title>` : '';
+    svg += `<rect x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" width="${n.width}" height="${n.height}" rx="9" fill="${st[0]}" stroke="${st[1]}" stroke-width="0.8">${rectTitle}</rect>\n`;
 
     let sub = n.description;
 
@@ -440,14 +516,27 @@ export function renderSVG(
         sub = '设备未达';
       }
     }
+    // hci 合并业务节点：副信息可能为两行（下方渲染时按 ' · ' 拆分）
     if (preset === 'hci' && n.kind === 'zone') {
-      const swID = id.replace('zone', '');
-      const d = data.get(`down:${swID}`);
-      if (d && d.oper !== -2) {
-        const tot = d.inBps + d.outBps;
-        sub = `下行 ${fmtBps(tot)}bps`;
+      // 合计挂在本节点上的各交换机分支（down:<交换机>:<分类>）
+      const branches = links.filter((l) => l.geometry === 'hci-down' && l.a === id);
+      let inSum = 0, outSum = 0, known = 0, upN = 0;
+      for (const l of branches) {
+        const dd = data.get(l.port);
+        if (!dd) continue;
+        known += 1;
+        if (dd.oper === 1) {
+          upN += 1;
+          inSum += dd.inBps;
+          outSum += dd.outBps;
+        }
+      }
+      if (known === 0) {
+        sub = n.description; // 首屏框架 / 设备未达：静态端口说明（可含 ' · ' 两行）
+      } else if (upN === 0) {
+        sub = '全部端口 Down';
       } else {
-        sub = '设备未达';
+        sub = `${fmtBps(inSum + outSum)}bps · ${upN}/${known} 台在线`;
       }
     }
 
@@ -458,8 +547,15 @@ export function renderSVG(
       if (n.peer) {
         svg += `<text x="${n.x}" y="${(n.y + 20).toFixed(0)}" text-anchor="middle" font-size="11" fill="#888780">${esc(n.peer)}</text>\n`;
       }
+    } else if (preset === 'hci' && n.kind === 'zone') {
+      // 合并业务节点：名称 + 两行短副信息（按 ' · ' 拆行，宽 118 不溢出）
+      const subLines = sub.split(' · ');
+      svg += `<text x="${n.x}" y="${(n.y - 11).toFixed(0)}" text-anchor="middle" font-size="12.5" font-weight="500" fill="${st[2]}">${esc(n.name)}</text>\n`;
+      subLines.forEach((line, i) => {
+        svg += `<text x="${n.x}" y="${(n.y + 6 + i * 12).toFixed(0)}" text-anchor="middle" font-size="9.5" fill="${st[3]}">${esc(line)}</text>\n`;
+      });
     } else if (preset === 'hci') {
-      // HCI 用更小的 sub 字体
+      // HCI 交换机：小 sub 字体
       svg += `<text x="${n.x}" y="${(n.y - 10).toFixed(0)}" text-anchor="middle" font-size="14" font-weight="500" fill="${st[2]}">${esc(n.name)}</text>\n`;
       svg += `<text x="${n.x}" y="${(n.y + 11).toFixed(0)}" text-anchor="middle" font-size="11.5" fill="${st[3]}">${esc(sub)}</text>\n`;
     } else {
@@ -487,6 +583,10 @@ export interface PortTableRow {
   linkGeometry: string;
   row: number;
   order: number;
+  /** HCI 视图筛选列 */
+  switchLabel: string;
+  category: string;
+  portNo: number;
 }
 
 export function buildPortTableRows(
@@ -500,9 +600,20 @@ export function buildPortTableRows(
   }
 
   const rows: PortTableRow[] = [];
-  for (const l of links) {
-    const d = data.get(l.port);
-    let speed = l.speed;
+  const pushRow = (
+    portKey: string,
+    description: string,
+    peer: string,
+    fallbackSpeed: number,
+    geometry: string,
+    row: number,
+    order: number,
+    switchLabel: string,
+    category: string,
+    portNo: number,
+    d?: PortData,
+  ) => {
+    let speed = fallbackSpeed;
     let oper = -1;
     let inBps = 0, outBps = 0;
     let ifName = '';
@@ -514,21 +625,10 @@ export function buildPortTableRows(
       ifName = d.name;
     }
     let util = 0;
-    if (speed > 0 && oper !== -2) util = Math.max(inBps, outBps) / (speed * 1e6) * 100;
-
-    // HCI 视图：推断对端
-    let peer = l.peer || '';
-    if (!peer) {
-      switch (l.geometry) {
-        case 'hci-up': peer = 'S12510-S-IRF'; break;
-        case 'hci-down': peer = '超融合服务器'; break;
-        case 'hci-peer': peer = '同组交换机'; break;
-      }
-    }
-
+    if (speed > 0 && oper !== -2 && oper === 1) util = Math.max(inBps, outBps) / (speed * 1e6) * 100;
     rows.push({
-      port: l.port,
-      description: l.description,
+      port: portKey,
+      description,
       peer,
       speed,
       oper,
@@ -536,16 +636,66 @@ export function buildPortTableRows(
       outBps,
       ifName,
       utilization: util,
-      linkGeometry: l.geometry,
-      row: l.row,
-      order: l.order,
+      linkGeometry: geometry,
+      row,
+      order,
+      switchLabel,
+      category,
+      portNo,
     });
+  };
+
+  if (viewId === 'hyperconverged') {
+    // 上联 / 互联：一条链路一行
+    for (const l of links.filter((x) => x.geometry !== 'hci-down')) {
+      const swId = l.port.split(':')[1] ?? '';
+      const label = hciSwitchMeta[swId]?.label ?? '';
+      const category = l.geometry === 'hci-up' ? '上联核心' : '集群互联';
+      pushRow(
+        l.port, l.description, l.peer || '', l.speed, l.geometry, 0, l.order,
+        label, category, 0, data.get(l.port),
+      );
+    }
+    // 下行：一个物理成员端口一行（agg 优先 / eth 兜底，采集端已逐口出数）
+    const swOrder = ['sw10', 'sw13', 'sw14', 'sw15'];
+    for (const swId of swOrder) {
+      const label = hciSwitchMeta[swId]?.label ?? swId;
+      hciDownCategories[swId]?.forEach((cat, ci) => {
+        for (const p of cat.ports) {
+          const key = `down:${swId}:${cat.key}#${p}`;
+          pushRow(
+            key,
+            `${label} 下行 · ${cat.name} [${p}]`,
+            hciPortPeer(swId, cat.key, p),
+            0,
+            'hci-down',
+            ci,
+            p,
+            label,
+            cat.name,
+            p,
+            data.get(key),
+          );
+        }
+      });
+    }
+  } else {
+    for (const l of links) {
+      pushRow(
+        l.port, l.description, l.peer || '', l.speed, l.geometry, l.row, l.order,
+        '', '', 0, data.get(l.port),
+      );
+    }
   }
-  // 排序：未达沉底，其余按利用率降序
+
+  // 排序：未达沉底，其余按利用率降序，利用率相同按交换机/分类/端口便于阅读
   rows.sort((a, b) => {
     if (a.oper === -2 && b.oper !== -2) return 1;
     if (a.oper !== -2 && b.oper === -2) return -1;
-    return b.utilization - a.utilization;
+    if (b.utilization !== a.utilization) return b.utilization - a.utilization;
+    if (a.switchLabel !== b.switchLabel) return a.switchLabel.localeCompare(b.switchLabel);
+    if (a.row !== b.row) return a.row - b.row;
+    return a.portNo - b.portNo;
   });
   return rows;
 }
