@@ -7,16 +7,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/jwt';
 import {
-  loadYamlConfig,
   getViewMeta,
   getRefreshPeriod,
 } from '@/lib/services/itc-weathermap/config-loader';
 import { canAccessView } from '@/lib/services/itc-weathermap/access';
-import { getSnapshot, initializeCollector, startCollecting, getViewConnection } from '@/lib/services/itc-weathermap/collector';
+import {
+  getSnapshot,
+  initializeCollector,
+  startCollecting,
+  restartCollecting,
+  whenFirstRound,
+  getViewConnection,
+} from '@/lib/services/itc-weathermap/collector';
 import { renderSVG, buildPortTableRows } from '@/lib/services/itc-weathermap/renderer';
-
-// 各视图正在初始化的 Promise（避免并发重复 init）
-const initPromises = new Map<string, Promise<boolean>>();
 
 function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
@@ -45,25 +48,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: '无权访问该网络天气图' }, { status: 403 });
     }
 
-    // 尝试初始化该视图的采集器（多设备并行 ping）——超时保护不阻塞框架渲染
-    if (!initPromises.has(viewId)) {
-      const p = withTimeout(
-        initializeCollector(viewId)
-          .then((ok) => {
-            if (ok) startCollecting(getRefreshPeriod(), viewId);
-            return ok;
-          })
-          .catch(() => false)
-          .finally(() => {
-            // 保留一小段时间防并发，随后允许重新初始化
-            setTimeout(() => initPromises.delete(viewId), 2000);
-          }),
-        6000,
-        false,
-      );
-      initPromises.set(viewId, p);
-    }
-    await initPromises.get(viewId);
+    // 初始化设备运行时（纯本地，不做网络探测）并确保采集循环运行（幂等）
+    const initialized = await initializeCollector(viewId).catch(() => false);
+    if (initialized) startCollecting(getRefreshPeriod(), viewId);
+
+    // 短等首轮采集：可达设备的 discover 在百毫秒级，拿得到首屏就直接带数据；
+    // 不可达设备首轮只快速探测 1.2s，等不到也立即返回拓扑框架
+    await withTimeout(whenFirstRound(viewId), 2500, undefined);
 
     const snapshot = getSnapshot(viewId);
     const conn = getViewConnection(viewId);
@@ -130,16 +121,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '无权访问该网络天气图' }, { status: 403 });
     }
 
-    // 强制重新初始化该视图（collector 内部对已初始化设备会保留基线）
-    initPromises.delete(viewId);
-    const ok = await withTimeout(
-      initializeCollector(viewId, true).catch(() => false),
-      8000,
-      false,
-    );
-    if (ok) {
-      startCollecting(getRefreshPeriod(), viewId);
-    }
+    // 强制重连：重建 SNMP 客户端与设备状态，立即跑一轮冷启动并重新预热
+    await initializeCollector(viewId, true).catch(() => false);
+    await withTimeout(restartCollecting(getRefreshPeriod(), viewId), 8000, undefined);
     const conn = getViewConnection(viewId);
 
     return NextResponse.json({

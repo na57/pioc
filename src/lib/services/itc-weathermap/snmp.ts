@@ -1,6 +1,11 @@
 /**
  * ITC 网络天气图 SNMP 客户端
  * 基于 Go 版本移植，支持 SNMP v2c GET/GETNEXT/GETBULK
+ *
+ * 性能设计：
+ * - 每个客户端（每台设备）复用一个长驻 UDP socket，按 request-id 多路复用在途请求；
+ * - 超时后用同一 request-id 真正重发（默认重试 1 次），而不是直接失败；
+ * - walk 优先使用 GETBULK（默认每次 25 条），设备不支持时自动降级为 GETNEXT。
  */
 
 import * as dgram from 'dgram';
@@ -50,6 +55,26 @@ export interface SNMPClientOptions {
   port?: number;
 }
 
+/** 单次请求的覆盖参数（冷启动快速探测等场景使用） */
+interface RequestOptions {
+  timeout?: number;
+  retries?: number;
+  maxRepetitions?: number;
+  /** walk 时 GETBULK 失败是否禁止降级 GETNEXT（快速探测不可达主机时，降级只会多等一轮超时） */
+  noFallback?: boolean;
+}
+
+interface PendingRequest {
+  id: number;
+  buf: Buffer;
+  resolve: (vbs: VarBind[]) => void;
+  reject: (err: Error) => void;
+  timer: NodeJS.Timeout | null;
+  attempts: number; // 已发送次数
+  maxAttempts: number;
+  timeoutMs: number;
+}
+
 export class SNMPClient {
   private host: string;
   private community: string;
@@ -58,13 +83,124 @@ export class SNMPClient {
   private port: number;
   private requestId: number;
 
+  // 长驻 socket 与在途请求表（按 request-id 匹配响应）
+  private socket: dgram.Socket | null = null;
+  private socketReady: Promise<void> | null = null;
+  private closing = false;
+  private pending = new Map<number, PendingRequest>();
+
   constructor(options: SNMPClientOptions) {
     this.host = options.host;
     this.community = options.community;
-    this.timeout = options.timeout || 5000;
-    this.retries = options.retries || 2;
+    this.timeout = options.timeout || 1500;
+    this.retries = options.retries ?? 1;
     this.port = options.port || 161;
     this.requestId = 0;
+  }
+
+  // ========== 长驻 socket 管理 ==========
+
+  /** 懒创建 socket；显式监听 error，未 bind 也可直接 send（隐式分配端口） */
+  private ensureSocket(): Promise<void> {
+    if (this.socketReady) return this.socketReady;
+    this.closing = false;
+    this.socketReady = new Promise<void>((resolve) => {
+      const sock = dgram.createSocket('udp4');
+      sock.on('message', (msg) => this.handleMessage(msg));
+      sock.on('error', (err) => this.handleSocketError(sock, err));
+      this.socket = sock;
+      resolve();
+    });
+    return this.socketReady;
+  }
+
+  /** socket 级错误（如 ICMP 不可达）：废弃旧 socket，让在途请求在新 socket 上重发 */
+  private handleSocketError(sock: dgram.Socket, err: Error): void {
+    console.warn(`[SNMP] socket 错误 ${this.host}:`, err.message);
+    try {
+      sock.removeAllListeners();
+      sock.close();
+    } catch {
+      /* ignore */
+    }
+    if (this.socket !== sock) return;
+    this.socket = null;
+    this.socketReady = null;
+    for (const req of this.pending.values()) {
+      this.dispatch(req, err);
+    }
+  }
+
+  /** 收到 UDP 报文：提取 request-id 并分发给在途请求 */
+  private handleMessage(msg: Buffer): void {
+    let rid = 0;
+    try {
+      rid = this.extractRequestId(msg);
+    } catch {
+      return; // 不是合法 SNMP 响应，忽略
+    }
+    const req = this.pending.get(rid);
+    if (!req) return; // 已超时或重复响应
+    try {
+      const vbs = this.parseResponse(msg);
+      if (req.timer) clearTimeout(req.timer);
+      this.pending.delete(rid);
+      req.resolve(vbs);
+    } catch (err) {
+      this.dispatch(req, err as Error);
+    }
+  }
+
+  /** 关闭并销毁客户端（强制重连时使用），拒绝全部在途请求 */
+  close(): void {
+    this.closing = true;
+    if (this.socket) {
+      try {
+        this.socket.removeAllListeners();
+        this.socket.close();
+      } catch {
+        /* ignore */
+      }
+      this.socket = null;
+    }
+    this.socketReady = null;
+    for (const req of this.pending.values()) {
+      if (req.timer) clearTimeout(req.timer);
+      req.reject(new Error('SNMP client closed'));
+    }
+    this.pending.clear();
+  }
+
+  private nextRequestId(): number {
+    this.requestId = (this.requestId % 0x7fffffff) + 1;
+    return this.requestId;
+  }
+
+  /**
+   * 发送（或重发）一个在途请求；超过最大尝试次数则 reject
+   */
+  private dispatch(req: PendingRequest, cause: Error): void {
+    if (req.timer) {
+      clearTimeout(req.timer);
+      req.timer = null;
+    }
+    if (this.closing || req.attempts >= req.maxAttempts) {
+      this.pending.delete(req.id);
+      req.reject(cause);
+      return;
+    }
+
+    void this.ensureSocket().then(() => {
+      if (!this.pending.has(req.id)) return; // 期间已被响应或关闭
+      req.attempts += 1;
+      req.timer = setTimeout(() => {
+        this.dispatch(req, new Error(`SNMP 请求超时 ${this.host} (${req.attempts}/${req.maxAttempts})`));
+      }, req.timeoutMs);
+
+      this.socket?.send(req.buf, 0, req.buf.length, this.port, this.host, (err) => {
+        if (err) this.dispatch(req, err);
+      });
+    });
   }
 
   // ========== BER 编码工具 ==========
@@ -156,103 +292,33 @@ export class SNMPClient {
   }
 
   /**
-   * 发送 SNMP 请求并等待响应
+   * 发送 SNMP 请求并等待响应（复用长驻 socket，超时自动重发）
    */
-  private async sendRequest(pduType: number, oids: string[]): Promise<VarBind[]> {
-    const socket = dgram.createSocket('udp4');
+  private async sendRequest(pduType: number, oids: string[], opts: RequestOptions = {}): Promise<VarBind[]> {
+    await this.ensureSocket();
+    const id = this.nextRequestId();
+    const buf = this.buildPDU(pduType, oids, id, opts);
 
     return new Promise((resolve, reject) => {
-      let lastError: Error | null = null;
-      let attempts = 0;
-      let closed = false;
-      let timeoutId: NodeJS.Timeout | null = null;
-
-      const cleanup = () => {
-        if (closed) return;
-        closed = true;
-        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-        try { socket.close(); } catch { /* ignore */ }
+      const req: PendingRequest = {
+        id,
+        buf,
+        resolve,
+        reject,
+        timer: null,
+        attempts: 0,
+        maxAttempts: 1 + (opts.retries ?? this.retries),
+        timeoutMs: opts.timeout ?? this.timeout,
       };
-
-      const fail = (err: Error) => {
-        cleanup();
-        reject(err);
-      };
-
-      const armTimeout = () => {
-        if (timeoutId) clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          // timeout -> close & retry (或最终失败)
-          if (closed) return;
-          cleanup();
-          if (attempts <= this.retries) {
-            // 重开一个 socket 重试：用嵌套 sendRequest 递归
-            // 但直接在 promise 链里递归会把 resolve/reject 弄乱，
-            // 改成：timeout 不 close socket，只负责触发一次 retry
-            // 这里已经 close 了，只能直接 fail，让上层 ping 用 withTimeout 降级
-            reject(lastError || new Error(`SNMP timeout (${attempts}/${this.retries + 1})`));
-          } else {
-            reject(lastError || new Error('SNMP request failed'));
-          }
-        }, this.timeout);
-      };
-
-      const trySend = () => {
-        if (closed) return;
-        attempts++;
-        const msg = this.buildPDU(pduType, oids);
-
-        armTimeout();
-
-        socket.send(msg, 0, msg.length, this.port, this.host, (err) => {
-          if (closed) return;
-          if (err) {
-            lastError = err;
-            if (attempts <= this.retries) {
-              setTimeout(trySend, 200);
-            } else {
-              fail(lastError || new Error('SNMP send failed'));
-            }
-          }
-        });
-      };
-
-      socket.on('message', (msg) => {
-        if (closed) return;
-        try {
-          const vbs = this.parseResponse(msg);
-          cleanup();
-          resolve(vbs);
-        } catch (err) {
-          lastError = err as Error;
-          if (attempts <= this.retries) {
-            setTimeout(trySend, 200);
-          } else {
-            fail(lastError);
-          }
-        }
-      });
-
-      socket.on('error', (err) => {
-        if (closed) return;
-        lastError = err;
-        if (attempts <= this.retries) {
-          setTimeout(trySend, 200);
-        } else {
-          fail(err);
-        }
-      });
-
-      trySend();
+      this.pending.set(id, req);
+      this.dispatch(req, new Error('SNMP 请求未发出'));
     });
   }
 
   /**
    * 构建 PDU（对齐 Go 程序的 build）
    */
-  private buildPDU(pduType: number, oids: string[]): Buffer {
-    this.requestId++;
-
+  private buildPDU(pduType: number, oids: string[], requestId: number, opts: RequestOptions = {}): Buffer {
     let vbs = Buffer.alloc(0);
     for (const oid of oids) {
       const vb = Buffer.concat([
@@ -262,10 +328,10 @@ export class SNMPClient {
       vbs = Buffer.concat([vbs, this.tlv(0x30, vb)]);
     }
 
-    // request-id
-    let p = this.encInt(this.requestId);
+    // request-id | error-status/non-repeaters | error-index/max-repetitions
+    let p = this.encInt(requestId);
     if (pduType === PDU_GETBULK) {
-      p = Buffer.concat([p, this.encInt(0), this.encInt(50)]);
+      p = Buffer.concat([p, this.encInt(0), this.encInt(opts.maxRepetitions ?? 50)]);
     } else {
       p = Buffer.concat([p, this.encInt(0), this.encInt(0)]);
     }
@@ -273,7 +339,7 @@ export class SNMPClient {
 
     // message: version | community | pdu
     const m = Buffer.concat([
-      this.encInt(1),  // version = 1 (v2c)
+      this.encInt(1), // version = 1 (v2c)
       this.encStr(this.community),
       this.tlv(pduType, p),
     ]);
@@ -281,12 +347,22 @@ export class SNMPClient {
     return this.tlv(0x30, m);
   }
 
+  /** 只解析响应中的 request-id，用于响应分发 */
+  private extractRequestId(msg: Buffer): number {
+    const { content: outer } = this.readTLV(msg, 0);
+    let r = this.readTLV(outer, 0); // version
+    r = this.readTLV(outer, r.next); // community
+    const pduTLV = this.readTLV(outer, r.next);
+    const idTLV = this.readTLV(pduTLV.content, 0);
+    return this.decUint(idTLV.content);
+  }
+
   /**
    * 解析响应（对齐 Go 程序的 readTLV 风格）
    */
   private parseResponse(msg: Buffer): VarBind[] {
     // 外层 SEQUENCE
-    let { content: outer, next } = this.readTLV(msg, 0);
+    const { content: outer } = this.readTLV(msg, 0);
 
     // version
     let r = this.readTLV(outer, 0);
@@ -360,8 +436,8 @@ export class SNMPClient {
   /**
    * GET 请求
    */
-  async get(oids: string[]): Promise<Map<string, VarBind>> {
-    const vbs = await this.sendRequest(PDU_GET, oids);
+  async get(oids: string[], opts?: RequestOptions): Promise<Map<string, VarBind>> {
+    const vbs = await this.sendRequest(PDU_GET, oids, opts);
     const result = new Map<string, VarBind>();
     for (const vb of vbs) {
       result.set(vb.oid, vb);
@@ -372,44 +448,72 @@ export class SNMPClient {
   /**
    * GETNEXT 请求
    */
-  async getNext(oid: string): Promise<VarBind | null> {
-    const vbs = await this.sendRequest(PDU_GETNEXT, [oid]);
+  async getNext(oid: string, opts?: RequestOptions): Promise<VarBind | null> {
+    const vbs = await this.sendRequest(PDU_GETNEXT, [oid], opts);
     return vbs[0] || null;
   }
 
   /**
-   * GETBULK 请求
+   * GETBULK 请求（non-repeaters=0，max-repetitions 可配）
    */
-  async getBulk(oids: string[]): Promise<VarBind[]> {
-    return this.sendRequest(PDU_GETBULK, oids);
+  async getBulk(oids: string[], maxRepetitions: number = 25, opts?: RequestOptions): Promise<VarBind[]> {
+    return this.sendRequest(PDU_GETBULK, oids, { ...opts, maxRepetitions });
   }
 
   /**
-   * WALK 请求（使用 GETBULK）
+   * WALK 请求：优先 GETBULK，失败（设备不支持/响应异常）自动降级为 GETNEXT
    */
-  async walk(baseOID: string, maxNodes: number = 4000): Promise<VarBind[]> {
+  async walk(baseOID: string, maxNodes: number = 4000, opts?: RequestOptions): Promise<VarBind[]> {
+    try {
+      return await this.walkBulk(baseOID, maxNodes, opts);
+    } catch (err) {
+      if (opts?.noFallback) throw err;
+      console.warn(
+        `[SNMP] GETBULK 失败 ${this.host} ${baseOID}，降级 GETNEXT:`,
+        (err as Error).message,
+      );
+      return this.walkGetNext(baseOID, maxNodes, opts);
+    }
+  }
+
+  /** GETBULK 版 walk：每轮最多取 maxRepetitions 条，直到走出子树 */
+  private async walkBulk(baseOID: string, maxNodes: number, opts?: RequestOptions): Promise<VarBind[]> {
+    const reps = opts?.maxRepetitions ?? 25;
+    const prefix = `${baseOID}.`;
+    const result: VarBind[] = [];
+    let currentOID = baseOID;
+    const maxRounds = Math.ceil(maxNodes / reps) + 4;
+
+    for (let i = 0; i < maxRounds && result.length < maxNodes; i++) {
+      const vbs = await this.getBulk([currentOID], reps, opts);
+      if (vbs.length === 0) break;
+
+      let advanced = false;
+      for (const vb of vbs) {
+        // 子树结束（endOfMibView 回显请求 OID）或第一条越界 OID：子树遍历完成
+        if (vb.missing || !vb.oid.startsWith(prefix)) return result;
+        result.push(vb);
+        currentOID = vb.oid;
+        advanced = true;
+        if (result.length >= maxNodes) return result;
+      }
+      if (!advanced) break;
+    }
+
+    return result;
+  }
+
+  /** GETNEXT 版 walk（降级路径）：逐条串行 */
+  private async walkGetNext(baseOID: string, maxNodes: number, opts?: RequestOptions): Promise<VarBind[]> {
+    const prefix = `${baseOID}.`;
     const result: VarBind[] = [];
     let currentOID = baseOID;
 
-    for (let i = 0; i < 200 && result.length < maxNodes; i++) {
-      try {
-        const vbs = await this.sendRequest(PDU_GETNEXT, [currentOID]);
-        
-        if (vbs.length === 0) {
-          break;
-        }
-
-        for (const vb of vbs) {
-          if (!vb.oid.startsWith(baseOID + '.')) {
-            return result;
-          }
-          result.push(vb);
-          currentOID = vb.oid;
-        }
-      } catch (error) {
-        console.error('[SNMP] Walk error:', error);
-        break;
-      }
+    for (let i = 0; i < maxNodes && result.length < maxNodes; i++) {
+      const vb = await this.getNext(currentOID, opts);
+      if (!vb || vb.missing || !vb.oid.startsWith(prefix)) break;
+      result.push(vb);
+      currentOID = vb.oid;
     }
 
     return result;

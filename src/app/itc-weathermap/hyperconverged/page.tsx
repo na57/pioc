@@ -96,30 +96,39 @@ function HCIWeathermapContent() {
   const [apiData, setApiData] = useState<ApiResp | null>(null);
   const [forbidden, setForbidden] = useState(false);
 
-  const fetchSnapshot = useCallback(async () => {
+  const fetchSnapshot = useCallback(async (): Promise<ApiResp | null> => {
     try {
       setLoading(true);
       const resp = await fetch('/api/itc-weathermap/snapshot?view=hyperconverged');
       if (resp.status === 403) {
         setForbidden(true);
         setApiData(null);
-        return;
+        return null;
       }
       const data: ApiResp = await resp.json();
       setApiData(data);
+      return data;
     } catch (err) {
       console.error('[HCIWeathermap] 网络错误:', err);
       message.error('网络请求失败');
+      return null;
     } finally {
       setLoading(false);
     }
   }, [message]);
 
+  // 自适应轮询：首轮未就绪（设备不可达/基线未建立）时 5 秒快轮，就绪后 30 秒
   useEffect(() => {
-    fetchSnapshot();
     if (forbidden) return;
-    const t = setInterval(fetchSnapshot, 30000);
-    return () => clearInterval(t);
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const loop = async () => {
+      const data = await fetchSnapshot();
+      if (stopped) return;
+      timer = setTimeout(loop, data?.ready ? 30000 : 5000);
+    };
+    void loop();
+    return () => { stopped = true; clearTimeout(timer); };
   }, [fetchSnapshot, forbidden]);
 
   if (forbidden) {
