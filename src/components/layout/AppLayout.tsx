@@ -157,6 +157,9 @@ function AppLayout({ children }: AppLayoutProps) {
     };
   }, []);
 
+  // 当前应用内按视图权限过滤后的菜单 key 集合（如 ITC 网络天气图的视图 id）
+  const [permittedViewIds, setPermittedViewIds] = useState<Set<string> | undefined>(undefined);
+
   // 根据当前路径匹配所在应用（最长前缀优先）
   const currentApp = React.useMemo(() => {
     return (
@@ -167,8 +170,33 @@ function AppLayout({ children }: AppLayoutProps) {
     );
   }, [allApps, pathname]);
 
+  // ITC 网络天气图：拉取当前用户可访问的视图，用于过滤左侧菜单
+  useEffect(() => {
+    if (currentApp?.url !== '/itc-weathermap') {
+      setPermittedViewIds(undefined);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/itc-weathermap/views')
+      .then((r) => (r.ok ? r.json() : { success: false }))
+      .then((data) => {
+        if (cancelled) return;
+        if (data.success && Array.isArray(data.data)) {
+          setPermittedViewIds(new Set<string>(data.data.map((v: { id: string }) => v.id)));
+        } else {
+          setPermittedViewIds(new Set());
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPermittedViewIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentApp?.url]);
+
   // 当前应用的侧边菜单：代码内置（src/lib/app-menus.ts），未注册的应用返回空数组
-  const appMenus: AppSideMenu[] = getAppSideMenus(currentApp?.url);
+  const appMenus: AppSideMenu[] = getAppSideMenus(currentApp?.url, pathname, permittedViewIds);
 
   const handleLogout = async () => {
     try {

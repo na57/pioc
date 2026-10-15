@@ -1,0 +1,396 @@
+'use client';
+
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import {
+  App,
+  Row,
+  Col,
+  Space,
+  Typography,
+  Badge,
+  Statistic,
+  Alert,
+  Tooltip,
+  Tabs,
+  Table,
+  Tag,
+  Result,
+  Popover,
+} from 'antd';
+import {
+  ReloadOutlined,
+  ClockCircleOutlined,
+  TableOutlined,
+  QuestionCircleOutlined,
+} from '@ant-design/icons';
+import { formatFriendlyTime } from '@/components/FriendlyTime';
+import ActionButton from '@/app/tags/components/ActionButton';
+import SnmpStatusBadge from '../components/SnmpStatusBadge';
+
+const { Title, Text } = Typography;
+
+interface PortTableRow {
+  port: string;
+  description: string;
+  peer: string;
+  speed: number;
+  oper: number;
+  inBps: number;
+  outBps: number;
+  ifName: string;
+  utilization: number;
+  linkGeometry: string;
+  row: number;
+  order: number;
+}
+
+interface DeviceState {
+  id: string;
+  name: string;
+  ip: string;
+  connected: boolean;
+}
+
+interface ApiResp {
+  success: boolean;
+  viewId: string;
+  viewName: string;
+  connected: boolean;
+  deviceTotal?: number;
+  deviceConnected?: number;
+  devices?: DeviceState[];
+  warm: boolean;
+  ready: boolean;
+  updateTime: number | null;
+  svg: string;
+  ports: PortTableRow[];
+  error: string;
+}
+
+/** SNMP 连接状态徽章（多设备 x/y、hover 逐台状态）见共享组件 */
+
+function fmtBps(v: number): string {
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + ' G';
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + ' M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + ' K';
+  return v.toFixed(0);
+}
+
+function fmtSpeed(speed: number): string {
+  if (speed === 0) return '未知';
+  if (speed >= 1000) return Math.round(speed / 1000) + 'G';
+  return speed + 'M';
+}
+
+function statusBadge(oper: number) {
+    if (oper === -2) return { color: '#A32D2D', text: '未达' };
+    if (oper >= 0 && oper !== 1) return { color: '#A32D2D', text: 'Down' };
+    if (oper === 1) return { color: '#3B6D11', text: 'Up' };
+    return { color: '#888', text: '未知' };
+  }
+
+function HCIWeathermapContent() {
+  const { message } = App.useApp();
+
+  const [loading, setLoading] = useState(true);
+  const [apiData, setApiData] = useState<ApiResp | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+
+  const fetchSnapshot = useCallback(async () => {
+    try {
+      setLoading(true);
+      const resp = await fetch('/api/itc-weathermap/snapshot?view=hyperconverged');
+      if (resp.status === 403) {
+        setForbidden(true);
+        setApiData(null);
+        return;
+      }
+      const data: ApiResp = await resp.json();
+      setApiData(data);
+    } catch (err) {
+      console.error('[HCIWeathermap] 网络错误:', err);
+      message.error('网络请求失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  useEffect(() => {
+    fetchSnapshot();
+    if (forbidden) return;
+    const t = setInterval(fetchSnapshot, 30000);
+    return () => clearInterval(t);
+  }, [fetchSnapshot, forbidden]);
+
+  if (forbidden) {
+    return (
+      <Result
+        status="403"
+        title="403"
+        subTitle="抱歉，您当前的角色无权访问「超融合业务」网络天气图。"
+      />
+    );
+  }
+
+  const ports = apiData?.ports ?? [];
+  const total = ports.length;
+  const upCount = ports.filter((p) => p.oper === 1).length;
+  const downCount = ports.filter((p) => p.oper >= 0 && p.oper !== 1).length;
+  const hotCount = ports.filter((p) => p.utilization >= 30 && p.oper === 1).length;
+
+  const portColumns = [
+    {
+      title: '链路',
+      dataIndex: 'description',
+      key: 'description',
+      width: 260,
+      ellipsis: true,
+      render: (v: string, r: PortTableRow) => {
+        const b = statusBadge(r.oper);
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span
+              title={b.text}
+              style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: b.color, flexShrink: 0 }}
+            />
+            <Text>{v}</Text>
+          </span>
+        );
+      },
+    },
+    {
+      title: '接口',
+      dataIndex: 'ifName',
+      key: 'ifName',
+      width: 200,
+      ellipsis: true,
+      render: (v: string) => (
+        <Text style={{ fontSize: 12, color: '#5F5E5A' }}>
+          {v || '—'}
+        </Text>
+      ),
+    },
+    {
+      title: '对端',
+      dataIndex: 'peer',
+      key: 'peer',
+      width: 160,
+      ellipsis: true,
+      render: (v: string) => <Text style={{ fontSize: 12 }}>{v || '—'}</Text>,
+    },
+    {
+      title: '带宽',
+      dataIndex: 'speed',
+      key: 'speed',
+      width: 70,
+      render: (v: number) => fmtSpeed(v),
+    },
+    {
+      title: '入',
+      dataIndex: 'inBps',
+      key: 'inBps',
+      width: 100,
+      align: 'right' as const,
+      render: (v: number) => <Text code style={{ fontSize: 12 }}>{v > 0 ? fmtBps(v) : '—'}</Text>,
+    },
+    {
+      title: '出',
+      dataIndex: 'outBps',
+      key: 'outBps',
+      width: 100,
+      align: 'right' as const,
+      render: (v: number) => <Text code style={{ fontSize: 12 }}>{v > 0 ? fmtBps(v) : '—'}</Text>,
+    },
+    {
+      title: '利用率',
+      dataIndex: 'utilization',
+      key: 'utilization',
+      width: 110,
+      align: 'right' as const,
+      render: (util: number, r: PortTableRow) => {
+        const bad = r.oper !== 1;
+        const color = bad ? '#B0B0B0' : `hsl(${120 - util * 1.2}, 60%, 45%)`;
+        return (
+          <Tooltip title={`入 ${fmtBps(r.inBps)} / 出 ${fmtBps(r.outBps)}`}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+              <span style={{ display: 'inline-block', width: 34, height: 9, borderRadius: 3, background: color }} />
+              <Text code style={{ fontSize: 12 }}>{bad ? '—' : util.toFixed(2) + '%'}</Text>
+            </div>
+          </Tooltip>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+      {/* 标题 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <Title level={4} style={{ margin: 0 }}>超融合业务</Title>
+          <Text type="secondary">4 台浪潮 CN9300H-48Y8C · 双归上联核心 · 下行超融合服务器区 · 交换机间集群互联</Text>
+        </div>
+        <Space wrap size="middle" style={{ justifyContent: 'flex-end' }}>
+          <SnmpStatusBadge
+            connected={!!apiData?.connected}
+            deviceTotal={apiData?.deviceTotal}
+            deviceConnected={apiData?.deviceConnected}
+            devices={apiData?.devices}
+            loading={loading && !apiData}
+          />
+          {apiData?.connected && (
+            <Badge
+              status={apiData.ready ? 'success' : 'processing'}
+              text={apiData.ready ? '就绪' : '首次采样中...'}
+            />
+          )}
+          {apiData?.updateTime && (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              <ClockCircleOutlined style={{ marginRight: 4 }} />
+              {formatFriendlyTime(new Date(apiData.updateTime))}
+            </Text>
+          )}
+          {hotCount > 0 && <Badge status="error" text={`${hotCount} 条链路利用率 ≥ 30%`} />}
+          {downCount > 0 && <Badge status="error" text={`${downCount} 条链路 Down`} />}
+          <ActionButton
+            icon={<ReloadOutlined spin={loading} />}
+            tooltip="刷新"
+            onClick={fetchSnapshot}
+          />
+          <Popover
+            title="看图说明"
+            trigger="hover"
+            placement="bottomRight"
+            content={
+              <ul style={{ paddingLeft: 18, margin: 0, maxWidth: 460, fontSize: 12.5, color: '#5F5E5A', lineHeight: 1.9 }}>
+                <li>本图以组内 4 台交换机为<b>中心</b>：向上双归上联两台核心，向下连接超融合服务器区。</li>
+                <li>所有流量均为 SNMP 直连 4 台交换机实测，两次采样取差值 ÷ 采样窗口，是瞬时值，会随业务波动。</li>
+                <li>上联单口 <b>10G</b>，服务器侧端口实测多为 <b>25G</b>，下行聚合带宽达数百 G；交换机间互联 <b>80G</b>。</li>
+                <li>虚线 = 交换机间互联，配对经 LLDP <b>双向互证实测</b>：
+                  <code>cg-tsg-d06-yewu1</code>↔<code>cg-tsg-d07-yewu2</code>、
+                  <code>cg-lxl2-b02-yewu3</code>↔<code>cg-lxl2-b03-yewu4</code>。
+                  <b>注意它是跨核心的</b>。
+                </li>
+                <li>如果<b>下行吞吐明显大于上联吞吐</b>，说明大量流量是<b>服务器之间的东西向流量</b>（HCI 存储复制 / 虚拟机迁移），在本机框内就转掉了，并没有走到核心 —— 这类流量只在交换机侧才看得到。</li>
+              </ul>
+            }
+          >
+            <ActionButton icon={<QuestionCircleOutlined />} tooltip="看图说明" />
+          </Popover>
+        </Space>
+      </div>
+
+      {/* SNMP 未连接提示 */}
+      {apiData && !apiData.connected && (
+        <Alert
+          type="info"
+          showIcon
+          title="SNMP 未连接"
+          description={`当前显示拓扑框架（节点/链路/带宽），尚未采集到实时流量数据。已配置 ${apiData.deviceTotal ?? 4} 台超融合交换机，其中 ${apiData.deviceConnected ?? 0} 台可达；设备恢复可达后将自动刷新。`}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {loading && !apiData?.svg && (
+        <div style={{ textAlign: 'center', padding: 60 }}>
+          <ReloadOutlined spin /> 正在加载...
+        </div>
+      )}
+
+      {apiData?.svg && (
+        <>
+          {/* 统计卡片 */}
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col xs={24} sm={8}>
+              <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
+                <Statistic title="总链路" value={total} />
+              </div>
+            </Col>
+            <Col xs={24} sm={8}>
+              <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
+                <Statistic title="Up" value={upCount} styles={{ content: { color: '#3B6D11' } }} />
+              </div>
+            </Col>
+            <Col xs={24} sm={8}>
+              <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
+                <Statistic title="Down / 未达" value={downCount} styles={{ content: { color: '#A32D2D' } }} />
+              </div>
+            </Col>
+          </Row>
+
+          {/* SVG 拓扑图 */}
+          <div
+            dangerouslySetInnerHTML={{ __html: apiData.svg }}
+            style={{
+              width: '100%',
+              overflowX: 'auto',
+              background: '#fff',
+              border: '1px solid #E8E6DF',
+              borderRadius: 10,
+              padding: 8,
+              marginBottom: 16,
+            }}
+          />
+
+          {/* 图例 */}
+          <div
+            dangerouslySetInnerHTML={{
+              __html: `
+                <div style="display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;background:#FAFAF8;border:1px solid #E8E6DF;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:12px;color:#5F5E5A">
+                  <div>
+                    <div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:500">链路粗细 = 带宽</div>
+                    <svg width="260" height="20">
+                      <line x1="2" y1="10" x2="32" y2="10" stroke="#888780" stroke-width="5" stroke-linecap="round"/>
+                      <text x="40" y="13" font-size="12" fill="#444">10G</text>
+                      <line x1="82" y1="10" x2="118" y2="10" stroke="#888780" stroke-width="8" stroke-linecap="round"/>
+                      <text x="126" y="13" font-size="12" fill="#444">25G</text>
+                      <line x1="176" y1="10" x2="214" y2="10" stroke="#888780" stroke-width="11" stroke-linecap="round"/>
+                      <text x="222" y="13" font-size="12" fill="#444">40G</text>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:500">链路颜色 = 利用率</div>
+                    <svg width="260" height="20">
+                      <rect x="2" y="6" width="20" height="9" fill="#3FA96B"/><text x="26" y="14" font-size="12" fill="#444">0%</text>
+                      <rect x="60" y="6" width="20" height="9" fill="#8CC63F"/><text x="84" y="14" font-size="12" fill="#444">15%</text>
+                      <rect x="120" y="6" width="20" height="9" fill="#C6B54A"/><text x="144" y="14" font-size="12" fill="#444">40%</text>
+                      <rect x="180" y="6" width="20" height="9" fill="#DF9B4B"/><text x="204" y="14" font-size="12" fill="#444">70%</text>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:500">其它</div>
+                    <div style="font-size:12px;color:#444;line-height:1.8">
+                      白色光点流动 = 有流量，静止 = 空载<br/>
+                      虚线 = 交换机间集群互联（80G）
+                    </div>
+                  </div>
+                </div>
+              `,
+            }}
+          />
+
+          {/* ========== 链路明细 ========== */}
+          <div style={{ marginTop: 20, marginBottom: 12 }}>
+            <Text strong style={{ color: '#2C2C2A' }}>链路明细（按利用率降序）</Text>
+          </div>
+          <Table
+            dataSource={ports}
+            columns={portColumns}
+            rowKey="port"
+            size="small"
+            pagination={false}
+            scroll={{ x: 1200 }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function HyperconvergedWeathermapPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>加载中...</div>}>
+      <HCIWeathermapContent />
+    </Suspense>
+  );
+}

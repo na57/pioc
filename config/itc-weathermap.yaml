@@ -1,0 +1,48 @@
+# ITC 网络天气图配置
+# 拓扑（节点/链路/坐标）已写死在 topology.ts，无需配置。
+# 本文件只管 SNMP 设备凭证和全局参数。
+
+# 刷新周期（秒），建议 >= 20
+refreshPeriod: 30
+
+# 热度阈值（%），超过此阈值显示警告色
+hotThreshold: 30
+
+# 视图访问控制：roles 为允许访问的角色名称（对应 pioc_roles.name），
+# 多个角色用英文逗号分隔；留空（""）表示所有登录用户均可访问。
+views:
+  # 数据中心核心链路
+  core:
+    roles: ""
+  # 超融合业务
+  hyperconverged:
+    roles: "admin"
+
+# SNMP 设备配置（community 密码集中管理在此）
+devices:
+  # 核心交换机（数据中心核心链路视图）
+  - id: core
+    ip: "113.55.12.1"
+    name: "CG-TSG-S12510 / CG-XZL-S12510"
+    snmpCommunity: "NOC2014"
+
+  # 超融合业务组交换机（超融合视图）
+  - id: sw10
+    ip: "10.10.251.10"
+    name: "cg-tsg-d06-yewu1"
+    snmpCommunity: "NOC2014!"
+
+  - id: sw14
+    ip: "10.10.251.14"
+    name: "cg-lxl2-b02-yewu3"
+    snmpCommunity: "NOC2014!"
+
+  - id: sw13
+    ip: "10.10.251.13"
+    name: "cg-tsg-d07-yewu2"
+    snmpCommunity: "NOC2014!"
+
+  - id: sw15
+    ip: "10.10.251.15"
+    name: "cg-lxl2-b03-yewu4"
+    snmpCommunity: "NOC2014!"

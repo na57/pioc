@@ -380,7 +380,9 @@ INSERT IGNORE INTO pioc_apps (id, name, description, icon, url, status) VALUES
   (18, '配置管理', '管理和分析各类配置文件，支持版本追踪、AI解读和合规检查', 'SettingOutlined', '/configsys', 1),
   (19, '规则管理', '管理系统规则，支持规则的创建、编辑、分享', 'FileTextOutlined', '/rules', 1),
   (20, 'API密钥管理', '创建和管理第三方API访问密钥，支持权限控制和IP白名单', 'SafetyOutlined', '/api-keys', 1),
-  (21, '听力训练', '基于艾宾浩斯记忆曲线的英语听力练习应用', 'SoundOutlined', '/listening-training', 1);
+  (21, '听力训练', '基于艾宾浩斯记忆曲线的英语听力练习应用', 'SoundOutlined', '/listening-training', 1),
+  (22, 'IT资产中心', '管理IT资产，支持资产登记、巡检、合规检查和资源关联图', 'RobotOutlined', '/it-asset-center', 1),
+  (23, 'ITC网络天气图', '展示数据中心网络拓扑和链路流量信息', 'GlobalOutlined', '/itc-weathermap', 1);
 
 -- 创建听力训练每日学习清单表
 CREATE TABLE IF NOT EXISTS pioc_lt_daily_plan (
@@ -513,8 +515,8 @@ async function assignMenuAppPermission(connection: mysql.PoolConnection) {
 
 async function assignAdditionalAppPermissions(connection: mysql.PoolConnection) {
   try {
-    // 为 admin 角色分配其他预装应用权限（应用ID 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20）
-    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
+    // 为 admin 角色分配其他预装应用权限（应用ID 5-23）
+    const additionalAppIds = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
     for (const appId of additionalAppIds) {
       await connection.execute(
         'INSERT IGNORE INTO pioc_role_apps (role_id, app_id) VALUES (?, ?)',

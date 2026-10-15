@@ -24,6 +24,7 @@ export const BUILTIN_APPS = {
   API_KEY_MANAGEMENT: 20, // API密钥管理
   LISTENING_TRAINING: 21, // 听力训练
   IT_ASSET_CENTER: 22,    // IT资产中心
+  ITC_WEATHERMAP: 23,     // ITC网络天气图
 } as const;
 
 // 内置应用URL映射
@@ -50,6 +51,7 @@ export const BUILTIN_APP_URLS = {
   '/api-keys': BUILTIN_APPS.API_KEY_MANAGEMENT,
   '/listening-training': BUILTIN_APPS.LISTENING_TRAINING,
   '/it-asset-center': BUILTIN_APPS.IT_ASSET_CENTER,
+  '/itc-weathermap': BUILTIN_APPS.ITC_WEATHERMAP,
 } as const;
 
 export interface App {

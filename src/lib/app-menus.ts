@@ -15,6 +15,12 @@ export interface AppSideMenu {
   path: string;
   /** 图标名称，需存在于 iconMapping 中 */
   icon?: string | null;
+  /**
+   * 视图权限 key（可选）。
+   * 设置后由应用方提供「当前用户可访问的 key 集合」进行过滤，
+   * 例如 ITC 网络天气图使用视图 id（core / hyperconverged）。
+   */
+  viewId?: string;
 }
 
 // 按应用 URL 注册的固定侧边菜单（数组顺序即展示顺序）
@@ -28,13 +34,53 @@ const appSideMenus: Record<string, AppSideMenu[]> = {
     { name: '巡检计划', path: '/it-asset-center?tab=schedules', icon: 'FieldTimeOutlined' },
     { name: '资源图谱', path: '/it-asset-center?tab=graph', icon: 'ApartmentOutlined' },
   ],
+  // ITC网络天气图（viewId 对应 config/itc-weathermap.yaml 的视图 id，按角色过滤）
+  '/itc-weathermap': [
+    { name: '数据中心核心链路', path: '/itc-weathermap', icon: 'GlobalOutlined', viewId: 'core' },
+    { name: '超融合业务', path: '/itc-weathermap/hyperconverged', icon: 'CloudServerOutlined', viewId: 'hyperconverged' },
+  ],
+  '/itc-weathermap/hyperconverged': [
+    { name: '数据中心核心链路', path: '/itc-weathermap', icon: 'GlobalOutlined', viewId: 'core' },
+    { name: '超融合业务', path: '/itc-weathermap/hyperconverged', icon: 'CloudServerOutlined', viewId: 'hyperconverged' },
+  ],
 };
 
 /**
- * 获取指定应用 URL 的内置侧边菜单
- * 未注册的应用返回空数组（侧边栏自动隐藏）
+ * 获取指定应用的侧边菜单
+ *
+ * 特殊处理：对于包含子路径的应用（如 /itc-weathermap），会根据当前路径
+ * 返回对应的子菜单。
+ *
+ * @param permittedViewIds 当前用户可访问的视图 key 集合；
+ *        传入后带 viewId 的菜单项若不在集合中则被过滤。
  */
-export function getAppSideMenus(appUrl?: string | null): AppSideMenu[] {
+export function getAppSideMenus(
+  appUrl?: string | null,
+  currentPath?: string,
+  permittedViewIds?: Set<string>,
+): AppSideMenu[] {
   if (!appUrl) return [];
-  return appSideMenus[appUrl] ?? [];
+
+  const filterByView = (menus: AppSideMenu[]): AppSideMenu[] => {
+    if (!permittedViewIds) return menus;
+    return menus.filter((m) => !m.viewId || permittedViewIds.has(m.viewId));
+  };
+
+  // 直接匹配
+  if (appSideMenus[appUrl]) {
+    return filterByView(appSideMenus[appUrl]);
+  }
+
+  // 特殊处理：对于 /itc-weathermap 应用，根据路径返回对应菜单
+  if (appUrl === '/itc-weathermap' && currentPath) {
+    if (currentPath === '/itc-weathermap' || currentPath.startsWith('/itc-weathermap?tab=')) {
+      // 主页面（核心链路）
+      return filterByView(appSideMenus['/itc-weathermap'] || []);
+    }
+    if (currentPath.startsWith('/itc-weathermap/hyperconverged')) {
+      return filterByView(appSideMenus['/itc-weathermap/hyperconverged'] || []);
+    }
+  }
+
+  return [];
 }

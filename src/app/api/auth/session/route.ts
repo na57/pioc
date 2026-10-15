@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/jwt';
+import { findUserRoles } from '@/lib/database/models/user';
 
 export async function GET() {
   try {
@@ -12,7 +13,15 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ success: true, data: session });
+    const roles = await findUserRoles(session.userId);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        ...session,
+        roles: roles.map((r) => r.name),
+      },
+    });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: 'Failed to get session', error: String(error) },
