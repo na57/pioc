@@ -151,7 +151,7 @@ export const coreView: TopoView = {
 const hciLibraryCategories: HciCategoryDef[] = [
   { key: 'compute2', name: '二路计算节点', ports: [1, 2, 3, 4, 5, 6, 7, 8], peer: '二路服务器1–8（另一归 yewu2）' },
   { key: 'compute4', name: '四路计算节点', ports: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18], peer: '四路服务器1–10（另一归 yewu2）' },
-  { key: 'rds', name: 'RDS 存储', ports: [19, 20], peer: 'RDS 存储 ×2（另一归 yewu2）' },
+  { key: 'rds', name: 'RDS', ports: [19, 20], peer: 'RDS 云数据库 ×2（另一归 yewu2）' },
   { key: 'access', name: '其他接入', ports: [21], peer: 'Access VLAN2011（无设备名，非双归）' },
   { key: 'security', name: '安全设备', ports: [30], peer: 'B08 深信服 S6520（另一归 yewu2）' },
   { key: 'test', name: '算力测试', ports: [33, 34], peer: '算力测试服务器 ×2（另一归 yewu2）' },
@@ -162,7 +162,7 @@ const hciLibraryCategories: HciCategoryDef[] = [
 const hciLxlCategories: HciCategoryDef[] = [
   { key: 'compute2', name: '二路计算节点', ports: [1, 2, 3, 4, 5, 6, 7, 8, 16, 19], peer: '二路服务器1–10（另一归 yewu4）' },
   { key: 'compute4', name: '四路计算节点', ports: [9, 10, 11, 12, 13, 14, 15], peer: '四路服务器1–7（另一归 yewu4）' },
-  { key: 'rds', name: 'RDS 存储', ports: [17, 18], peer: 'RDS 存储 ×2（另一归 yewu4）' },
+  { key: 'rds', name: 'RDS', ports: [17, 18], peer: 'RDS 云数据库 ×2（另一归 yewu4）' },
   { key: 'ai', name: '智算节点', ports: [21, 22, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39], peer: '阿里智算×2 + 浪潮智算×11（另一归 yewu4）' },
   { key: 'aistore', name: '智算存储', ports: [40, 41, 42], peer: '智算存储 ×3（另一归 yewu4）' },
   { key: 'oob', name: '带外管理', ports: [47], peer: '带外服务器（非双归）' },
@@ -175,6 +175,16 @@ export const hciDownCategories: Record<string, HciCategoryDef[]> = {
   sw14: hciLxlCategories,
   sw15: hciLxlCategories,
 };
+
+/**
+ * 「智算集群」= 算力测试（图书馆对 [33][34]，2 台）
+ *             + 智算节点（礼贤楼对 [21][22][29]–[39]，13 台）
+ *             + 智算存储（礼贤楼对 [40]–[42]，3 台）
+ * 合计 18 台设备、36 条双归链路。SVG 上三类合并为一个节点，每台交换机只画一段；
+ * 逐类/逐口的逻辑 key 仍保留（节点悬停分量、链路明细表逐口行使用）。
+ */
+export const HCI_AI_CLUSTER_CATS = new Set(['test', 'ai', 'aistore']);
+export const HCI_AI_CLUSTER_NODE = 'dn_aicluster';
 
 /** 交换机在图书馆/礼贤楼对中的另一归（双归对端） */
 export const hciPairPeer: Record<string, string> = {
@@ -213,7 +223,7 @@ export function hciPortPeer(swId: string, catKey: string, port: number): string 
     }
     case 'rds': {
       const n = isLib ? port - 18 : port - 16; // 图书馆 [19][20] / 礼贤 [17][18] → RDS 1/2
-      return `RDS 存储${n}（另一归 ${other}）`;
+      return `RDS 云数据库${n}（另一归 ${other}）`;
     }
     case 'access':
       return 'Access VLAN2011（无设备名，非双归）';
@@ -235,6 +245,50 @@ export function hciPortPeer(swId: string, catKey: string, port: number): string 
     default:
       return '';
   }
+}
+
+/**
+ * 物理设备枚举（节点「x/y 台在线」的唯一口径）：
+ * 同一交换机对内，双归业务的每个端口号 = 一台设备（同号口双网卡接配对两台交换机）；
+ * 非双归业务（接入/带外）每台交换机上的口各自是独立设备。
+ */
+const HCI_NON_DUAL_CATS = new Set(['access', 'oob']);
+const HCI_SWITCH_PAIRS: [string, string][] = [
+  ['sw10', 'sw13'], // 图书馆对
+  ['sw14', 'sw15'], // 礼贤楼对
+];
+
+export interface HciDevice {
+  /** 该设备在各交换机上的逐口逻辑 key（双归 2 个，非双归 1 个），任一 Up 即在线 */
+  ports: string[];
+}
+
+export function hciNodeDevices(nodeId: string): HciDevice[] {
+  const catKeys = nodeId === HCI_AI_CLUSTER_NODE
+    ? [...HCI_AI_CLUSTER_CATS]
+    : [nodeId.replace(/^dn_/, '')];
+  const devices: HciDevice[] = [];
+  for (const catKey of catKeys) {
+    for (const [swA, swB] of HCI_SWITCH_PAIRS) {
+      const catA = hciDownCategories[swA]?.find((c) => c.key === catKey);
+      const catB = hciDownCategories[swB]?.find((c) => c.key === catKey);
+      const cat = catA ?? catB;
+      if (!cat) continue;
+      for (const p of cat.ports) {
+        const keyA = catA ? `down:${swA}:${catKey}#${p}` : null;
+        const keyB = catB ? `down:${swB}:${catKey}#${p}` : null;
+        if (HCI_NON_DUAL_CATS.has(catKey)) {
+          // 非双归：两台交换机上的同号口是各自独立的设备
+          if (keyA) devices.push({ ports: [keyA] });
+          if (keyB) devices.push({ ports: [keyB] });
+        } else {
+          // 双归：一台设备两条链路
+          devices.push({ ports: [keyA, keyB].filter((k): k is string => k !== null) });
+        }
+      }
+    }
+  }
+  return devices;
 }
 
 const hciHeadNodes: TopoNode[] = [
@@ -275,21 +329,20 @@ const hciSwitches = [
 ];
 
 // 下行业务节点：同类业务全组合并为一个节点（跨机房/跨交换机双归的同一类设备）。
-// 位置按所接交换机重心分三组，二部图交叉最小化：
-//   图书馆专属（接 sw10/sw13，重心 375）→ 全四台共享（重心 650）→ 礼贤楼专属（接 sw14/sw15，重心 925）
+// 智算节点/智算存储/算力测试三类再向上归并为单个「智算集群」节点（18 台设备、
+// 36 条双归链路）。位置按所接交换机重心排序：图书馆专属（重心 375）→ 四台共享组
+// （重心 650，集群按端口加权重心 864 居组内最右），二部图交叉最小化。
 const HCI_DN_W = 118;
 const HCI_DN_H = 54;
 const HCI_DN_Y = 498;
 const hciMergedOrder: { key: string; x: number }[] = [
-  { key: 'access', x: 122 },
-  { key: 'security', x: 244 },
-  { key: 'test', x: 366 },
-  { key: 'compute2', x: 490 },
-  { key: 'compute4', x: 612 },
-  { key: 'rds', x: 734 },
-  { key: 'oob', x: 856 },
-  { key: 'ai', x: 978 },
-  { key: 'aistore', x: 1100 },
+  { key: 'access', x: 123 },
+  { key: 'security', x: 295 },
+  { key: 'compute2', x: 467 },
+  { key: 'compute4', x: 639 },
+  { key: 'rds', x: 811 },
+  { key: 'oob', x: 983 },
+  { key: 'aicluster', x: 1155 },
 ];
 
 const hciCategoryName = new Map<string, string>();
@@ -299,8 +352,9 @@ for (const cats of Object.values(hciDownCategories)) {
   }
 }
 
-/** 合并节点静态说明（渲染时按 · 拆成两行）：按机楼对统计端口数 */
+/** 合并节点静态说明（渲染时按 · 拆成两行）：按机楼对统计端口数；集群为设备/链路规模 */
 function hciMergedDescription(key: string): string {
+  if (key === 'aicluster') return '18 台设备 · 36 条双归链路';
   const libN = hciDownCategories.sw10.find((c) => c.key === key)?.ports.length;
   const lxlN = hciDownCategories.sw14.find((c) => c.key === key)?.ports.length;
   const parts: string[] = [];
@@ -311,7 +365,7 @@ function hciMergedDescription(key: string): string {
 
 const hciDownNodes: TopoNode[] = hciMergedOrder.map(({ key, x }) => ({
   id: `dn_${key}`,
-  name: hciCategoryName.get(key)!,
+  name: key === 'aicluster' ? '智算集群' : hciCategoryName.get(key)!,
   description: hciMergedDescription(key),
   x,
   y: HCI_DN_Y,
@@ -320,11 +374,14 @@ const hciDownNodes: TopoNode[] = hciMergedOrder.map(({ key, x }) => ({
   kind: 'zone',
 }));
 
-// 下行链路仍按「交换机 × 业务分类」逐段取数（key 不变），只是两端改为共享业务节点
+// 下行链路：普通分类按「交换机 × 业务分类」逐段（key=down:<sw>:<cat>）；
+// 智算集群三类在每台交换机上合并为一段（key=down:<sw>:aicluster）。
 const hciDownLinks: TopoLink[] = [];
 for (const sw of hciSwitches) {
   const cats = hciDownCategories[sw.id];
+  const clusterCats = cats.filter((c) => HCI_AI_CLUSTER_CATS.has(c.key));
   cats.forEach((cat, i) => {
+    if (HCI_AI_CLUSTER_CATS.has(cat.key)) return; // 集群三类统一合并为一段
     const peerText = cat.key === 'oob'
       ? cat.peer
       : cat.peer.replace('yewu2', hciPairPeer[sw.id]).replace('yewu4', hciPairPeer[sw.id]);
@@ -340,6 +397,26 @@ for (const sw of hciSwitches) {
       order: i,
     });
   });
+  if (clusterCats.length > 0) {
+    const totalPorts = clusterCats.reduce((n, c) => n + c.ports.length, 0);
+    const detail = clusterCats
+      .map((c) => `${c.name} ×${c.ports.length}（${portsLabel(c.ports)}）`)
+      .join('、');
+    const peerText = clusterCats
+      .map((c) => c.peer.replace('yewu2', hciPairPeer[sw.id]).replace('yewu4', hciPairPeer[sw.id]))
+      .join('、');
+    hciDownLinks.push({
+      a: HCI_AI_CLUSTER_NODE,
+      b: sw.id,
+      port: `down:${sw.id}:aicluster`,
+      description: `${sw.label} 下行 · 智算集群 ${totalPorts} 口：${detail}`,
+      peer: peerText,
+      geometry: 'hci-down',
+      speed: 0,
+      row: 0,
+      order: 99,
+    });
+  }
 }
 
 const hciNodes: TopoNode[] = [...hciHeadNodes, ...hciDownNodes];
@@ -360,7 +437,7 @@ const hciLinks: TopoLink[] = [
 export const hyperconvergedView: TopoView = {
   id: 'hyperconverged',
   title: '超融合业务',
-  description: '4 台浪潮 CN9300H-48Y8C 双归上联核心 · 同类下行业务合并显示（计算/存储/安全/测试/智算/带外），逐端口流量见链路明细 · 交换机间集群互联',
+  description: '4 台浪潮 CN9300H-48Y8C 双归上联核心 · 同类下行业务合并显示（计算/存储/安全/智算集群/带外），逐端口流量见链路明细 · 交换机间集群互联',
   deviceIds: ['sw10', 'sw13', 'sw14', 'sw15'],
   canvasWidth: 1280,
   canvasHeight: 555,

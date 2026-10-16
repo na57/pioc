@@ -13,7 +13,16 @@ import {
   getNodeStylePresetForView,
   getViewMeta,
 } from './config-loader';
-import { TopoNode, TopoLink, hciDownCategories, hciSwitchMeta, hciPortPeer } from './topology';
+import {
+  TopoNode,
+  TopoLink,
+  hciDownCategories,
+  hciSwitchMeta,
+  hciPortPeer,
+  HCI_AI_CLUSTER_NODE,
+  HCI_AI_CLUSTER_CATS,
+  hciNodeDevices,
+} from './topology';
 
 // ========== 利用率颜色插值（5 段线性，与 Go 程序 utilColor 一致） ==========
 interface Stop { p: number; r: number; g: number; b: number }
@@ -461,17 +470,35 @@ export function renderSVG(
     // hci 合并业务节点：悬停展示逐交换机分支明细
     let nodeTip = '';
     if (preset === 'hci' && n.kind === 'zone') {
-      const branches = links
-        .filter((l) => l.geometry === 'hci-down' && l.a === id)
-        .map((l) => ({ l, swX: nodes.get(l.b)?.x ?? 0 }))
-        .sort((p, q) => p.swX - q.swX);
       const lines = [n.name, n.description, ''];
-      for (const { l } of branches) {
-        const label = l.description.split(' 下行')[0];
-        const dd = data.get(l.port);
-        if (!dd) lines.push(`${label}：采集中…`);
-        else if (dd.oper !== 1) lines.push(`${label}：端口 Down`);
-        else lines.push(`${label}：入 ${fmtBps(dd.inBps)} ／ 出 ${fmtBps(dd.outBps)}`);
+      if (id === HCI_AI_CLUSTER_NODE) {
+        // 智算集群：逐交换机 → 逐子类（算力测试 / 智算节点 / 智算存储）展开分量
+        for (const swId of ['sw10', 'sw13', 'sw14', 'sw15']) {
+          const cats = hciDownCategories[swId]?.filter((c) => HCI_AI_CLUSTER_CATS.has(c.key)) ?? [];
+          if (cats.length === 0) continue;
+          lines.push(hciSwitchMeta[swId]?.label ?? swId);
+          for (const c of cats) {
+            const dd = data.get(`down:${swId}:${c.key}`);
+            const tail = !dd
+              ? '采集中…'
+              : dd.oper !== 1
+                ? '端口 Down'
+                : `入 ${fmtBps(dd.inBps)} ／ 出 ${fmtBps(dd.outBps)}`;
+            lines.push(`  ${c.name} ×${c.ports.length}：${tail}`);
+          }
+        }
+      } else {
+        const branches = links
+          .filter((l) => l.geometry === 'hci-down' && l.a === id)
+          .map((l) => ({ l, swX: nodes.get(l.b)?.x ?? 0 }))
+          .sort((p, q) => p.swX - q.swX);
+        for (const { l } of branches) {
+          const label = l.description.split(' 下行')[0];
+          const dd = data.get(l.port);
+          if (!dd) lines.push(`${label}：采集中…`);
+          else if (dd.oper !== 1) lines.push(`${label}：端口 Down`);
+          else lines.push(`${label}：入 ${fmtBps(dd.inBps)} ／ 出 ${fmtBps(dd.outBps)}`);
+        }
       }
       nodeTip = lines.join('\n');
     }
@@ -518,25 +545,32 @@ export function renderSVG(
     }
     // hci 合并业务节点：副信息可能为两行（下方渲染时按 ' · ' 拆分）
     if (preset === 'hci' && n.kind === 'zone') {
-      // 合计挂在本节点上的各交换机分支（down:<交换机>:<分类>）
+      // 吞吐合计挂在各交换机分支（down:<交换机>:<分类|aicluster>）上
       const branches = links.filter((l) => l.geometry === 'hci-down' && l.a === id);
-      let inSum = 0, outSum = 0, known = 0, upN = 0;
+      let inSum = 0, outSum = 0;
       for (const l of branches) {
         const dd = data.get(l.port);
-        if (!dd) continue;
-        known += 1;
-        if (dd.oper === 1) {
-          upN += 1;
+        if (dd && dd.oper === 1) {
           inSum += dd.inBps;
           outSum += dd.outBps;
         }
       }
+      // 在线台数按物理设备枚举（topology 端口规划为唯一口径）：
+      // 双归设备的两口任一 Up 即在线，分母是真实设备数而非交换机分支数
+      const devices = hciNodeDevices(id);
+      let known = 0, upN = 0;
+      for (const dev of devices) {
+        const ddList = dev.ports
+          .map((k) => data.get(k))
+          .filter((d): d is PortData => !!d);
+        if (ddList.length === 0) continue;
+        known += 1;
+        if (ddList.some((d) => d.oper === 1)) upN += 1;
+      }
       if (known === 0) {
-        sub = n.description; // 首屏框架 / 设备未达：静态端口说明（可含 ' · ' 两行）
-      } else if (upN === 0) {
-        sub = '全部端口 Down';
+        sub = n.description; // 首屏框架 / 设备未达：静态说明（可含 ' · ' 两行）
       } else {
-        sub = `${fmtBps(inSum + outSum)}bps · ${upN}/${known} 台在线`;
+        sub = `${fmtBps(inSum + outSum)}bps · ${upN}/${devices.length} 台在线`;
       }
     }
 
@@ -661,18 +695,21 @@ export function buildPortTableRows(
     for (const swId of swOrder) {
       const label = hciSwitchMeta[swId]?.label ?? swId;
       hciDownCategories[swId]?.forEach((cat, ci) => {
+        // 业务分类与 SVG 节点一致：智算节点/智算存储/算力测试统一归为「智算集群」
+        // （具体设备子类在「对端」列仍可辨识：浪潮/阿里智算、智算存储、算力测试服务器）
+        const nodeName = HCI_AI_CLUSTER_CATS.has(cat.key) ? '智算集群' : cat.name;
         for (const p of cat.ports) {
           const key = `down:${swId}:${cat.key}#${p}`;
           pushRow(
             key,
-            `${label} 下行 · ${cat.name} [${p}]`,
+            `${label} 下行 · ${nodeName} [${p}]`,
             hciPortPeer(swId, cat.key, p),
             0,
             'hci-down',
             ci,
             p,
             label,
-            cat.name,
+            nodeName,
             p,
             data.get(key),
           );

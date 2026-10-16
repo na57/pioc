@@ -21,7 +21,7 @@ import {
   getDeviceConfigsForView,
   DeviceConfig,
 } from './config-loader';
-import { hciDownCategories } from './topology';
+import { hciDownCategories, HCI_AI_CLUSTER_CATS } from './topology';
 
 // 类型定义
 export interface PortData {
@@ -752,6 +752,10 @@ async function discoverHciPorts(
     });
   }
 
+  // 智算集群（算力测试 + 智算节点 + 智算存储）SVG 聚合段的全部成员，
+  // 与下方逐类/逐口 logical 共用同一批 ifIndex，采集并集去重、基线复用，零额外 SNMP 请求
+  const aiClusterMembers: { port: number; ifIndex: number; name: string; speed: number; up: boolean }[] = [];
+
   // 下行：按静态端口表逐口归类（agg 优先、eth 兜底）
   for (const cat of hciDownCategories[id] ?? []) {
     const members: { port: number; ifIndex: number; name: string; speed: number; up: boolean }[] = [];
@@ -769,6 +773,7 @@ async function discoverHciPorts(
       });
     }
     if (members.length === 0) continue;
+    if (HCI_AI_CLUSTER_CATS.has(cat.key)) aiClusterMembers.push(...members);
     // 分类聚合链路（SVG 上交换机 → 合并业务节点的那一段）
     logical.push({
       key: `down:${id}:${cat.key}`,
@@ -786,6 +791,20 @@ async function discoverHciPorts(
         speed: m.speed,
       });
     }
+  }
+
+  // 智算集群聚合段：三类成员 ifIndex 并集去重（跨类端口不重叠，去重仅为保险）
+  if (aiClusterMembers.length > 0) {
+    const seen = new Set<number>();
+    const uniq = aiClusterMembers.filter(
+      (m) => (seen.has(m.ifIndex) ? false : seen.add(m.ifIndex)),
+    );
+    logical.push({
+      key: `down:${id}:aicluster`,
+      name: compactMemberNames(uniq.map((m) => m.name)),
+      ifIndices: uniq.map((m) => m.ifIndex),
+      speed: uniq.filter((m) => m.up).reduce((s, m) => s + m.speed, 0),
+    });
   }
 
   d.logicalPorts = logical;
