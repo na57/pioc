@@ -503,7 +503,10 @@ export function renderSVG(
       nodeTip = lines.join('\n');
     }
     const rectTitle = nodeTip ? `<title>${esc(nodeTip)}</title>` : '';
-    svg += `<rect x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" width="${n.width}" height="${n.height}" rx="9" fill="${st[0]}" stroke="${st[1]}" stroke-width="0.8">${rectTitle}</rect>\n`;
+    // 带跳转链接的节点：整个节点（矩形+文字）包在 SVG <a> 里
+    const hrefOpen = n.href ? `<a href="${esc(n.href)}" target="_self" style="cursor:pointer">` : '';
+    const hrefClose = n.href ? '</a>' : '';
+    svg += `${hrefOpen}<rect x="${nx.toFixed(1)}" y="${ny.toFixed(1)}" width="${n.width}" height="${n.height}" rx="9" fill="${st[0]}" stroke="${st[1]}" stroke-width="0.8">${rectTitle}</rect>\n`;
 
     let sub = n.description;
 
@@ -596,6 +599,7 @@ export function renderSVG(
       svg += `<text x="${n.x}" y="${(n.y - 10).toFixed(0)}" text-anchor="middle" font-size="14" font-weight="500" fill="${st[2]}">${esc(n.name)}</text>\n`;
       svg += `<text x="${n.x}" y="${(n.y + 11).toFixed(0)}" text-anchor="middle" font-size="12" fill="${st[3]}">${esc(sub)}</text>\n`;
     }
+    if (hrefClose) svg += `${hrefClose}\n`;
   }
 
   svg += '</svg>';

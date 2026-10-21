@@ -18,6 +18,8 @@ export interface TopoNode {
   peer?: string;
   /** 节点吞吐标注取数用的逻辑链路 key（HCI 下行业务节点） */
   metricKey?: string;
+  /** 节点点击跳转链接（渲染为 SVG 内 <a> 包裹整个节点） */
+  href?: string;
 }
 
 /**
@@ -73,7 +75,7 @@ const coreNodes: TopoNode[] = [
   { id: 'core1', name: 'CG-TSG-S12510', description: '图书馆 TSG · 接口前缀 1/x/x/x', x: 400, y: 312, width: 280, height: 84, kind: 'core' },
   { id: 'core2', name: 'CG-XZL-S12510', description: '礼贤楼 LXL · 接口前缀 2/x/x/x', x: 900, y: 312, width: 280, height: 84, kind: 'core' },
   // 业务 row 1
-  { id: 'hci25', name: '超融合业务组', description: '1|2/0/0/16·17', x: 128, y: 550, width: 190, height: 60, kind: 'biz' },
+  { id: 'hci25', name: '超融合业务组', description: '1|2/0/0/16·17', x: 128, y: 550, width: 190, height: 60, kind: 'biz', href: '/itc-weathermap/hyperconverged' },
   { id: 'store25', name: '图书馆分布式存储', description: '1|2/0/0/22', x: 384, y: 550, width: 190, height: 60, kind: 'biz' },
   { id: 'ykt10', name: '图书馆一卡通超融合', description: '1|2/0/0/20', x: 640, y: 550, width: 190, height: 60, kind: 'biz' },
   { id: 'db40', name: '图书馆超融合', description: '1|2/0/0/33', x: 896, y: 550, width: 190, height: 60, kind: 'biz' },
@@ -302,8 +304,8 @@ export function hciNodeDevices(nodeId: string): HciDevice[] {
 }
 
 const hciHeadNodes: TopoNode[] = [
-  { id: 'core1', name: 'CG-TSG-S12510', description: '图书馆 TSG · 接口前缀 1/x/x/x', x: 375, y: 92, width: 300, height: 66, kind: 'core' },
-  { id: 'core2', name: 'CG-XZL-S12510', description: '礼贤楼 LXL · 接口前缀 2/x/x/x', x: 915, y: 92, width: 300, height: 66, kind: 'core' },
+  { id: 'core1', name: 'CG-TSG-S12510', description: '图书馆 TSG · 接口前缀 1/x/x/x', x: 375, y: 92, width: 300, height: 66, kind: 'core', href: '/itc-weathermap' },
+  { id: 'core2', name: 'CG-XZL-S12510', description: '礼贤楼 LXL · 接口前缀 2/x/x/x', x: 915, y: 92, width: 300, height: 66, kind: 'core', href: '/itc-weathermap' },
   // 同机楼对相邻排列：图书馆对（yewu1/yewu2）左、礼贤楼对（yewu3/yewu4）右。
   // 下联按对就近、集群互联短；代价是两条上联在对间空档形成一处有序 X 交叉。
   { id: 'sw10', name: 'cg-tsg-d06-yewu1', description: '10.10.251.10', x: 250, y: 322, width: 212, height: 64, kind: 'sw' },
