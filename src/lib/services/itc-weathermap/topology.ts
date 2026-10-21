@@ -81,13 +81,8 @@ const coreNodes: TopoNode[] = [
   { id: 'db40', name: '图书馆超融合', description: '1|2/0/0/33', x: 896, y: 550, width: 190, height: 60, kind: 'biz' },
   // 业务 row 2
   { id: 'lb', name: '负载均衡', description: '1|2/0/0/31', x: 256, y: 712, width: 190, height: 60, kind: 'biz' },
-  { id: 'dns_r', name: '递归 DNS', description: '1|2/1/0/7', x: 512, y: 712, width: 190, height: 60, kind: 'biz' },
-  { id: 'dns_a', name: '权威 DNS', description: '1|2/1/0/8', x: 768, y: 712, width: 190, height: 60, kind: 'biz' },
-  { id: 'm6k', name: '下联接入 M6K', description: '1|2/0/0/7', x: 1024, y: 712, width: 190, height: 60, kind: 'biz' },
-  // 外部/专线
-  { id: 'idc', name: 'IDC 医保专线', description: '1/0/0/27', x: 132, y: 96, width: 216, height: 56, kind: 'ext', peer: 'CG_S12500F-AF_CORE_BG' },
-  { id: 'cloud', name: '腾讯云', description: '1/0/0/15', x: 132, y: 164, width: 216, height: 56, kind: 'ext', peer: 'GC-1' },
-  { id: 'sec', name: '对外安全设备', description: '1/1/0/11', x: 132, y: 232, width: 216, height: 56, kind: 'ext', peer: 'CG-TSG-AnQuanSheBei-DaiWai' },
+  { id: 'dns', name: 'DNS业务组', description: '1|2/1/0/7·8', x: 640, y: 712, width: 190, height: 60, kind: 'biz' },
+  { id: 'other', name: '其他业务组', description: '1|2/0/0/7 等 5 口', x: 1024, y: 712, width: 190, height: 60, kind: 'biz' },
 ];
 
 const coreLinks: TopoLink[] = [
@@ -112,18 +107,17 @@ const coreLinks: TopoLink[] = [
   { a: 'db40', b: 'core2', port: '2/0/0/33', description: '图书馆超融合 → CG-XZL-S12510', peer: 'TSG-RJ-JieRu', geometry: 'row1', speed: 10000, row: 1, order: 9 },
   // Row 2 → core1
   { a: 'lb', b: 'core1', port: '1/0/0/31', description: '负载均衡 → CG-TSG-S12510', peer: 'H3C-TSG-LB1', geometry: 'row2', speed: 10000, row: 2, order: 0 },
-  { a: 'dns_r', b: 'core1', port: '1/1/0/7', description: '递归 DNS → CG-TSG-S12510', geometry: 'row2', speed: 1000, row: 2, order: 1 },
-  { a: 'dns_a', b: 'core1', port: '1/1/0/8', description: '权威 DNS → CG-TSG-S12510', geometry: 'row2', speed: 1000, row: 2, order: 2 },
-  { a: 'm6k', b: 'core1', port: '1/0/0/7', description: 'M6K 接入 → CG-TSG-S12510', geometry: 'row2', speed: 10000, row: 2, order: 3 },
+  { a: 'dns', b: 'core1', port: '1/1/0/7', description: '递归 DNS → CG-TSG-S12510', geometry: 'row2', speed: 1000, row: 2, order: 1 },
+  { a: 'dns', b: 'core1', port: '1/1/0/8', description: '权威 DNS → CG-TSG-S12510', geometry: 'row2', speed: 1000, row: 2, order: 2 },
+  { a: 'other', b: 'core1', port: '1/0/0/7', description: 'M6K 接入 → CG-TSG-S12510', geometry: 'row2', speed: 10000, row: 2, order: 3 },
   // Row 2 → core2
   { a: 'lb', b: 'core2', port: '2/0/0/31', description: '负载均衡 → CG-XZL-S12510', peer: 'H3C-LXL-LB2', geometry: 'row2', speed: 10000, row: 2, order: 4 },
-  { a: 'dns_r', b: 'core2', port: '2/1/0/7', description: '递归 DNS → CG-XZL-S12510', geometry: 'row2', speed: 1000, row: 2, order: 5 },
-  { a: 'dns_a', b: 'core2', port: '2/1/0/8', description: '权威 DNS → CG-XZL-S12510', geometry: 'row2', speed: 1000, row: 2, order: 6 },
-  { a: 'm6k', b: 'core2', port: '2/0/0/7', description: 'M6K 接入 → CG-XZL-S12510', geometry: 'row2', speed: 10000, row: 2, order: 7 },
-  // 外部/专线
-  { a: 'idc', b: 'core1', port: '1/0/0/27', description: 'IDC 医保专线 → CG-TSG-S12510', peer: 'CG_S12500F-AF_CORE_BG', geometry: 'ext', speed: 10000, row: 0, order: 0 },
-  { a: 'cloud', b: 'core1', port: '1/0/0/15', description: '腾讯云 → CG-TSG-S12510', peer: 'GC-1', geometry: 'ext', speed: 10000, row: 0, order: 1 },
-  { a: 'sec', b: 'core1', port: '1/1/0/11', description: '对外安全设备 → CG-TSG-S12510', peer: 'CG-TSG-AnQuanSheBei-DaiWai', geometry: 'ext', speed: 1000, row: 0, order: 2 },
+  { a: 'dns', b: 'core2', port: '2/1/0/7', description: '递归 DNS → CG-XZL-S12510', geometry: 'row2', speed: 1000, row: 2, order: 5 },
+  { a: 'dns', b: 'core2', port: '2/1/0/8', description: '权威 DNS → CG-XZL-S12510', geometry: 'row2', speed: 1000, row: 2, order: 6 },
+  { a: 'other', b: 'core2', port: '2/0/0/7', description: 'M6K 接入 → CG-XZL-S12510', geometry: 'row2', speed: 10000, row: 2, order: 7 },
+  { a: 'other', b: 'core1', port: '1/0/0/27', description: 'IDC 医保专线 → CG-TSG-S12510', peer: 'CG_S12500F-AF_CORE_BG', geometry: 'row2', speed: 10000, row: 2, order: 8 },
+  { a: 'other', b: 'core1', port: '1/0/0/15', description: '腾讯云 → CG-TSG-S12510', peer: 'GC-1', geometry: 'row2', speed: 10000, row: 2, order: 9 },
+  { a: 'other', b: 'core1', port: '1/1/0/11', description: '对外安全设备 → CG-TSG-S12510', peer: 'CG-TSG-AnQuanSheBei-DaiWai', geometry: 'row2', speed: 1000, row: 2, order: 10 },
 ];
 
 export const coreView: TopoView = {
@@ -138,8 +132,7 @@ export const coreView: TopoView = {
     'fw_tsg', 'fw_lxl',
     'core1', 'core2',
     'hci25', 'store25', 'ykt10', 'db40',
-    'lb', 'dns_r', 'dns_a', 'm6k',
-    'idc', 'cloud', 'sec',
+    'lb', 'dns', 'other',
   ],
   nodes: coreNodes,
   links: coreLinks,

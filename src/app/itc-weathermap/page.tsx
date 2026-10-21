@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
+import type { Key } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   App,
@@ -50,6 +51,7 @@ interface PortTableRow {
   linkGeometry: string;
   row: number;
   order: number;
+  category: string;   // 业务分组（链路 a 端拓扑节点名）
 }
 
 interface ApiResp {
@@ -170,9 +172,20 @@ function ITCWeathermapContent() {
   const upCount = ports.filter((p) => p.oper === 1).length;
   const downCount = ports.filter((p) => p.oper >= 0 && p.oper !== 1).length;
   const hotCount = ports.filter((p) => p.utilization >= 30 && p.oper === 1).length;
+  const categoryFilters = [...new Set(ports.map((p) => p.category).filter(Boolean))]
+    .map((v) => ({ text: v, value: v }));
 
   // ========== 端口表格列 ==========
   const portColumns = [
+    {
+      title: '业务分组',
+      dataIndex: 'category',
+      key: 'category',
+      width: 116,
+      filters: categoryFilters,
+      onFilter: (value: Key | boolean, r: PortTableRow) => r.category === value,
+      render: (v: string) => v ? <Tag style={{ marginInlineEnd: 0, fontSize: 12 }}>{v}</Tag> : '—',
+    },
     {
       title: '链路',
       dataIndex: 'description',

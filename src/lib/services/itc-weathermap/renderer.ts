@@ -721,10 +721,12 @@ export function buildPortTableRows(
       });
     }
   } else {
+    // 业务分组 = 链路 a 端拓扑节点名（如 DNS业务组 / 负载均衡 / 防火墙）
+    const nodes = new Map(getNodesForView(viewId).map((n) => [n.id, n]));
     for (const l of links) {
       pushRow(
         l.port, l.description, l.peer || '', l.speed, l.geometry, l.row, l.order,
-        '', '', 0, data.get(l.port),
+        '', nodes.get(l.a)?.name ?? '', 0, data.get(l.port),
       );
     }
   }
