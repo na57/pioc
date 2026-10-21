@@ -95,7 +95,7 @@ function deltaToBps(cur: bigint, prev: bigint, dt: number): number {
  * 因此每个端口优先取 agg、无 agg 才回退取 eth，不会双算。
  */
 interface LogicalPort {
-  key: string; // 对应 topology.ts 中的逻辑键，如 uplink:sw10 / down:sw10:compute4 / peerlink:sw10
+  key: string; // 对应 topology.ts 中的逻辑键，如 uplink:sw10 / down:sw10:inspur / peerlink:sw10
   name: string; // 展示名（参与的 agg/eth 名，压缩区间）
   ifIndices: number[]; // 承载该逻辑链路的接口 ifIndex（agg 优先，缺失时 eth）
   speed: number; // UP 成员协商速率之和（Mbps），用于利用率分母

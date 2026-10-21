@@ -147,21 +147,24 @@ export const coreView: TopoView = {
 // 超融合视图
 // =====================================================================
 
-// 图书馆 HCI 对（交换机1·yewu1=sw10 / 交换机2·yewu2=sw13）下行业务分类（文档 §5.1/§5.3）
+// 图书馆 HCI 对（交换机1·yewu1=sw10 / 交换机2·yewu2=sw13）下行业务分类
+// （文档 §5.1 2026-10-21 按品牌细分、§5.3 端口映射。实测物理机接口表确认
+//  yewu1/yewu2 仅接四路服务器 [9]–[18] 与云桌面 [31]，无二路服务器）
 const hciLibraryCategories: HciCategoryDef[] = [
-  { key: 'compute2', name: '二路计算节点', ports: [1, 2, 3, 4, 5, 6, 7, 8], peer: '二路服务器1–8（另一归 yewu2）' },
-  { key: 'compute4', name: '四路计算节点', ports: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18], peer: '四路服务器1–10（另一归 yewu2）' },
+  { key: 'inspur', name: '浪潮超融合', ports: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18], peer: '浪潮四路服务器1–10（另一归 yewu2）' },
   { key: 'rds', name: 'RDS', ports: [19, 20], peer: 'RDS 云数据库 ×2（另一归 yewu2）' },
   { key: 'access', name: '其他接入', ports: [21], peer: 'Access VLAN2011（无设备名，非双归）' },
   { key: 'security', name: '安全设备', ports: [30], peer: 'B08 深信服 S6520（另一归 yewu2）' },
+  { key: 'oycloud', name: '噢易云桌面', ports: [31], peer: '噢易云桌面服务器（另一归 yewu2）' },
   { key: 'test', name: '算力测试', ports: [33, 34], peer: '算力测试服务器 ×2（另一归 yewu2）' },
   { key: 'oob', name: '带外管理', ports: [47], peer: '图书馆带外交换机（非双归）' },
 ];
 
-// 礼贤楼 HCI 对（交换机3·yewu3=sw14 / 交换机4·yewu4=sw15）下行业务分类（文档 §5.2/§5.3）
+// 礼贤楼 HCI 对（交换机3·yewu3=sw14 / 交换机4·yewu4=sw15）下行业务分类
+// （文档 §5.1 2026-10-21 按品牌细分 / §5.2）
 const hciLxlCategories: HciCategoryDef[] = [
-  { key: 'compute2', name: '二路计算节点', ports: [1, 2, 3, 4, 5, 6, 7, 8, 16, 19], peer: '二路服务器1–10（另一归 yewu4）' },
-  { key: 'compute4', name: '四路计算节点', ports: [9, 10, 11, 12, 13, 14, 15], peer: '四路服务器1–7（另一归 yewu4）' },
+  { key: 'sxf', name: '深信服超融合', ports: [1, 2, 3, 4, 5, 6, 7, 8, 16, 19], peer: '深信服二路服务器1–10（另一归 yewu4）' },
+  { key: 'zstack', name: 'zstack超融合', ports: [9, 10, 11, 12, 13, 14, 15], peer: 'zstack四路服务器1–7（另一归 yewu4）' },
   { key: 'rds', name: 'RDS', ports: [17, 18], peer: 'RDS 云数据库 ×2（另一归 yewu4）' },
   { key: 'ai', name: '智算节点', ports: [21, 22, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39], peer: '阿里智算×2 + 浪潮智算×11（另一归 yewu4）' },
   { key: 'aistore', name: '智算存储', ports: [40, 41, 42], peer: '智算存储 ×3（另一归 yewu4）' },
@@ -200,29 +203,36 @@ export const hciSwitchMeta: Record<string, { label: string }> = {
   sw15: { label: 'yewu4' },
 };
 
-/** 图书馆对四路服务器端口错位：端口 [N] → 四路服务器号（文档 §5.3） */
+/** 图书馆对浪潮四路服务器端口错位：端口 [N] → 四路服务器号（文档 §5.3） */
 const LIB_COMPUTE4_SERVER: Record<number, number> = {
   9: 8, 10: 9, 11: 10, 12: 5, 13: 6, 14: 7, 15: 2, 16: 3, 17: 4, 18: 1,
 };
 
 /**
- * 逐端口对端文案（链路明细表「对端」列用），依据文档 §5.1/§5.2/§5.3：
+ * 逐端口对端文案（链路明细表「对端」列用），依据文档 §5.1/§5.2/§5.3
+ * （计算节点 2026-10-21 按品牌细分：sxf=深信服二路、zstack=zstack四路、
+ * inspur=浪潮四路、oycloud=噢易云桌面）：
  * 同号端口在配对两台交换机上接同一台设备（双归），[N] 后的设备名按端口规划表还原。
  */
 export function hciPortPeer(swId: string, catKey: string, port: number): string {
-  const isLib = swId === 'sw10' || swId === 'sw13';
   const other = hciPairPeer[swId];
   switch (catKey) {
-    case 'compute2': {
-      const n = isLib ? port : port <= 8 ? port : port === 16 ? 9 : 10;
-      return `二路服务器${n}（另一归 ${other}）`;
+    case 'sxf': {
+      // 礼贤楼对：[1]–[8] → 1–8，[16] → 9，[19] → 10
+      const n = port <= 8 ? port : port === 16 ? 9 : 10;
+      return `深信服二路服务器${n}（另一归 ${other}）`;
     }
-    case 'compute4': {
-      const n = isLib ? LIB_COMPUTE4_SERVER[port] : port - 8;
-      return `四路服务器${n}（另一归 ${other}）`;
-    }
+    case 'zstack':
+      // 礼贤楼对：[9]–[15] → zstack四路服务器 1–7
+      return `zstack四路服务器${port - 8}（另一归 ${other}）`;
+    case 'inspur':
+      // 图书馆对：[9]–[18] 端口错位映射
+      return `浪潮四路服务器${LIB_COMPUTE4_SERVER[port]}（另一归 ${other}）`;
+    case 'oycloud':
+      return `噢易云桌面服务器（另一归 ${other}）`;
     case 'rds': {
-      const n = isLib ? port - 18 : port - 16; // 图书馆 [19][20] / 礼贤 [17][18] → RDS 1/2
+      // 图书馆 [19][20] / 礼贤 [17][18] → RDS 1/2
+      const n = swId === 'sw10' || swId === 'sw13' ? port - 18 : port - 16;
       return `RDS 云数据库${n}（另一归 ${other}）`;
     }
     case 'access':
@@ -328,20 +338,23 @@ const hciSwitches = [
   { id: 'sw15', x: 1050, label: 'yewu4' },
 ];
 
-// 下行业务节点：同类业务全组合并为一个节点（跨机房/跨交换机双归的同一类设备）。
-// 智算节点/智算存储/算力测试三类再向上归并为单个「智算集群」节点（18 台设备、
-// 36 条双归链路）。位置按所接交换机重心排序：图书馆专属（重心 375）→ 四台共享组
-// （重心 650，集群按端口加权重心 864 居组内最右），二部图交叉最小化。
+// 下行业务节点：计算节点按品牌分组（文档 §5.1 2026-10-21），同组全组合并为
+// 一个节点（跨交换机双归的同一组设备）。智算节点/智算存储/算力测试三类再向上
+// 归并为单个「智算集群」节点（18 台设备、36 条双归链路）。位置按所接交换机
+// 重心排序：图书馆专属（重心 375）→ 四台共享组（重心 650）→ 礼贤楼专属
+// （重心 925），集群按端口加权重心 864 居最右，二部图交叉最小化。
 const HCI_DN_W = 118;
 const HCI_DN_H = 54;
 const HCI_DN_Y = 498;
 const hciMergedOrder: { key: string; x: number }[] = [
   { key: 'access', x: 123 },
-  { key: 'security', x: 295 },
-  { key: 'compute2', x: 467 },
-  { key: 'compute4', x: 639 },
-  { key: 'rds', x: 811 },
-  { key: 'oob', x: 983 },
+  { key: 'security', x: 252 },
+  { key: 'inspur', x: 381 },
+  { key: 'oycloud', x: 510 },
+  { key: 'rds', x: 639 },
+  { key: 'oob', x: 768 },
+  { key: 'sxf', x: 897 },
+  { key: 'zstack', x: 1026 },
   { key: 'aicluster', x: 1155 },
 ];
 
@@ -437,7 +450,7 @@ const hciLinks: TopoLink[] = [
 export const hyperconvergedView: TopoView = {
   id: 'hyperconverged',
   title: '超融合业务',
-  description: '4 台浪潮 CN9300H-48Y8C 双归上联核心 · 同类下行业务合并显示（计算/存储/安全/智算集群/带外），逐端口流量见链路明细 · 交换机间集群互联',
+  description: '4 台浪潮 CN9300H-48Y8C 双归上联核心 · 下行业务按品牌/业务分组合并显示（超融合计算/RDS/安全/云桌面/智算集群/带外），逐端口流量见链路明细 · 交换机间集群互联',
   deviceIds: ['sw10', 'sw13', 'sw14', 'sw15'],
   canvasWidth: 1280,
   canvasHeight: 555,
