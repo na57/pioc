@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Card, Button, Tag, Space, Descriptions, Table, App, Modal, Form, Input, Drawer } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
-import { useRouter, useParams } from 'next/navigation';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Card, Button, Tag, Space, Descriptions, Table, App, Modal, Form, Input, Drawer, Menu, Typography, theme } from 'antd';
+import type { MenuProps } from 'antd';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, InfoCircleOutlined, HistoryOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 
 
 const { TextArea } = Input;
+const { Text, Title } = Typography;
 
 interface Config {
   id: string;
@@ -50,12 +52,15 @@ interface Version {
 export default function ConfigDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const configId = params.id as string;
   const { message } = App.useApp();
-  
+  const { token } = theme.useToken();
+
   const [config, setConfig] = useState<Config | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('basic');
   const [isVersionModalVisible, setIsVersionModalVisible] = useState(false);
   const [versionForm] = Form.useForm();
   const [ruleDrawerVisible, setRuleDrawerVisible] = useState(false);
@@ -66,6 +71,21 @@ export default function ConfigDetailPage() {
     fetchConfigDetail();
     fetchVersions();
   }, [configId]);
+
+  // 从 URL 参数同步当前菜单（?tab=versions），与左侧菜单联动
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    setActiveTab(tab === 'versions' ? 'versions' : 'basic');
+  }, [searchParams]);
+
+  // 切换菜单：同步写入 URL，刷新/分享后状态保持
+  const switchTab = useCallback((key: string) => {
+    setActiveTab(key);
+    const p = new URLSearchParams(searchParams.toString());
+    if (key === 'basic') p.delete('tab'); else p.set('tab', key);
+    const qs = p.toString();
+    router.push(`/configsys/${configId}${qs ? `?${qs}` : ''}`);
+  }, [router, searchParams, configId]);
 
   const fetchConfigDetail = async () => {
     try {
@@ -211,53 +231,147 @@ export default function ConfigDetailPage() {
     return <Card loading />;
   }
 
-  return (
-    <>
-      <Card title={config.name}>
-        {/* 基本信息 */}
-        <Descriptions bordered column={2}>
-          <Descriptions.Item label="配置名称">{config.name}</Descriptions.Item>
-          <Descriptions.Item label="创建时间">
-            <FriendlyTime date={config.created_at} />
-          </Descriptions.Item>
-          <Descriptions.Item label="描述" span={2}>{config.description}</Descriptions.Item>
-          <Descriptions.Item label="合规规则" span={2}>
-            {config.compliance_rule_id ? (
-              <Button
-                type="link"
-                style={{ padding: 0 }}
-                onClick={() => handleShowRuleDetail(config.compliance_rule_id!)}
-              >
-                {config.compliance_rule_name}
-              </Button>
-            ) : (
-              <span style={{ color: '#999' }}>未设置</span>
-            )}
-          </Descriptions.Item>
-        </Descriptions>
+  // 左侧菜单：顶部「配置管理」返回应用首页，其余为功能菜单
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'app-home',
+      icon: <AppstoreOutlined />,
+      label: '配置管理',
+    },
+    { type: 'divider' },
+    { key: 'basic', icon: <InfoCircleOutlined />, label: '基本信息' },
+    {
+      key: 'versions',
+      icon: <HistoryOutlined />,
+      label: (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          版本历史
+          {versions.length > 0 && <Tag style={{ marginInlineEnd: 0 }}>{versions.length}</Tag>}
+        </span>
+      ),
+    },
+  ];
 
-        {/* 版本历史 */}
-        <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h3 style={{ margin: 0 }}>版本历史 ({versions.length})</h3>
-            {config.isOwner && (
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => setIsVersionModalVisible(true)}
-              >
-                新增版本
-              </Button>
-            )}
+  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+    // 「配置管理」：返回配置管理应用首页 /configsys
+    if (key === 'app-home') {
+      router.push('/configsys');
+      return;
+    }
+    switchTab(key);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        background: token.colorBgContainer,
+      }}
+    >
+      {/* 左侧菜单：白色同色画布，右侧发丝分割线，无边框 */}
+      <div
+        style={{
+          width: 208,
+          flexShrink: 0,
+          borderRight: `1px solid ${token.colorBorderSecondary}`,
+        }}
+      >
+        <div style={{ position: 'sticky', top: 80 }}>
+          <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+            <Text
+              strong
+              style={{ fontSize: 15, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              title={config.name}
+            >
+              {config.name}
+            </Text>
           </div>
-          <Table
-            dataSource={versions}
-            columns={versionColumns}
-            rowKey="id"
-            pagination={false}
+          <Menu
+            mode="inline"
+            selectedKeys={[activeTab]}
+            items={menuItems}
+            onClick={handleMenuClick}
+            style={{ borderInlineEnd: 'none', paddingTop: 8 }}
           />
         </div>
-      </Card>
+      </div>
+
+      {/* 右侧 main */}
+      <div style={{ flex: 1, minWidth: 0, padding: '0 0 24px 24px' }}>
+        {/* 页头：标题发丝分割 */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            padding: '16px 0 12px',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <Title
+              level={4}
+              style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {config.name}
+            </Title>
+            <Text type="secondary">
+              创建于 <FriendlyTime date={config.created_at} />
+            </Text>
+          </div>
+        </div>
+
+        {/* 当前菜单内容 */}
+        <div style={{ paddingTop: 16 }}>
+          {activeTab === 'basic' && (
+            <Descriptions column={2}>
+              <Descriptions.Item label="配置名称">{config.name}</Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                <FriendlyTime date={config.created_at} />
+              </Descriptions.Item>
+              <Descriptions.Item label="描述" span={2}>{config.description}</Descriptions.Item>
+              <Descriptions.Item label="合规规则" span={2}>
+                {config.compliance_rule_id ? (
+                  <Button
+                    type="link"
+                    style={{ padding: 0 }}
+                    onClick={() => handleShowRuleDetail(config.compliance_rule_id!)}
+                  >
+                    {config.compliance_rule_name}
+                  </Button>
+                ) : (
+                  <span style={{ color: '#999' }}>未设置</span>
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          )}
+
+          {activeTab === 'versions' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Text strong style={{ fontSize: 15 }}>版本历史 ({versions.length})</Text>
+                {config.isOwner && (
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={() => setIsVersionModalVisible(true)}
+                  >
+                    新增版本
+                  </Button>
+                )}
+              </div>
+              <Table
+                dataSource={versions}
+                columns={versionColumns}
+                rowKey="id"
+                pagination={false}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* 新增版本模态框 */}
       <Modal
@@ -295,7 +409,7 @@ export default function ConfigDetailPage() {
         {ruleLoading ? (
           <Card loading />
         ) : ruleDetail ? (
-          <Descriptions bordered column={1}>
+          <Descriptions column={1}>
             <Descriptions.Item label="规则名称">{ruleDetail.name}</Descriptions.Item>
             <Descriptions.Item label="创建者">{ruleDetail.creator_name || '-'}</Descriptions.Item>
             <Descriptions.Item label="状态">
@@ -313,13 +427,26 @@ export default function ConfigDetailPage() {
               {ruleDetail.description || '-'}
             </Descriptions.Item>
             <Descriptions.Item label="规则内容">
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto' }}>
+              <pre
+                style={{
+                  margin: 0,
+                  padding: 16,
+                  border: `1px solid ${token.colorBorderSecondary}`,
+                  background: token.colorFillQuaternary,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  maxHeight: 400,
+                  overflow: 'auto',
+                  fontSize: 13,
+                  lineHeight: 1.7,
+                }}
+              >
                 {ruleDetail.content}
               </pre>
             </Descriptions.Item>
           </Descriptions>
         ) : null}
       </Drawer>
-    </>
+    </div>
   );
 }

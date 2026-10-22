@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Card, Button, Tag, Space, Descriptions, App, Select, Modal, Alert, Tabs } from 'antd';
-import { RobotOutlined, FileTextOutlined, SafetyOutlined, InfoCircleOutlined, MessageOutlined, DiffOutlined } from '@ant-design/icons';
-import { useRouter, useParams } from 'next/navigation';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Card, Button, Tag, Space, Descriptions, App, Select, Modal, Alert, Menu, Typography, theme } from 'antd';
+import type { MenuProps } from 'antd';
+import { RobotOutlined, FileTextOutlined, SafetyOutlined, InfoCircleOutlined, MessageOutlined, DiffOutlined, ProfileOutlined } from '@ant-design/icons';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import ActionButton from '@/app/tags/components/ActionButton';
 import FriendlyTime from '@/components/FriendlyTime';
 import { AIChatPanel } from '@/components/ai-chat';
 
 const { Option } = Select;
+const { Text, Title } = Typography;
 
 interface Version {
   id: string;
@@ -29,8 +31,10 @@ interface Version {
 export default function VersionDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const versionId = params.id as string;
   const { message } = App.useApp();
+  const { token } = theme.useToken();
   
   const [version, setVersion] = useState<Version | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -47,6 +51,21 @@ export default function VersionDetailPage() {
   useEffect(() => {
     fetchVersionDetail();
   }, [versionId]);
+
+  // 从 URL 参数同步当前菜单（?tab=xxx），与左侧菜单联动
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    setActiveTab(tab && ['ai', 'compliance', 'ai-compare', 'chat'].includes(tab) ? tab : 'basic');
+  }, [searchParams]);
+
+  // 切换菜单：同步写入 URL（如 ?tab=ai），刷新/分享后状态保持
+  const switchTab = useCallback((key: string) => {
+    setActiveTab(key);
+    const p = new URLSearchParams(searchParams.toString());
+    if (key === 'basic') p.delete('tab'); else p.set('tab', key);
+    const qs = p.toString();
+    router.push(`/configsys/versions/${versionId}${qs ? `?${qs}` : ''}`);
+  }, [router, searchParams, versionId]);
 
   const fetchVersionDetail = async () => {
     try {
@@ -75,8 +94,8 @@ export default function VersionDetailPage() {
         setVersion(prev => prev ? { ...prev, ai_full_analysis: data.data, ai_summary: data.data.summary } : null);
         // 然后重新获取完整数据
         await fetchVersionDetail();
-        // 切换到AI解读tab
-        setActiveTab('ai');
+        // 切换到AI解读菜单
+        switchTab('ai');
       } else {
         message.error(data.message || '解读失败');
       }
@@ -123,8 +142,8 @@ export default function VersionDetailPage() {
       if (data.success) {
         message.success('合规检查完成');
         fetchVersionDetail();
-        // 切换到合规检查tab
-        setActiveTab('compliance');
+        // 切换到合规检查菜单
+        switchTab('compliance');
       } else {
         message.error(data.message || '检查失败');
       }
@@ -165,71 +184,106 @@ export default function VersionDetailPage() {
     return <Card loading />;
   }
 
+  // 小节标题：Swiss 风格区块头，标题居左、操作居右，无卡片边框
+  const SectionHeader = ({ title, extra }: { title: React.ReactNode; extra?: React.ReactNode }) => (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 16,
+        flexWrap: 'wrap',
+        marginBottom: 12,
+      }}
+    >
+      <Text strong style={{ fontSize: 15 }}>{title}</Text>
+      {extra}
+    </div>
+  );
+
+  // 空状态：发丝边框扁平提示块
+  const EmptyState = ({ text, hint }: { text: string; hint?: string }) => (
+    <div style={{ border: `1px solid ${token.colorBorderSecondary}`, padding: '40px 24px', textAlign: 'center' }}>
+      <Text type="secondary">{text}</Text>
+      {hint && (
+        <div style={{ marginTop: 4 }}>
+          <Text type="secondary" style={{ fontSize: 13 }}>{hint}</Text>
+        </div>
+      )}
+    </div>
+  );
+
   // 基本信息Tab内容
   const BasicInfoTab = () => (
     <>
-      {/* 差异报告 */}
+      {/* 版本对比结果 */}
       {compareResult && (
-        <Card title="版本对比结果" style={{ marginBottom: 16 }}>
-          <Alert title={compareResult.summary} type="info" />
-          {compareResult.changes && (
-            <div style={{ marginTop: 16 }}>
-              {compareResult.changes.map((change: any, index: number) => (
-                <Alert
-                  key={index}
-                  type={change.type === 'add' ? 'success' : change.type === 'remove' ? 'error' : 'warning'}
-                  title={`${change.category} - ${change.type === 'add' ? '新增' : change.type === 'remove' ? '删除' : '修改'}`}
-                  description={
-                    <div>
-                      <p>{change.description}</p>
-                      <p><strong>风险：</strong>
-                        <Tag color={change.risk === 'high' ? 'red' : change.risk === 'medium' ? 'orange' : 'green'}>
-                          {change.risk}
-                        </Tag>
-                      </p>
-                      <p><strong>建议：</strong>{change.suggestion}</p>
-                    </div>
-                  }
-                  style={{ marginBottom: 8 }}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
+        <div style={{ marginBottom: 24 }}>
+          <SectionHeader title="版本对比结果" />
+          <p style={{ margin: '0 0 12px', lineHeight: 1.7 }}>{compareResult.summary}</p>
+          {compareResult.changes && compareResult.changes.map((change: any, index: number) => (
+            <Alert
+              key={index}
+              type={change.type === 'add' ? 'success' : change.type === 'remove' ? 'error' : 'warning'}
+              title={`${change.category} - ${change.type === 'add' ? '新增' : change.type === 'remove' ? '删除' : '修改'}`}
+              description={
+                <div>
+                  <p>{change.description}</p>
+                  <p><strong>风险：</strong>
+                    <Tag color={change.risk === 'high' ? 'red' : change.risk === 'medium' ? 'orange' : 'green'}>
+                      {change.risk}
+                    </Tag>
+                  </p>
+                  <p><strong>建议：</strong>{change.suggestion}</p>
+                </div>
+              }
+              style={{ marginBottom: 8 }}
+            />
+          ))}
+        </div>
       )}
 
       {/* 配置内容 */}
-      <Card title="配置内容">
-        <pre style={{ 
-          background: '#f5f5f5', 
-          padding: 16, 
-          borderRadius: 4,
-          overflow: 'auto',
-          maxHeight: 500,
-        }}>
+      <div style={compareResult ? { marginTop: 24, paddingTop: 24, borderTop: `1px solid ${token.colorBorderSecondary}` } : undefined}>
+        <SectionHeader title="配置内容" />
+        <pre
+          style={{
+            margin: 0,
+            padding: 16,
+            border: `1px solid ${token.colorBorderSecondary}`,
+            background: token.colorFillQuaternary,
+            overflow: 'auto',
+            maxHeight: 500,
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
           {version.content}
         </pre>
-      </Card>
+      </div>
     </>
   );
 
   // AI解读Tab内容
   const AIInterpretTab = () => (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Button
-          icon={<RobotOutlined />}
-          onClick={handleAIInterpret}
-          loading={aiLoading}
-          type="primary"
-        >
-          {version.ai_full_analysis ? '重新解读' : '开始AI解读'}
-        </Button>
-      </div>
-      
+      <SectionHeader
+        title="AI 解读"
+        extra={
+          <Button
+            icon={<RobotOutlined />}
+            onClick={handleAIInterpret}
+            loading={aiLoading}
+            type="primary"
+          >
+            {version.ai_full_analysis ? '重新解读' : '开始AI解读'}
+          </Button>
+        }
+      />
+
       {version.ai_full_analysis ? (
-        <Card>
-          <Descriptions bordered column={2}>
+        <>
+          <Descriptions column={2}>
             <Descriptions.Item label="识别类型">{version.ai_full_analysis.detectedType}</Descriptions.Item>
             <Descriptions.Item label="风险等级">
               <Tag color={version.ai_full_analysis.riskAssessment?.level === 'high' ? 'red' : version.ai_full_analysis.riskAssessment?.level === 'medium' ? 'orange' : 'green'}>
@@ -238,37 +292,35 @@ export default function VersionDetailPage() {
             </Descriptions.Item>
             <Descriptions.Item label="配置概述" span={2}>{version.ai_full_analysis.summary}</Descriptions.Item>
           </Descriptions>
+
           {version.ai_full_analysis.keyItems && version.ai_full_analysis.keyItems.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <h4>关键配置项：</h4>
-              <ul>
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+              <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>关键配置项</Text>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {version.ai_full_analysis.keyItems.map((item: any, index: number) => (
-                  <li key={index}>
+                  <li key={index} style={{ marginBottom: 4, lineHeight: 1.7 }}>
                     <strong>{item.name}</strong>: {item.value} - {item.description}
                   </li>
                 ))}
               </ul>
             </div>
           )}
+
           {version.ai_full_analysis.riskAssessment?.findings && version.ai_full_analysis.riskAssessment.findings.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <h4>风险发现：</h4>
-              <ul>
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+              <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>风险发现</Text>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {version.ai_full_analysis.riskAssessment.findings.map((finding: string, index: number) => (
-                  <li key={index} style={{ color: '#cf1322', marginBottom: 4 }}>
+                  <li key={index} style={{ color: '#cf1322', marginBottom: 4, lineHeight: 1.7 }}>
                     {finding}
                   </li>
                 ))}
               </ul>
             </div>
           )}
-        </Card>
+        </>
       ) : (
-        <Alert
-          type="info"
-          title="尚未进行AI解读"
-          description="点击上方的'开始AI解读'按钮分析配置内容"
-        />
+        <EmptyState text="尚未进行AI解读" hint="点击右上角「开始AI解读」，AI 将分析配置内容" />
       )}
     </>
   );
@@ -276,28 +328,29 @@ export default function VersionDetailPage() {
   // 合规检查Tab内容
   const ComplianceTab = () => (
     <>
-      <div style={{ marginBottom: 16 }}>
-        <Button
-          icon={<SafetyOutlined />}
-          onClick={handleComplianceCheck}
-          loading={complianceLoading}
-          type="primary"
-        >
-          {version.compliance_report ? '重新检查' : '开始合规检查'}
-        </Button>
-      </div>
+      <SectionHeader
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            合规检查
+            {version.compliance_report?.ruleName && (
+              <Tag color="blue">规则: {version.compliance_report.ruleName}</Tag>
+            )}
+          </span>
+        }
+        extra={
+          <Button
+            icon={<SafetyOutlined />}
+            onClick={handleComplianceCheck}
+            loading={complianceLoading}
+            type="primary"
+          >
+            {version.compliance_report ? '重新检查' : '开始合规检查'}
+          </Button>
+        }
+      />
 
       {version.compliance_report ? (
-        <Card
-          title={
-            <Space>
-              <span>合规检查报告</span>
-              {version.compliance_report.ruleName && (
-                <Tag color="blue">规则: {version.compliance_report.ruleName}</Tag>
-              )}
-            </Space>
-          }
-        >
+        <>
           <Alert
             type={
               version.compliance_report.overallStatus === 'pass'
@@ -315,9 +368,10 @@ export default function VersionDetailPage() {
             }
             description={version.compliance_report.summary}
           />
+
           {version.compliance_report.findings && version.compliance_report.findings.length > 0 && (
-            <div style={{ marginTop: 16 }}>
-              <h4>详细检查结果：</h4>
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+              <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>详细检查结果</Text>
               {version.compliance_report.findings.map((finding: any, index: number) => (
                 <Alert
                   key={index}
@@ -329,7 +383,7 @@ export default function VersionDetailPage() {
                         : 'error'
                   }
                   title={
-                    <Space>
+                    <Space size={6}>
                       <span>{finding.rule}</span>
                       {finding.severity && finding.status !== 'pass' && (
                         <Tag
@@ -361,13 +415,9 @@ export default function VersionDetailPage() {
               ))}
             </div>
           )}
-        </Card>
+        </>
       ) : (
-        <Alert
-          type="info"
-          title="尚未进行合规检查"
-          description="点击上方的'开始合规检查'按钮检查配置合规性"
-        />
+        <EmptyState text="尚未进行合规检查" hint="点击右上角「开始合规检查」，检查配置合规性" />
       )}
     </>
   );
@@ -393,12 +443,12 @@ export default function VersionDetailPage() {
   // AI比对Tab内容
   const AICompareTab = () => (
     <>
-      <Card style={{ marginBottom: 16 }}>
-        <Space orientation="vertical" style={{ width: '100%' }}>
-          <div>
-            <span style={{ marginRight: 8 }}>选择对比版本:</span>
+      <SectionHeader
+        title="AI 比对"
+        extra={
+          <Space>
             <Select
-              style={{ width: 300 }}
+              style={{ width: 260 }}
               placeholder="选择要对比的目标版本"
               onChange={(value) => setAiCompareVersionId(value)}
               value={aiCompareVersionId || undefined}
@@ -409,163 +459,222 @@ export default function VersionDetailPage() {
                 </Option>
               ))}
             </Select>
-          </div>
-          <Button
-            type="primary"
-            icon={<DiffOutlined />}
-            onClick={handleAICompare}
-            loading={aiCompareLoading}
-            disabled={!aiCompareVersionId}
-          >
-            开始AI比对
-          </Button>
-        </Space>
-      </Card>
-
-      {aiCompareResult && (
-        <Card title="AI比对结果">
-          <Space orientation="vertical" style={{ width: '100%' }}>
-            <Alert
-              type="info"
-              title={`版本差异概述`}
-              description={aiCompareResult.summary}
-            />
-
-            {aiCompareResult.changes && aiCompareResult.changes.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <h4>详细变更:</h4>
-                {aiCompareResult.changes.map((change: any, index: number) => (
-                  <Alert
-                    key={index}
-                    type={change.type === 'add' ? 'success' : change.type === 'remove' ? 'error' : 'warning'}
-                    title={
-                      <Space>
-                        <span>{change.category}</span>
-                        <Tag color={change.type === 'add' ? 'green' : change.type === 'remove' ? 'red' : 'orange'}>
-                          {change.type === 'add' ? '新增' : change.type === 'remove' ? '删除' : '修改'}
-                        </Tag>
-                        <Tag color={change.risk === 'high' ? 'red' : change.risk === 'medium' ? 'orange' : 'green'}>
-                          {change.risk === 'high' ? '高风险' : change.risk === 'medium' ? '中风险' : '低风险'}
-                        </Tag>
-                      </Space>
-                    }
-                    description={
-                      <div>
-                        <p><strong>变更内容:</strong> {change.description}</p>
-                        <p><strong>建议:</strong> {change.suggestion}</p>
-                      </div>
-                    }
-                    style={{ marginBottom: 8 }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {aiCompareResult.impact && (
-              <Alert
-                type="info"
-                title="整体影响评估"
-                description={aiCompareResult.impact}
-                style={{ marginTop: 16 }}
-              />
-            )}
+            <Button
+              type="primary"
+              icon={<DiffOutlined />}
+              onClick={handleAICompare}
+              loading={aiCompareLoading}
+              disabled={!aiCompareVersionId}
+            >
+              开始AI比对
+            </Button>
           </Space>
-        </Card>
-      )}
+        }
+      />
 
-      {!aiCompareResult && !aiCompareLoading && (
-        <Alert
-          type="info"
-          title="尚未进行AI比对"
-          description='选择上方的目标版本，点击"开始AI比对"按钮，AI将分析两个版本之间的差异。'
+      {aiCompareResult ? (
+        <>
+          <p style={{ margin: 0, lineHeight: 1.7 }}>{aiCompareResult.summary}</p>
+
+          {aiCompareResult.changes && aiCompareResult.changes.length > 0 && (
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+              <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 12 }}>详细变更</Text>
+              {aiCompareResult.changes.map((change: any, index: number) => (
+                <Alert
+                  key={index}
+                  type={change.type === 'add' ? 'success' : change.type === 'remove' ? 'error' : 'warning'}
+                  title={
+                    <Space size={6}>
+                      <span>{change.category}</span>
+                      <Tag color={change.type === 'add' ? 'green' : change.type === 'remove' ? 'red' : 'orange'}>
+                        {change.type === 'add' ? '新增' : change.type === 'remove' ? '删除' : '修改'}
+                      </Tag>
+                      <Tag color={change.risk === 'high' ? 'red' : change.risk === 'medium' ? 'orange' : 'green'}>
+                        {change.risk === 'high' ? '高风险' : change.risk === 'medium' ? '中风险' : '低风险'}
+                      </Tag>
+                    </Space>
+                  }
+                  description={
+                    <div>
+                      <p><strong>变更内容:</strong> {change.description}</p>
+                      <p><strong>建议:</strong> {change.suggestion}</p>
+                    </div>
+                  }
+                  style={{ marginBottom: 8 }}
+                />
+              ))}
+            </div>
+          )}
+
+          {aiCompareResult.impact && (
+            <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${token.colorBorderSecondary}` }}>
+              <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>整体影响评估</Text>
+              <p style={{ margin: 0, lineHeight: 1.7 }}>{aiCompareResult.impact}</p>
+            </div>
+          )}
+        </>
+      ) : (
+        <EmptyState
+          text="尚未进行AI比对"
+          hint="选择右上角目标版本，点击「开始AI比对」，AI 将分析两个版本之间的差异"
         />
       )}
     </>
   );
 
-  const tabItems = [
+  // 左侧菜单：顶部「配置详情」返回配置详情页，其余为功能菜单
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'config-detail',
+      icon: <ProfileOutlined />,
+      label: '配置详情',
+    },
+    { type: 'divider' },
     {
       key: 'basic',
-      label: (
-        <Space>
-          <InfoCircleOutlined />
-          基本信息
-        </Space>
-      ),
-      children: <BasicInfoTab />,
+      icon: <InfoCircleOutlined />,
+      label: '基本信息',
     },
     {
       key: 'ai',
+      icon: <RobotOutlined />,
       label: (
-        <Space>
-          <RobotOutlined />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           AI解读
-          {version.ai_full_analysis && <Tag color="success">已完成</Tag>}
-        </Space>
+          {version.ai_full_analysis && <Tag color="success" style={{ marginInlineEnd: 0 }}>已完成</Tag>}
+        </span>
       ),
-      children: <AIInterpretTab />,
     },
     {
       key: 'compliance',
+      icon: <SafetyOutlined />,
       label: (
-        <Space>
-          <SafetyOutlined />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           合规检查
           {version.compliance_report && (
-            <Tag color={version.compliance_report.overallStatus === 'pass' ? 'success' : version.compliance_report.overallStatus === 'warning' ? 'warning' : 'error'}>
-              {version.compliance_report.overallStatus === 'pass' ? '通过' : version.compliance_report.overallStatus === 'warning' ? '警告' : '不合规'}
+            <Tag
+              color={
+                version.compliance_report.overallStatus === 'pass'
+                  ? 'success'
+                  : version.compliance_report.overallStatus === 'warning'
+                    ? 'warning'
+                    : 'error'
+              }
+              style={{ marginInlineEnd: 0 }}
+            >
+              {version.compliance_report.overallStatus === 'pass'
+                ? '通过'
+                : version.compliance_report.overallStatus === 'warning'
+                  ? '警告'
+                  : '不合规'}
             </Tag>
           )}
-        </Space>
+        </span>
       ),
-      children: <ComplianceTab />,
     },
     {
       key: 'ai-compare',
+      icon: <DiffOutlined />,
       label: (
-        <Space>
-          <DiffOutlined />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           AI比对
-          {aiCompareResult && <Tag color="success">已比对</Tag>}
-        </Space>
+          {aiCompareResult && <Tag color="success" style={{ marginInlineEnd: 0 }}>已比对</Tag>}
+        </span>
       ),
-      children: <AICompareTab />,
     },
     {
       key: 'chat',
-      label: (
-        <Space>
-          <MessageOutlined />
-          AI问答
-        </Space>
-      ),
-      children: <AIChatTab />,
+      icon: <MessageOutlined />,
+      label: 'AI问答',
     },
   ];
 
+  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+    // 「配置详情」：返回配置详情页 /configsys/[id]
+    if (key === 'config-detail') {
+      router.push(`/configsys/${version.config_id}`);
+      return;
+    }
+    switchTab(key);
+  };
+
   return (
-    <>
-      <Card
-        title={`${version.config_name} - ${version.version_number}`}
-        extra={
-          <Space>
-            {version.otherVersions.length > 0 && (
-              <Button
-                icon={<FileTextOutlined />}
-                onClick={() => setIsCompareModalVisible(true)}
-              >
-                版本比对
-              </Button>
-            )}
-          </Space>
-        }
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        background: token.colorBgContainer,
+      }}
+    >
+      {/* 左侧菜单：白色同色画布，右侧发丝分割线，无边框 */}
+      <div
+        style={{
+          width: 208,
+          flexShrink: 0,
+          borderRight: `1px solid ${token.colorBorderSecondary}`,
+        }}
       >
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={tabItems}
-        />
-      </Card>
+        <div style={{ position: 'sticky', top: 80 }}>
+          <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+            <Text
+              strong
+              style={{ fontSize: 15, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              title={version.config_name}
+            >
+              {version.config_name}
+            </Text>
+          </div>
+          <Menu
+            mode="inline"
+            selectedKeys={[activeTab]}
+            items={menuItems}
+            onClick={handleMenuClick}
+            style={{ borderInlineEnd: 'none', paddingTop: 8 }}
+          />
+        </div>
+      </div>
+
+      {/* 右侧 main */}
+      <div style={{ flex: 1, minWidth: 0, padding: '0 0 24px 24px' }}>
+        {/* 页头：标题 + 操作，发丝分割 */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            padding: '16px 0 12px',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <Title
+              level={4}
+              style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
+              {version.config_name}
+            </Title>
+            <Text type="secondary">版本 {version.version_number}</Text>
+          </div>
+          {version.otherVersions.length > 0 && (
+            <Button
+              icon={<FileTextOutlined />}
+              onClick={() => setIsCompareModalVisible(true)}
+            >
+              版本比对
+            </Button>
+          )}
+        </div>
+
+        {/* 当前菜单内容 */}
+        <div style={{ paddingTop: 16 }}>
+          {activeTab === 'basic' && <BasicInfoTab />}
+          {activeTab === 'ai' && <AIInterpretTab />}
+          {activeTab === 'compliance' && <ComplianceTab />}
+          {activeTab === 'ai-compare' && <AICompareTab />}
+          {activeTab === 'chat' && <AIChatTab />}
+        </div>
+      </div>
 
       {/* 版本比对选择模态框 */}
       <Modal
@@ -587,6 +696,6 @@ export default function VersionDetailPage() {
           ))}
         </Select>
       </Modal>
-    </>
+    </div>
   );
 }
