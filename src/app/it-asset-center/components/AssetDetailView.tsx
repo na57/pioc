@@ -156,6 +156,29 @@ const ASSET_DETAIL_CONFIGS: Partial<Record<AssetType, AssetTypeConfig>> = {
     ],
   },
 
+  database: {
+    fields: [
+      { label: '数据库名称', field: 'name' },
+      { label: '数据库类型', field: 'db_type', type: 'tag' },
+      { label: '数据库版本', field: 'version' },
+      { label: '唯一标识', field: 'code' },
+      { label: '主机地址', field: 'host' },
+      { label: '端口', field: 'port' },
+      { label: '运行状态', type: 'status' },
+      { label: '所属信息系统', type: 'systemLink' },
+      { label: '所属单位', field: 'department' },
+      { label: '负责人', field: 'owner' },
+      { label: '备注', field: 'description', span: 'column', showIf: (a) => !!a.description },
+      { label: '创建时间', field: 'created_at', type: 'time' },
+      { label: '更新时间', field: 'updated_at', type: 'time' },
+    ],
+    metadataLabels: {
+      sjly: '数据来源',
+      dwh: '单位号',
+      fzrgh: '负责人工号',
+    },
+  },
+
   virtual_machine: {
     fields: [
       { label: '虚拟机名称', field: 'name' },
