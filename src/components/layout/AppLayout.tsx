@@ -196,7 +196,7 @@ function AppLayout({ children }: AppLayoutProps) {
   }, [currentApp?.url]);
 
   // 当前应用的侧边菜单：代码内置（src/lib/app-menus.ts），未注册的应用返回空数组
-  const appMenus: AppSideMenu[] = getAppSideMenus(currentApp?.url, pathname, permittedViewIds);
+  const appMenus: AppSideMenu[] = getAppSideMenus(currentApp?.url, permittedViewIds);
 
   const handleLogout = async () => {
     try {
@@ -420,19 +420,37 @@ function AppLayout({ children }: AppLayoutProps) {
   const selectedChain = getSelectedKeys();
   const currentPageTitle = getCurrentPageTitle();
 
-  // 应用级侧边菜单（当前应用在代码中注册了菜单时显示），key 直接使用菜单路径
-  const appMenuItems: MenuProps['items'] = appMenus.map((m) => ({
-    key: m.path,
-    icon: m.icon ? iconMapping[m.icon] ?? null : null,
-    label: m.name,
-  }));
+  // 递归扁平化菜单：选中项匹配与点击校验需要在完整清单上做
+  const flattenAppMenus = (items: AppSideMenu[]): AppSideMenu[] =>
+    items.flatMap((m) => (m.children?.length ? [m, ...flattenAppMenus(m.children)] : [m]));
+  const flatAppMenus = flattenAppMenus(appMenus);
+
+  // 应用级侧边菜单（当前应用在代码中注册了菜单时显示），key 直接使用菜单路径；
+  // 带子项的菜单渲染为可收缩子菜单，父项标题点击跳转父项路径
+  const buildAppMenuItems = (items: AppSideMenu[]): MenuProps['items'] =>
+    items.map((m) => {
+      const base = {
+        key: m.path,
+        icon: m.icon ? iconMapping[m.icon] ?? null : null,
+        label: m.name,
+      };
+      if (m.children?.length) {
+        return {
+          ...base,
+          children: buildAppMenuItems(m.children),
+          onTitleClick: () => router.push(m.path),
+        };
+      }
+      return base;
+    });
+  const appMenuItems: MenuProps['items'] = buildAppMenuItems(appMenus);
 
   // 应用级菜单选中项：菜单路径可能带查询参数（如 /xxx?tab=stats），需与完整 URL 匹配
   const appMenuSelectedKeys = (() => {
     const params = new URLSearchParams(currentSearch);
     // 带 query 的菜单项：pathname 一致且菜单 query 参数为 URL query 的子集
     //（URL 可附加筛选参数，如 ?tab=assets&category=infrastructure 仍命中 ?tab=assets 菜单）
-    const queryMatch = appMenus.find((m) => {
+    const queryMatch = flatAppMenus.find((m) => {
       if (!m.path.includes('?')) return false;
       const [basePath, baseQuery = ''] = m.path.split('?');
       if (basePath !== pathname) return false;
@@ -443,7 +461,7 @@ function AppLayout({ children }: AppLayoutProps) {
     // URL 带 tab 参数但无菜单项与之匹配时不高亮；
     // 无 tab 参数时 query 视为页面筛选参数，按 pathname 匹配无 query 的菜单项
     if (params.get('tab')) return [];
-    const plainMenus = appMenus.filter((m) => !m.path.includes('?'));
+    const plainMenus = flatAppMenus.filter((m) => !m.path.includes('?'));
     const exact = plainMenus.find((m) => m.path === pathname);
     if (exact) return [exact.path];
     const prefix = plainMenus
@@ -454,10 +472,15 @@ function AppLayout({ children }: AppLayoutProps) {
 
   const handleAppMenuClick = ({ key }: { key: string }) => {
     // key 即菜单路径（见 appMenuItems）
-    if (appMenus.some((m) => m.path === key)) {
+    if (flatAppMenus.some((m) => m.path === key)) {
       router.push(key);
     }
   };
+
+  // 初始展开的子菜单：当前路径位于父项之下时自动展开（布局跨路由持久，后续由用户手动控制）
+  const appMenuDefaultOpenKeys = appMenus
+    .filter((m) => m.children?.length && pathname.startsWith(m.path))
+    .map((m) => m.path);
 
   const showSider = !isMobile && !!currentApp && appMenus.length > 0;
 
@@ -617,6 +640,7 @@ function AppLayout({ children }: AppLayoutProps) {
               <Menu
                 mode="inline"
                 selectedKeys={appMenuSelectedKeys}
+                defaultOpenKeys={appMenuDefaultOpenKeys}
                 items={appMenuItems}
                 onClick={handleAppMenuClick}
                 style={{ borderInlineEnd: 'none', paddingTop: 8 }}

@@ -21,7 +21,7 @@ import {
   getDeviceConfigsForView,
   DeviceConfig,
 } from './config-loader';
-import { hciDownCategories, HCI_AI_CLUSTER_CATS } from './topology';
+import { hciDownCategories, HCI_AI_CLUSTER_CATS, lbVlanGroups } from './topology';
 
 // 类型定义
 export interface PortData {
@@ -69,6 +69,10 @@ const REQUEST_TIMEOUT_MS = 1500; // 常规请求超时（重试 1 次，最差 3
 const HCI_PEER_SPEED_MIN = 80000; // ≥80G：交换机间集群互联（agg55，已含 eth55+eth56）
 const HCI_UPLINK_SPEED_MIN = 10000; // 10G：上联核心（agg48）
 // 下行端口不再按速率阈值粗分，改按 topology.hciDownCategories 的静态端口表逐口归类
+
+// LB（H3C SecPath L5060）固定物理口（依据《负载均衡业务.md》）
+const LB_TRUNK_IFNAME = 'Ten-GigabitEthernet1/2/4'; // 上联核心 trunk（承载 8 个 VLAN 子接口）
+const LB_HA_IFNAME = 'Ten-GigabitEthernet1/2/0'; // HA Keepalive 心跳口
 
 /** Counter64 差分异常上限（超过视为计数器回绕/重置，该轮速率记 0） */
 const COUNTER_DELTA_MAX = BigInt('4600000000000000000');
@@ -399,17 +403,19 @@ async function probeDevice(
   fast: boolean,
 ): Promise<boolean> {
   const opts = fast ? { timeout: FIRST_PROBE_TIMEOUT_MS, retries: 0, noFallback: true } : undefined;
-  const isHci = viewId === 'hyperconverged';
+  const useLogical = viewId === 'hyperconverged' || viewId === 'loadbalancer';
   try {
-    if (isHci) {
+    if (viewId === 'hyperconverged') {
       await discoverHciPorts(d, opts);
+    } else if (viewId === 'loadbalancer') {
+      await discoverLbPorts(d, opts);
     } else {
       await discoverCorePorts(d, links, opts);
       if (d.ifIndexMap.size === 0) throw new Error('未发现任何目标端口');
     }
     d.connected = true;
     d.discovered = true;
-    const found = isHci
+    const found = useLogical
       ? d.logicalPorts.map((lp) => `${lp.key}(${lp.ifIndices.length}口)`)
       : [...d.ifIndexMap.keys()];
     console.log(`[ITCWeathermap:${viewId}] 设备已连接: ${d.config.ip} (${d.config.name})，发现 ${found.length} 条链路: ${found.join(', ')}`);
@@ -443,12 +449,13 @@ async function collectDevice(
 ): Promise<DeviceCollectResult> {
   if (!d.discovered) {
     if (viewId === 'hyperconverged') await discoverHciPorts(d);
+    else if (viewId === 'loadbalancer') await discoverLbPorts(d);
     else await discoverCorePorts(d, links);
     d.discovered = true;
   }
-  return viewId === 'hyperconverged'
-    ? collectHciDevice(d, dt)
-    : collectCoreDevice(d, links, dt);
+  if (viewId === 'hyperconverged') return collectHciDevice(d, dt);
+  if (viewId === 'loadbalancer') return collectLbDevice(d, dt);
+  return collectCoreDevice(d, links, dt);
 }
 
 /**
@@ -805,6 +812,115 @@ async function discoverHciPorts(
       ifIndices: uniq.map((m) => m.ifIndex),
       speed: uniq.filter((m) => m.up).reduce((s, m) => s + m.speed, 0),
     });
+  }
+
+  d.logicalPorts = logical;
+  d.aggPrev.clear();
+}
+
+/**
+ * LB 设备采集：与 HCI 同为「逻辑链路 = 成员口计数器逐口差分再求和」
+ * 模式（见 collectHciDevice），直接复用。
+ */
+async function collectLbDevice(d: DeviceRuntime, dt: number): Promise<DeviceCollectResult> {
+  return collectHciDevice(d, dt);
+}
+
+/**
+ * LB 视图端口发现（H3C SecPath L5060，HA 主备的 active 成员）。
+ *
+ * 依据《负载均衡业务.md》：
+ * - 物理 trunk Te1/2/4（上联核心 1/0/0/31），承载 8 个 VLAN 子接口；
+ * - HA 心跳口 Te1/2/0（主备 Keepalive，10G）；
+ * - 子接口 Ten-GigabitEthernet1/2/4.<vlan>，按 topology.lbVlanGroups 分三组。
+ * SNMP 仅在 HA active 成员上应答；管理地址（VRRP VIP）始终指向 active，
+ * 发现不到 trunk/子接口时判定不可达（如主备切换瞬间，下轮自动重连）。
+ *
+ * 逻辑链路：
+ *   uplink:lb           → 物理 trunk（speed 取 HIGH_SPEED 实测）
+ *   peerlink:lb         → HA 心跳口（speed 取实测；偶发缺失时跳过）
+ *   down:lb:<组>        → 组内 VLAN 子接口计数器之和（speed 定 10000：
+ *                          trunk 瓶颈口径，子接口共享物理口带宽，
+ *                          避免按子接口速率求和虚增容量）
+ *   down:lb:<组>#<vlan> → 逐 VLAN 子接口（链路明细表行）
+ */
+async function discoverLbPorts(
+  d: DeviceRuntime,
+  opts?: { timeout?: number; retries?: number; noFallback?: boolean },
+): Promise<void> {
+  const vbs = await d.client.walk(OID_IF_NAME, 4000, opts);
+  if (vbs.length === 0) throw new Error('ifName WALK 无结果');
+
+  const ifIndexByName = new Map<string, number>();
+  for (const vb of vbs) {
+    if (!vb.isStr) continue;
+    const oidParts = vb.oid.split('.');
+    const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
+    if (!Number.isFinite(ifIndex)) continue;
+    ifIndexByName.set(vb.str, ifIndex);
+  }
+
+  const trunkIfIndex = ifIndexByName.get(LB_TRUNK_IFNAME);
+  const haIfIndex = ifIndexByName.get(LB_HA_IFNAME);
+  const subIfIndex = new Map<number, number>();
+  const subRe = /^Ten-GigabitEthernet1\/2\/4\.(\d+)$/;
+  for (const [name, ifIndex] of ifIndexByName) {
+    const m = subRe.exec(name);
+    if (m) subIfIndex.set(parseInt(m[1], 10), ifIndex);
+  }
+
+  if (trunkIfIndex === undefined || subIfIndex.size === 0) {
+    throw new Error('未发现 LB trunk/子接口（非 active 成员或设备不符）');
+  }
+
+  // trunk + HA 口协商速率一次批量取
+  const speedTargets = [trunkIfIndex, ...(haIfIndex !== undefined ? [haIfIndex] : [])];
+  const speedResult = await d.client.get(speedTargets.map((i) => `${OID_HIGH_SPEED}.${i}`), opts);
+  const speedOf = (ifIndex: number): number => {
+    const vb = speedResult.get(`${OID_HIGH_SPEED}.${ifIndex}`);
+    return vb && !vb.missing ? vb.num : 0;
+  };
+
+  const logical: LogicalPort[] = [];
+
+  // 上行 trunk
+  logical.push({
+    key: 'uplink:lb',
+    name: `${LB_TRUNK_IFNAME}（上联核心 trunk）`,
+    ifIndices: [trunkIfIndex],
+    speed: speedOf(trunkIfIndex) || 10000,
+  });
+
+  // HA 心跳口（active 成员上可见；缺失时跳过，不影响其余链路）
+  if (haIfIndex !== undefined) {
+    logical.push({
+      key: 'peerlink:lb',
+      name: `${LB_HA_IFNAME}（HA Keepalive）`,
+      ifIndices: [haIfIndex],
+      speed: speedOf(haIfIndex) || 10000,
+    });
+  }
+
+  // VLAN 分组：组聚合 + 逐 VLAN
+  for (const g of lbVlanGroups) {
+    const members = g.vlans
+      .filter((vlan) => subIfIndex.has(vlan))
+      .map((vlan) => ({ vlan, ifIndex: subIfIndex.get(vlan)! }));
+    if (members.length === 0) continue; // 设备上该组子接口均未配置
+    logical.push({
+      key: `down:lb:${g.key}`,
+      name: members.map((m) => `${LB_TRUNK_IFNAME}.${m.vlan}`).join('、'),
+      ifIndices: members.map((m) => m.ifIndex),
+      speed: 10000, // trunk 瓶颈口径
+    });
+    for (const m of members) {
+      logical.push({
+        key: `down:lb:${g.key}#${m.vlan}`,
+        name: `${LB_TRUNK_IFNAME}.${m.vlan}`,
+        ifIndices: [m.ifIndex],
+        speed: 10000,
+      });
+    }
   }
 
   d.logicalPorts = logical;

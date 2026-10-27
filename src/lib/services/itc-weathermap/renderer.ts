@@ -22,6 +22,8 @@ import {
   HCI_AI_CLUSTER_NODE,
   HCI_AI_CLUSTER_CATS,
   hciNodeDevices,
+  lbVlanGroups,
+  lbVlanVip,
 } from './topology';
 
 // ========== 利用率颜色插值（5 段线性，与 Go 程序 utilColor 一致） ==========
@@ -90,6 +92,11 @@ const nodeStylePresets: Record<string, Record<string, [string, string, string, s
     zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
   },
   hci: {
+    core: ['#CECBF6', '#534AB7', '#26215C', '#534AB7'],
+    sw:   ['#EAF3F0', '#1D9E75', '#085041', '#0F6E56'],
+    zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
+  },
+  lb: {
     core: ['#CECBF6', '#534AB7', '#26215C', '#534AB7'],
     sw:   ['#EAF3F0', '#1D9E75', '#085041', '#0F6E56'],
     zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
@@ -330,6 +337,7 @@ export function renderSVG(
 ): string {
   const viewId = options.viewId || 'core';
   const preset = getNodeStylePresetForView(viewId);
+  const isLbView = viewId === 'loadbalancer';
   const canvas = getCanvasSizeForView(viewId);
   const nodesList = getNodesForView(viewId);
   const links = getLinksForView(viewId);
@@ -389,8 +397,9 @@ export function renderSVG(
     const down = oper >= 0 && oper !== 1;
     let color = '#B0B0B0';
     if (!down && !unreach) color = utilColor(util);
-    // hci-down 是多口聚合的逻辑分支（容量可达 250G），线宽单独收窄，避免 26 条分支过重
-    const w = l.geometry === 'hci-down'
+    // hci-down 是多口聚合的逻辑分支（容量可达 250G），线宽单独收窄，避免 26 条分支过重；
+    // LB 视图各组均为 10G trunk 瓶颈口径，与上行/HA 统一用标准线宽
+    const w = l.geometry === 'hci-down' && !isLbView
       ? Math.max(1.8, Math.min(6.5, 1.8 + (speed / 25000) * 0.5))
       : widthFor(speed);
 
@@ -416,7 +425,16 @@ export function renderSVG(
     } else {
       let dirOut: string;
       let dirIn: string;
-      if (l.geometry === 'hci-down') {
+      if (isLbView && l.geometry === 'row1') {
+        dirOut = 'LB → 核心（出为主）';
+        dirIn = '核心 → LB（入为主）';
+      } else if (isLbView && l.geometry === 'hci-peer') {
+        dirOut = 'LB1 → LB2（心跳）';
+        dirIn = 'LB2 → LB1（心跳）';
+      } else if (isLbView && l.geometry === 'hci-down') {
+        dirOut = 'LB → 业务区（出为主）';
+        dirIn = '业务区 → LB（入为主）';
+      } else if (l.geometry === 'hci-down') {
         dirOut = '交换机 → 下行业务（出为主）';
         dirIn = '下行业务 → 交换机（入为主）';
       } else if (l.geometry === 'hci-up') {
@@ -502,6 +520,23 @@ export function renderSVG(
       }
       nodeTip = lines.join('\n');
     }
+    // lb 视图：业务区悬停展示逐 VLAN 子接口明细
+    if (preset === 'lb' && n.kind === 'zone') {
+      const lines = [n.name, n.description, ''];
+      const g = lbVlanGroups.find((x) => `dn_${x.key}` === id);
+      if (g) {
+        for (const vlan of g.vlans) {
+          const dd = data.get(`down:lb:${g.key}#${vlan}`);
+          const tail = !dd
+            ? '采集中…'
+            : dd.oper !== 1
+              ? '端口 Down'
+              : `入 ${fmtBps(dd.inBps)} ／ 出 ${fmtBps(dd.outBps)}`;
+          lines.push(`  VLAN${vlan}：${tail}`);
+        }
+      }
+      nodeTip = lines.join('\n');
+    }
     const rectTitle = nodeTip ? `<title>${esc(nodeTip)}</title>` : '';
     // 带跳转链接的节点：整个节点（矩形+文字）包在 SVG <a> 里
     const hrefOpen = n.href ? `<a href="${esc(n.href)}" target="_self" style="cursor:pointer">` : '';
@@ -546,6 +581,15 @@ export function renderSVG(
         sub = '设备未达';
       }
     }
+    // lb 视图：主用 LB 显示上行 trunk 总吞吐（备用 LB SNMP 不可见，保留静态说明）
+    if (preset === 'lb' && n.kind === 'sw' && id === 'lb1') {
+      const d = data.get('uplink:lb');
+      if (d && d.oper !== -2) {
+        sub = `上行 ${fmtBps(d.inBps + d.outBps)}bps`;
+      } else {
+        sub = '设备未达';
+      }
+    }
     // hci 合并业务节点：副信息可能为两行（下方渲染时按 ' · ' 拆分）
     if (preset === 'hci' && n.kind === 'zone') {
       // 吞吐合计挂在各交换机分支（down:<交换机>:<分类|aicluster>）上
@@ -576,6 +620,26 @@ export function renderSVG(
         sub = `${fmtBps(inSum + outSum)}bps · ${upN}/${devices.length} 台在线`;
       }
     }
+    // lb 视图：业务区副信息 = 组聚合吞吐 + 在线 VLAN 数
+    if (preset === 'lb' && n.kind === 'zone') {
+      const g = lbVlanGroups.find((x) => `dn_${x.key}` === id);
+      if (g) {
+        const agg = data.get(`down:lb:${g.key}`);
+        let inSum = 0, outSum = 0, upN = 0;
+        if (agg && agg.oper === 1) {
+          inSum += agg.inBps;
+          outSum += agg.outBps;
+        }
+        for (const vlan of g.vlans) {
+          const dd = data.get(`down:lb:${g.key}#${vlan}`);
+          if (dd && dd.oper === 1) upN += 1;
+        }
+        const hasData = g.vlans.some((vlan) => data.has(`down:lb:${g.key}#${vlan}`));
+        if (hasData) {
+          sub = `${fmtBps(inSum + outSum)}bps · VLAN ${upN}/${g.vlans.length} Up`;
+        }
+      }
+    }
 
     // 绘制文字：name (bold) + sub
     if (n.kind === 'ext') {
@@ -584,7 +648,7 @@ export function renderSVG(
       if (n.peer) {
         svg += `<text x="${n.x}" y="${(n.y + 20).toFixed(0)}" text-anchor="middle" font-size="11" fill="#888780">${esc(n.peer)}</text>\n`;
       }
-    } else if (preset === 'hci' && n.kind === 'zone') {
+    } else if ((preset === 'hci' || preset === 'lb') && n.kind === 'zone') {
       // 合并业务节点：名称 + 两行短副信息（按 ' · ' 拆行，宽 118 不溢出）
       const subLines = sub.split(' · ');
       svg += `<text x="${n.x}" y="${(n.y - 11).toFixed(0)}" text-anchor="middle" font-size="12.5" font-weight="500" fill="${st[2]}">${esc(n.name)}</text>\n`;
@@ -719,6 +783,28 @@ export function buildPortTableRows(
           );
         }
       });
+    }
+  } else if (viewId === 'loadbalancer') {
+    // 上行 trunk / HA 心跳：一条链路一行
+    for (const l of links.filter((x) => x.geometry !== 'hci-down')) {
+      pushRow(
+        l.port, l.description, l.peer || '', l.speed, l.geometry, 0, l.order,
+        '', l.geometry === 'row1' ? '上行 trunk' : 'HA 心跳', 0, data.get(l.port),
+      );
+    }
+    // 下行：VLAN 组聚合一行 + 逐 VLAN 子接口一行
+    for (const g of lbVlanGroups) {
+      pushRow(
+        `down:lb:${g.key}`, `${g.name} · VLAN${g.vlans.join('/')}`, g.peer,
+        0, 'hci-down', 0, 0, '', g.name, 0, data.get(`down:lb:${g.key}`),
+      );
+      for (const vlan of g.vlans) {
+        const key = `down:lb:${g.key}#${vlan}`;
+        pushRow(
+          key, `${g.name} · VLAN${vlan} 子接口`, lbVlanVip[vlan] ?? '',
+          0, 'hci-down', 1, vlan, '', g.name, vlan, data.get(key),
+        );
+      }
     }
   } else {
     // 业务分组 = 链路 a 端拓扑节点名（如 DNS业务组 / 负载均衡 / 防火墙）

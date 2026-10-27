@@ -17,6 +17,9 @@ views:
   # 超融合业务
   hyperconverged:
     roles: "admin"
+  # 负载均衡
+  loadbalancer:
+    roles: ""
 
 # SNMP 设备配置（community 密码集中管理在此）
 devices:
@@ -45,4 +48,10 @@ devices:
   - id: sw15
     ip: "10.10.251.15"
     name: "cg-lxl2-b03-yewu4"
+    snmpCommunity: "NOC2014!"
+
+  # 负载均衡（HA 堆叠主备，VLAN88 VRRP 管理地址；SNMP 只在 active 成员上应答）
+  - id: lb
+    ip: "10.10.88.2"
+    name: "H3C-TSG-LB1 / H3C-LXL-LB2"
     snmpCommunity: "NOC2014!"

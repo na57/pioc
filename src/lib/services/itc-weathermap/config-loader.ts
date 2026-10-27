@@ -130,7 +130,7 @@ export function getCanvasSizeForView(viewId: string): { width: number; height: n
   return { width: v?.canvasWidth ?? 1280, height: v?.canvasHeight ?? 800 };
 }
 
-export function getNodeStylePresetForView(viewId: string): 'core' | 'hci' {
+export function getNodeStylePresetForView(viewId: string): 'core' | 'hci' | 'lb' {
   return getTopoView(viewId)?.nodeStylePreset ?? 'core';
 }
 

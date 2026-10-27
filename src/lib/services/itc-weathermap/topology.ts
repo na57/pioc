@@ -57,7 +57,7 @@ export interface TopoView {
   deviceIds: string[];
   canvasWidth: number;
   canvasHeight: number;
-  nodeStylePreset: 'core' | 'hci';
+  nodeStylePreset: 'core' | 'hci' | 'lb';
   nodeOrder: string[];
   nodes: TopoNode[];
   links: TopoLink[];
@@ -80,7 +80,7 @@ const coreNodes: TopoNode[] = [
   { id: 'ykt10', name: '图书馆一卡通超融合', description: '1|2/0/0/20', x: 640, y: 550, width: 190, height: 60, kind: 'biz' },
   { id: 'db40', name: '图书馆超融合', description: '1|2/0/0/33', x: 896, y: 550, width: 190, height: 60, kind: 'biz' },
   // 业务 row 2
-  { id: 'lb', name: '负载均衡', description: '1|2/0/0/31', x: 256, y: 712, width: 190, height: 60, kind: 'biz' },
+  { id: 'lb', name: '负载均衡', description: '1|2/0/0/31', x: 256, y: 712, width: 190, height: 60, kind: 'biz', href: '/itc-weathermap/loadbalancer' },
   { id: 'dns', name: 'DNS业务组', description: '1|2/1/0/7·8', x: 640, y: 712, width: 190, height: 60, kind: 'biz' },
   { id: 'other', name: '其他业务组', description: '1|2/0/0/7 等 5 口', x: 1024, y: 712, width: 190, height: 60, kind: 'biz' },
 ];
@@ -456,12 +456,95 @@ export const hyperconvergedView: TopoView = {
 };
 
 // =====================================================================
+// 负载均衡视图
+// =====================================================================
+
+/**
+ * LB VLAN 分组定义（依据《负载均衡业务.md》）。
+ * 同一物理 trunk Te1/2/4 承载 8 个 VLAN 子接口，按业务分三组：
+ * 组一公网入口（VLAN25/26）→ 组二业务服务（VLAN27/28/29）→
+ * 组三内网管理/后端（VLAN88/92/248，VLAN248 挂后端真实服务器）。
+ */
+export interface LbVlanGroupDef {
+  /** 逻辑链路后缀：down:lb:<key>（聚合）与 down:lb:<key>#<vlan>（逐 VLAN） */
+  key: string;
+  name: string;
+  vlans: number[];
+  /** 链路明细「对端」列（分组聚合行） */
+  peer: string;
+}
+
+export const lbVlanGroups: LbVlanGroupDef[] = [
+  { key: 'pub', name: '公网入口区', vlans: [25, 26], peer: '运营商网段 202.203.208.0/26 · 202.203.209.112/25' },
+  { key: 'svc', name: '业务服务区', vlans: [27, 28, 29], peer: '服务网段 113.55.15.0/22 · 113.55.16.0/24 · 113.55.17.0/24' },
+  { key: 'mgmt', name: '内网管理·后端', vlans: [88, 92, 248], peer: 'VLAN88 管理 · VLAN92 内网 · VLAN248 后端真实服务器' },
+];
+
+/** 逐 VLAN 的 VRRP VIP（明细表逐 VLAN 行「对端」列用） */
+export const lbVlanVip: Record<number, string> = {
+  25: '202.203.208.5',
+  26: '202.203.209.114',
+  27: '113.55.16.2',
+  28: '113.55.15.1',
+  29: '113.55.17.2',
+  88: '10.10.88.2（VRRP 管理地址）',
+  92: '10.10.92.2 · 10.10.93.2',
+  248: '10.10.249.2',
+};
+
+const lbNodes: TopoNode[] = [
+  { id: 'core1', name: 'CG-TSG-S12510', description: '图书馆 TSG · 接口前缀 1/x/x/x', x: 375, y: 92, width: 300, height: 66, kind: 'core', href: '/itc-weathermap' },
+  { id: 'core2', name: 'CG-XZL-S12510', description: '礼贤楼 LXL · 接口前缀 2/x/x/x', x: 915, y: 92, width: 300, height: 66, kind: 'core', href: '/itc-weathermap' },
+  // LB HA 主备堆叠：SNMP 只在 active 成员（LB1）上应答，
+  // standby（LB2）的上行链路不可见，故不画上行，仅 HA 心跳拱弧
+  { id: 'lb1', name: 'H3C-TSG-LB1', description: 'HA 主用（active）· L5060', x: 420, y: 300, width: 240, height: 64, kind: 'sw' },
+  { id: 'lb2', name: 'H3C-LXL-LB2', description: 'HA 备用（standby）· SNMP 不可见', x: 860, y: 300, width: 240, height: 64, kind: 'sw' },
+  // 下排 VLAN 业务分组节点
+  { id: 'dn_pub', name: '公网入口区', description: 'VLAN 25 / 26 · 虚 IP 入口', x: 210, y: 480, width: 190, height: 56, kind: 'zone' },
+  { id: 'dn_svc', name: '业务服务区', description: 'VLAN 27 / 28 / 29 · 服务虚 IP', x: 430, y: 480, width: 190, height: 56, kind: 'zone' },
+  { id: 'dn_mgmt', name: '内网管理·后端', description: 'VLAN 88 / 92 / 248 · 管理与后端', x: 650, y: 480, width: 190, height: 56, kind: 'zone' },
+];
+
+const lbLinks: TopoLink[] = [
+  // 上行 trunk（LB1 active 成员可见）：LB 侧 Te1/2/4 ↔ core 侧 1/0/0/31
+  { a: 'lb1', b: 'core1', port: 'uplink:lb', description: '负载均衡上行 trunk（8 个 VLAN 子接口）', peer: 'CG-TSG-S12510 · 1/0/0/31（10G，主用）', geometry: 'row1', speed: 10000, row: 0, order: 0 },
+  // HA Keepalive
+  { a: 'lb1', b: 'lb2', port: 'peerlink:lb', description: 'HA Keepalive 心跳', peer: 'H3C-LXL-LB2 · Te1/2/0（10G）', geometry: 'hci-peer', speed: 10000, row: 0, order: 0 },
+  // VLAN 分组下行（聚合：trunk 子接口按组求和）
+  ...lbVlanGroups.map((g, i) => ({
+    a: `dn_${g.key}`,
+    b: 'lb1',
+    port: `down:lb:${g.key}`,
+    description: `${g.name} · VLAN${g.vlans.join('/')}（${g.vlans.length} 个子接口）`,
+    peer: g.peer,
+    geometry: 'hci-down' as const,
+    speed: 0,
+    row: 0,
+    order: i,
+  })),
+];
+
+export const loadbalancerView: TopoView = {
+  id: 'loadbalancer',
+  title: '负载均衡',
+  description: 'H3C SecPath L5060 ×2 HA 主备（单台逻辑设备 · 管理地址 10.10.88.2）· 上行 trunk 承载 8 个 VLAN 子接口分三组 · 业务模型：公网/服务虚 IP → VLAN248 后端真实服务器（38 NAT / 180 server-farm / 226 real-server）',
+  deviceIds: ['lb'],
+  canvasWidth: 1280,
+  canvasHeight: 555,
+  nodeStylePreset: 'lb',
+  nodeOrder: ['core1', 'core2', 'lb1', 'lb2', 'dn_pub', 'dn_svc', 'dn_mgmt'],
+  nodes: lbNodes,
+  links: lbLinks,
+};
+
+// =====================================================================
 // 视图索引
 // =====================================================================
 
 const ALL_VIEWS: Record<string, TopoView> = {
   core: coreView,
   hyperconverged: hyperconvergedView,
+  loadbalancer: loadbalancerView,
 };
 
 export function getTopoView(viewId: string): TopoView | undefined {
