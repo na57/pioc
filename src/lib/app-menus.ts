@@ -49,6 +49,8 @@ const appSideMenus: Record<string, AppSideMenu[]> = {
         { name: '负载均衡业务', path: '/itc-weathermap/loadbalancer', icon: 'DeploymentUnitOutlined', viewId: 'loadbalancer' },
       ],
     },
+    // 运维排障工具：不设 viewId，所有可访问本应用的用户均可用
+    { name: 'SNMP 诊断', path: '/itc-weathermap/snmp-diagnosis', icon: 'ApiOutlined' },
   ],
 };
 
