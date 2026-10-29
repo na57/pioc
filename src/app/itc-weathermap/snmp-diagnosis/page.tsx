@@ -252,7 +252,7 @@ export default function SnmpDiagnosisPage() {
               title="SNMP 正常"
               value={report?.okCount ?? '-'}
               suffix="台"
-              valueStyle={{ color: '#52c41a' }}
+              styles={{ content: { color: '#52c41a' } }}
             />
           </Card>
         </Col>
@@ -262,7 +262,7 @@ export default function SnmpDiagnosisPage() {
               title="异常/警告"
               value={report ? failCount : '-'}
               suffix="台"
-              valueStyle={{ color: failCount > 0 ? '#ff4d4f' : undefined }}
+              styles={{ content: { color: failCount > 0 ? '#ff4d4f' : undefined } }}
             />
           </Card>
         </Col>

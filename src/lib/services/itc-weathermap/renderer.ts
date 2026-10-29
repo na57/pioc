@@ -24,6 +24,12 @@ import {
   hciNodeDevices,
   lbVlanGroups,
   lbVlanVip,
+  yktSwitchMeta,
+  zabSwitchMeta,
+  storageSwitchMeta,
+  storagePortPeer,
+  STORAGE_HS_PORTS,
+  STORAGE_YDX_PORTS,
 } from './topology';
 
 // ========== 利用率颜色插值（5 段线性，与 Go 程序 utilColor 一致） ==========
@@ -101,6 +107,21 @@ const nodeStylePresets: Record<string, Record<string, [string, string, string, s
     sw:   ['#EAF3F0', '#1D9E75', '#085041', '#0F6E56'],
     zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
   },
+  ykt: {
+    core: ['#CECBF6', '#534AB7', '#26215C', '#534AB7'],
+    sw:   ['#EAF3F0', '#1D9E75', '#085041', '#0F6E56'],
+    zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
+  },
+  zab: {
+    core: ['#CECBF6', '#534AB7', '#26215C', '#534AB7'],
+    sw:   ['#EAF3F0', '#1D9E75', '#085041', '#0F6E56'],
+    zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
+  },
+  storage: {
+    core: ['#CECBF6', '#534AB7', '#26215C', '#534AB7'],
+    sw:   ['#EAF3F0', '#1D9E75', '#085041', '#0F6E56'],
+    zone: ['#F1EFE8', '#888780', '#2C2C2A', '#5F5E5A'],
+  },
 };
 
 function getNodeStyle(preset: string, kind: string): [string, string, string, string] {
@@ -121,6 +142,40 @@ function getNodeStyle(preset: string, kind: string): [string, string, string, st
 interface Pt { x: number; y: number }
 
 const linkKey = (l: TopoLink) => `${l.a}|${l.b}|${l.port}`;
+
+/**
+ * 渲染链路：在 TopoLink 基础上支持「同对节点多条物理链路聚合为一条线」。
+ * members 为该组原始链路（单链路组即其自身），rkey 为渲染唯一键。
+ */
+interface RenderLink extends TopoLink {
+  members: TopoLink[];
+  rkey: string;
+}
+
+/**
+ * 把拓扑链路按 geometry|a|b 分组合并：
+ * 同一对节点之间同类型的多条链路（如双上联、IRF 多口、双归、堆叠成员拆分的聚合成员）
+ * 只画一条线，线宽/速率/流量取成员之和，成员明细在 tooltip 中逐条展开 —— 与超融合视图
+ * 「虚拟逻辑端口聚合」的视觉效果一致。
+ */
+function mergeLinksForRender(links: TopoLink[]): RenderLink[] {
+  const groups = new Map<string, TopoLink[]>();
+  for (const l of links) {
+    const key = `${l.geometry}|${l.a}|${l.b}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(l);
+    else groups.set(key, [l]);
+  }
+  return [...groups.values()].map((members) => {
+    const head = members[0];
+    return { ...head, members, rkey: linkKey(head) };
+  });
+}
+
+/** 成员有效速率：优先取采集到的协商速率，否则用拓扑声明速率 */
+function memberSpeed(m: TopoLink, d?: PortData): number {
+  return d && d.speed > 0 ? d.speed : m.speed;
+}
 
 const f1 = (n: number) => n.toFixed(1);
 
@@ -162,7 +217,7 @@ function arcPath(p0: Pt, ctrl: Pt, p1: Pt): string {
 function buildLinkPaths(
   nodesList: TopoNode[],
   nodes: Map<string, TopoNode>,
-  links: TopoLink[],
+  links: RenderLink[],
 ): Map<string, string> {
   const paths = new Map<string, string>();
   const PAD = 18;
@@ -199,11 +254,11 @@ function buildLinkPaths(
         const RISE_Y = 488;
         const k = 66;
         paths.set(
-          linkKey(item.l),
+          item.l.rkey,
           `M${f1(sx)} ${f1(sy)} L${f1(sx)} ${f1(RISE_Y)} C${f1(sx)} ${f1(RISE_Y - k)} ${f1(landX)} ${f1(edgeY + k)} ${f1(landX)} ${f1(edgeY)}`,
         );
       } else {
-        paths.set(linkKey(item.l), vCurvePath(sx, sy, landX, edgeY));
+        paths.set(item.l.rkey, vCurvePath(sx, sy, landX, edgeY));
       }
     });
   }
@@ -220,7 +275,7 @@ function buildLinkPaths(
       const p0: Pt = { x: left.x + left.width / 2 - 24, y: topY };
       const p1: Pt = { x: right.x - right.width / 2 + 24, y: topY };
       const ctrl: Pt = { x: (left.x + right.x) / 2, y: topY - 52 - i * 30 };
-      paths.set(linkKey(l), arcPath(p0, ctrl, p1));
+      paths.set(l.rkey, arcPath(p0, ctrl, p1));
     });
 
   // ---- hci-down：共享业务节点（底边单排）↔ 交换机（上排）的双边开槽扇出 ----
@@ -242,7 +297,7 @@ function buildLinkPaths(
       const span = owner.width - slotPad * 2;
       const m = new Map<string, number>();
       group.forEach((item, i) => {
-        m.set(linkKey(item.l), lo + (span * (i + 0.5)) / group.length);
+        m.set(item.l.rkey, lo + (span * (i + 0.5)) / group.length);
       });
       return m;
     };
@@ -259,14 +314,14 @@ function buildLinkPaths(
     for (const l of downLinks) {
       const card = nodes.get(l.a)!;
       const sw = nodes.get(l.b)!;
-      const sx = nodeSlots.get(linkKey(l))!;
-      const landX = swSlots.get(linkKey(l))!;
+      const sx = nodeSlots.get(l.rkey)!;
+      const landX = swSlots.get(l.rkey)!;
       const sy = card.y - card.height / 2; // 节点顶边
       const edgeY = sw.y + sw.height / 2; // 交换机底边
       const dist = Math.max(1, sy - edgeY);
       const k = Math.max(30, Math.min(90, dist * 0.5));
       paths.set(
-        linkKey(l),
+        l.rkey,
         `M${f1(sx)} ${f1(sy)} C${f1(sx)} ${f1(sy - k)} ${f1(landX)} ${f1(edgeY + k)} ${f1(landX)} ${f1(edgeY)}`,
       );
     }
@@ -274,7 +329,7 @@ function buildLinkPaths(
 
   // ---- 直线/专线类 ----
   for (const l of links) {
-    const key = linkKey(l);
+    const key = l.rkey;
     if (paths.has(key)) continue;
     const na = nodes.get(l.a);
     const nb = nodes.get(l.b);
@@ -341,6 +396,8 @@ export function renderSVG(
   const canvas = getCanvasSizeForView(viewId);
   const nodesList = getNodesForView(viewId);
   const links = getLinksForView(viewId);
+  // 同对节点之间的多条物理链路在渲染层聚合为一条线（与超融合视图一致）
+  const renderLinks = mergeLinksForRender(links);
   const nodeOrder = getNodeOrderForView(viewId) || nodesList.map((n) => n.id);
 
   const nodes = new Map<string, TopoNode>();
@@ -372,75 +429,85 @@ export function renderSVG(
   const flows: Flow[] = [];
 
   // 预计算所有链路的 path（贝塞尔曲线 / 直线 / 拱弧）
-  const linkPaths = buildLinkPaths(nodesList, nodes, links);
+  const linkPaths = buildLinkPaths(nodesList, nodes, renderLinks);
 
-  // ========== 先画链路 ==========
-  for (const l of links) {
-    const d = data.get(l.port);
-    const dPath = linkPaths.get(linkKey(l));
+  // ========== 先画链路（同对节点多条链路聚合为一条线） ==========
+  for (const rl of renderLinks) {
+    const dPath = linkPaths.get(rl.rkey);
     if (!dPath) continue;
 
-    let speed = l.speed;
+    // 成员聚合：速率/流量求和；状态取最优成员（任一 up 即视为 up）
+    let speed = 0;
+    let inBps = 0;
+    let outBps = 0;
     let oper = -1;
-    if (d) {
-      if (d.speed > 0) speed = d.speed;
-      oper = d.oper;
+    let sawDown = false;
+    let sawUnreach = false;
+    let anyData = false;
+    for (const m of rl.members) {
+      const dm = data.get(m.port);
+      speed += memberSpeed(m, dm);
+      if (!dm) continue;
+      anyData = true;
+      inBps += dm.inBps;
+      outBps += dm.outBps;
+      if (dm.oper === 1) oper = 1;
+      else if (dm.oper >= 0) sawDown = true;
+      else if (dm.oper === -2) sawUnreach = true;
+    }
+    if (oper !== 1) {
+      if (sawDown) oper = 0;
+      else if (sawUnreach) oper = -2;
     }
 
-    let util = 0.0;
-    if (d) {
-      const maxBps = Math.max(d.inBps, d.outBps);
-      if (speed > 0) util = maxBps / (speed * 1e6) * 100;
-    }
+    const util = anyData && speed > 0 ? (Math.max(inBps, outBps) / (speed * 1e6)) * 100 : 0;
 
     const unreach = oper === -2;
     const down = oper >= 0 && oper !== 1;
     let color = '#B0B0B0';
     if (!down && !unreach) color = utilColor(util);
-    // hci-down 是多口聚合的逻辑分支（容量可达 250G），线宽单独收窄，避免 26 条分支过重；
-    // LB 视图各组均为 10G trunk 瓶颈口径，与上行/HA 统一用标准线宽
-    const w = l.geometry === 'hci-down' && !isLbView
+    // hci/storage/ykt/zab 的 hci-down 是多口聚合的逻辑分支（合并后容量可达 250G+），
+    // 线宽单独收窄，避免分支过重压过上联；LB 视图各组均为 10G trunk 瓶颈口径，用标准线宽
+    const w = (preset === 'hci' || preset === 'storage' || preset === 'ykt' || preset === 'zab') && rl.geometry === 'hci-down'
       ? Math.max(1.8, Math.min(6.5, 1.8 + (speed / 25000) * 0.5))
       : widthFor(speed);
 
     let dash = '';
-    if (l.geometry === 'irf' && l.row === 2) {
+    if (rl.geometry === 'irf' && rl.row === 2) {
       dash = ' stroke-dasharray="7 5"';
     }
-    if (l.geometry === 'hci-peer') {
+    if (rl.geometry === 'hci-peer') {
       // 线宽较粗，间隙必须大于线帽半径才能看出虚线
       dash = ' stroke-dasharray="10 12"';
     }
 
-    // tooltip
-    let inBps = 0, outBps = 0;
-    let ifaceName = l.port;
-    if (d) {
-      inBps = d.inBps; outBps = d.outBps;
-      if (d.name) ifaceName = d.name;
-    }
-    let tip = `${l.description}\n`;
+    // tooltip：单成员保持原有格式；多成员先给汇总值，再逐条展开成员明细
+    const multi = rl.members.length > 1;
+    const headData = data.get(rl.port);
+    let ifaceName = rl.port;
+    if (!multi && headData && headData.name) ifaceName = headData.name;
+    let tip = multi ? `${rl.description}（${rl.members.length} 条链路聚合）\n` : `${rl.description}\n`;
     if (unreach) {
       tip += '设备未达（community 不对或不可达）';
     } else {
       let dirOut: string;
       let dirIn: string;
-      if (isLbView && l.geometry === 'row1') {
+      if (isLbView && rl.geometry === 'row1') {
         dirOut = 'LB → 核心（出为主）';
         dirIn = '核心 → LB（入为主）';
-      } else if (isLbView && l.geometry === 'hci-peer') {
+      } else if (isLbView && rl.geometry === 'hci-peer') {
         dirOut = 'LB1 → LB2（心跳）';
         dirIn = 'LB2 → LB1（心跳）';
-      } else if (isLbView && l.geometry === 'hci-down') {
+      } else if (isLbView && rl.geometry === 'hci-down') {
         dirOut = 'LB → 业务区（出为主）';
         dirIn = '业务区 → LB（入为主）';
-      } else if (l.geometry === 'hci-down') {
+      } else if (rl.geometry === 'hci-down') {
         dirOut = '交换机 → 下行业务（出为主）';
         dirIn = '下行业务 → 交换机（入为主）';
-      } else if (l.geometry === 'hci-up') {
+      } else if (rl.geometry === 'hci-up') {
         dirOut = '交换机 → 核心（出为主）';
         dirIn = '核心 → 交换机（入为主）';
-      } else if (l.geometry === 'hci-peer') {
+      } else if (rl.geometry === 'hci-peer') {
         dirOut = '本端 → 对端交换机（出为主）';
         dirIn = '对端交换机 → 本端（入为主）';
       } else {
@@ -448,15 +515,30 @@ export function renderSVG(
         dirIn = '对端 → 核心（入为主）';
       }
       const dir = outBps > inBps ? dirOut : dirIn;
-      const peerLine = l.peer ? `对端：${l.peer}\n` : '';
-      tip += `${ifaceName}\n${peerLine}入 ${fmtBps(inBps)} ／ 出 ${fmtBps(outBps)} · 合计 ${fmtBps(inBps + outBps)}\n协商 ${fmtSpeed(speed)} · 主流量方向：${dir}\n利用率 ${util.toFixed(2)}%`;
+      const peerLine = rl.peer ? `对端：${rl.peer}\n` : '';
+      const head = multi ? peerLine : `${ifaceName}\n${peerLine}`;
+      tip += `${head}入 ${fmtBps(inBps)} ／ 出 ${fmtBps(outBps)} · 合计 ${fmtBps(inBps + outBps)}\n协商 ${fmtSpeed(speed)} · 主流量方向：${dir}\n利用率 ${util.toFixed(2)}%`;
       if (down) tip += '\n端口 Down';
+    }
+    if (multi) {
+      tip += '\n成员明细：';
+      for (const m of rl.members) {
+        const dm = data.get(m.port);
+        const st = !dm
+          ? '采集中…'
+          : dm.oper === -2
+            ? '设备未达'
+            : dm.oper !== 1
+              ? '端口 Down'
+              : `入 ${fmtBps(dm.inBps)} ／ 出 ${fmtBps(dm.outBps)}`;
+        tip += `\n  ${m.description}（${fmtSpeed(memberSpeed(m, dm))}）：${st}`;
+      }
     }
 
     svg += `<path d="${dPath}" fill="none" stroke="${color}" stroke-width="${w.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"${dash} opacity="0.92"><title>${esc(tip)}</title></path>\n`;
 
-    if (!down && !unreach && d && Math.max(d.inBps, d.outBps) > 1e5) {
-      flows.push({ d: dPath, w, bps: Math.max(d.inBps, d.outBps), fwd: d.inBps >= d.outBps });
+    if (!down && !unreach && anyData && Math.max(inBps, outBps) > 1e5) {
+      flows.push({ d: dPath, w, bps: Math.max(inBps, outBps), fwd: inBps >= outBps });
     }
   }
 
@@ -487,7 +569,7 @@ export function renderSVG(
     const ny = n.y - n.height / 2;
     // hci 合并业务节点：悬停展示逐交换机分支明细
     let nodeTip = '';
-    if (preset === 'hci' && n.kind === 'zone') {
+    if ((preset === 'hci' || preset === 'ykt' || preset === 'zab' || preset === 'storage') && n.kind === 'zone') {
       const lines = [n.name, n.description, ''];
       if (id === HCI_AI_CLUSTER_NODE) {
         // 智算集群：逐交换机 → 逐子类（算力测试 / 智算节点 / 智算存储）展开分量
@@ -545,13 +627,15 @@ export function renderSVG(
 
     let sub = n.description;
 
-    // core 视图：业务/外部节点补充协商速率
+    // core 视图：业务/外部节点补充协商速率（取该节点第一条聚合链路的成员速率之和，
+    // 与图上聚合线的口径一致）
     if (preset === 'core' && (n.kind === 'biz' || n.kind === 'ext')) {
-      for (const l of links) {
-        if (l.a === id || l.b === id) {
-          const dd = data.get(l.port);
-          if (dd && dd.speed > 0) {
-            sub = `${sub} · ${fmtSpeed(dd.speed)}`;
+      for (const rl of renderLinks) {
+        if (rl.a === id || rl.b === id) {
+          let s = 0;
+          for (const m of rl.members) s += memberSpeed(m, data.get(m.port));
+          if (s > 0) {
+            sub = `${sub} · ${fmtSpeed(s)}`;
           }
           break;
         }
@@ -586,6 +670,30 @@ export function renderSVG(
       const d = data.get('uplink:lb');
       if (d && d.oper !== -2) {
         sub = `上行 ${fmtBps(d.inBps + d.outBps)}bps`;
+      } else {
+        sub = '设备未达';
+      }
+    }
+    // storage 视图：仅对1两台（st26/st28）有上联链路，对2两台保留静态说明
+    if (preset === 'storage' && n.kind === 'sw') {
+      const uplinkKey = `uplink:${id}`;
+      if (links.some((l) => l.port === uplinkKey)) {
+        const d = data.get(uplinkKey);
+        if (d && d.oper !== -2) {
+          sub = `上联 ${fmtBps(d.inBps + d.outBps)}bps`;
+        } else {
+          sub = '设备未达';
+        }
+      }
+    }
+    // ykt / zab 视图：上联数据取核心侧物理口（两条 hci-up 链路求和）
+    if ((preset === 'ykt' || preset === 'zab') && n.kind === 'sw') {
+      const valid = links
+        .filter((l) => l.geometry === 'hci-up' && l.a === id)
+        .map((l) => data.get(l.port))
+        .filter((d): d is PortData => !!d && d.oper !== -2);
+      if (valid.length > 0) {
+        sub = `上联 ${fmtBps(valid.reduce((s, d) => s + d.inBps + d.outBps, 0))}bps`;
       } else {
         sub = '设备未达';
       }
@@ -640,6 +748,23 @@ export function renderSVG(
         }
       }
     }
+    // ykt / zab / storage 视图：业务区副信息 = 分支吞吐合计 + 静态说明（description 单段，
+    // 与下方 ' · ' 拆两行的渲染约定配合）
+    if ((preset === 'ykt' || preset === 'zab' || preset === 'storage') && n.kind === 'zone') {
+      const branches = links.filter((l) => l.geometry === 'hci-down' && l.a === id);
+      let inSum = 0, outSum = 0, saw = false;
+      for (const l of branches) {
+        const dd = data.get(l.port);
+        if (dd) saw = true;
+        if (dd && dd.oper === 1) {
+          inSum += dd.inBps;
+          outSum += dd.outBps;
+        }
+      }
+      if (saw) {
+        sub = `${fmtBps(inSum + outSum)}bps · ${n.description}`;
+      }
+    }
 
     // 绘制文字：name (bold) + sub
     if (n.kind === 'ext') {
@@ -648,7 +773,7 @@ export function renderSVG(
       if (n.peer) {
         svg += `<text x="${n.x}" y="${(n.y + 20).toFixed(0)}" text-anchor="middle" font-size="11" fill="#888780">${esc(n.peer)}</text>\n`;
       }
-    } else if ((preset === 'hci' || preset === 'lb') && n.kind === 'zone') {
+    } else if ((preset === 'hci' || preset === 'lb' || preset === 'ykt' || preset === 'zab' || preset === 'storage') && n.kind === 'zone') {
       // 合并业务节点：名称 + 两行短副信息（按 ' · ' 拆行，宽 118 不溢出）
       const subLines = sub.split(' · ');
       svg += `<text x="${n.x}" y="${(n.y - 11).toFixed(0)}" text-anchor="middle" font-size="12.5" font-weight="500" fill="${st[2]}">${esc(n.name)}</text>\n`;
@@ -804,6 +929,83 @@ export function buildPortTableRows(
           key, `${g.name} · VLAN${vlan} 子接口`, lbVlanVip[vlan] ?? '',
           0, 'hci-down', 1, vlan, '', g.name, vlan, data.get(key),
         );
+      }
+    }
+  } else if (viewId === 'ykt' || viewId === 'zab') {
+    const nodes = new Map(getNodesForView(viewId).map((n) => [n.id, n]));
+    const meta = viewId === 'ykt' ? yktSwitchMeta : zabSwitchMeta;
+    // 上联 / 堆叠互联：一条链路一行（堆叠互联标注发起侧堆叠成员）
+    for (const l of links.filter((x) => x.geometry !== 'hci-down')) {
+      const isStack = l.geometry === 'hci-peer';
+      pushRow(
+        l.port, l.description, l.peer || '', l.speed, l.geometry, 0, l.order,
+        isStack ? (meta[l.a]?.label ?? '') : '核心侧',
+        isStack ? '堆叠互联' : '上联核心',
+        0, data.get(l.port),
+      );
+    }
+    // 下行：一条逻辑链路一行（switchLabel 按承载的堆叠成员 TF1/TF2 标注）
+    for (const l of links.filter((x) => x.geometry === 'hci-down')) {
+      pushRow(
+        l.port, l.description, l.peer || '', l.speed, l.geometry, 0, l.order,
+        meta[l.b]?.label ?? '',
+        nodes.get(l.a)?.name ?? '',
+        0, data.get(l.port),
+      );
+    }
+  } else if (viewId === 'storage') {
+    // 管理面 / 上联 / m-lag 互联：一条链路一行
+    for (const l of links.filter((x) => x.geometry !== 'hci-down')) {
+      let switchLabel = '';
+      let category = '';
+      if (l.geometry === 'uplink') {
+        switchLabel = '核心侧';
+        category = '管理面';
+      } else if (l.geometry === 'hci-up') {
+        switchLabel = storageSwitchMeta[l.a]?.label ?? '';
+        category = '上联核心';
+      } else if (l.geometry === 'hci-peer') {
+        switchLabel = storageSwitchMeta[l.a]?.label ?? '';
+        category = 'm-lag 互联';
+      }
+      pushRow(
+        l.port, l.description, l.peer || '', l.speed, l.geometry, 0, l.order,
+        switchLabel, category, 0, data.get(l.port),
+      );
+    }
+    // 下行：每台交换机「宏杉聚合一行 + 逐口 12 行」「云大学堂聚合一行 + 逐口 6 行」
+    const swOrder = ['st28', 'st26', 'st27', 'st25'];
+    for (const swId of swOrder) {
+      const label = storageSwitchMeta[swId]?.label ?? swId;
+      const hsAgg = links.find((x) => x.port === `down:${swId}:hs`);
+      if (hsAgg) {
+        pushRow(
+          hsAgg.port, hsAgg.description, hsAgg.peer || '', hsAgg.speed, hsAgg.geometry,
+          0, hsAgg.order, label, '宏杉分布式存储', 0, data.get(hsAgg.port),
+        );
+      }
+      for (const p of STORAGE_HS_PORTS) {
+        const key = `down:${swId}:hs#${p}`;
+        pushRow(
+          key, `${label} 下行 · 宏杉分布式存储 [${p}]`,
+          storagePortPeer(swId, 'hs', p), 0, 'hci-down', 0, p,
+          label, '宏杉分布式存储', p, data.get(key),
+        );
+      }
+      const ydxAgg = links.find((x) => x.port === `down:${swId}:ydx`);
+      if (ydxAgg) {
+        pushRow(
+          ydxAgg.port, ydxAgg.description, ydxAgg.peer || '', ydxAgg.speed, ydxAgg.geometry,
+          1, ydxAgg.order, label, '云大学堂', 0, data.get(ydxAgg.port),
+        );
+        for (const p of STORAGE_YDX_PORTS) {
+          const key = `down:${swId}:ydx#${p}`;
+          pushRow(
+            key, `${label} 下行 · 云大学堂 [${p}]`,
+            storagePortPeer(swId, 'ydx', p), 0, 'hci-down', 1, p,
+            label, '云大学堂', p, data.get(key),
+          );
+        }
       }
     }
   } else {

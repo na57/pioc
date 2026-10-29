@@ -20,6 +20,15 @@ views:
   # 负载均衡
   loadbalancer:
     roles: ""
+  # 图书馆一卡通业务
+  ykt:
+    roles: ""
+  # 图书馆分布式存储
+  storage:
+    roles: ""
+  # 图书馆灾备业务
+  zab:
+    roles: ""
 
 # SNMP 设备配置（community 密码集中管理在此）
 devices:
@@ -54,4 +63,37 @@ devices:
   - id: lb
     ip: "10.10.88.2"
     name: "H3C-TSG-LB1 / H3C-LXL-LB2"
+    snmpCommunity: "NOC2014!"
+
+  # 图书馆一卡通业务交换机（锐捷 S6150 两台堆叠，管理地址）
+  - id: ykt
+    ip: "10.10.251.4"
+    name: "Yndx_YKT"
+    snmpCommunity: "NOC2014!"
+
+  # 图书馆灾备业务交换机（锐捷 S6150 两台堆叠，原图书馆超融合）
+  - id: zab
+    ip: "10.10.251.2"
+    name: "灾备10G业务交换机"
+    snmpCommunity: "NOC2014!"
+
+  # 图书馆分布式存储交换机（H3C S6530X m-lag 对1/对2 ×4）
+  - id: st25
+    ip: "10.10.251.25"
+    name: "YD_TSG_B10_25U_SW1"
+    snmpCommunity: "NOC2014!"
+
+  - id: st26
+    ip: "10.10.251.26"
+    name: "YD_TSG_B10_23U_SW2"
+    snmpCommunity: "NOC2014!"
+
+  - id: st27
+    ip: "10.10.251.27"
+    name: "YD_TSG_B09_25U_SW1"
+    snmpCommunity: "NOC2014!"
+
+  - id: st28
+    ip: "10.10.251.28"
+    name: "YD_TSG_B09_23U_SW2"
     snmpCommunity: "NOC2014!"

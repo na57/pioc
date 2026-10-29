@@ -47,6 +47,9 @@ const appSideMenus: Record<string, AppSideMenu[]> = {
       children: [
         { name: '超融合业务', path: '/itc-weathermap/hyperconverged', icon: 'CloudServerOutlined', viewId: 'hyperconverged' },
         { name: '负载均衡业务', path: '/itc-weathermap/loadbalancer', icon: 'DeploymentUnitOutlined', viewId: 'loadbalancer' },
+        { name: '图书馆一卡通业务', path: '/itc-weathermap/ykt', icon: 'CreditCardOutlined', viewId: 'ykt' },
+        { name: '图书馆分布式存储', path: '/itc-weathermap/storage', icon: 'DatabaseOutlined', viewId: 'storage' },
+        { name: '图书馆灾备业务', path: '/itc-weathermap/zab', icon: 'CloudUploadOutlined', viewId: 'zab' },
       ],
     },
     // 运维排障工具：不设 viewId，所有可访问本应用的用户均可用

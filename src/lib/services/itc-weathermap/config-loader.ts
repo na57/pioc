@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
-import { getTopoView, getAllViewIds, TopoNode, TopoLink } from './topology';
+import { getTopoView, getAllViewIds, TopoNode, TopoLink, NodeStylePreset } from './topology';
 
 // ========== 类型 ==========
 
@@ -130,7 +130,7 @@ export function getCanvasSizeForView(viewId: string): { width: number; height: n
   return { width: v?.canvasWidth ?? 1280, height: v?.canvasHeight ?? 800 };
 }
 
-export function getNodeStylePresetForView(viewId: string): 'core' | 'hci' | 'lb' {
+export function getNodeStylePresetForView(viewId: string): NodeStylePreset {
   return getTopoView(viewId)?.nodeStylePreset ?? 'core';
 }
 

@@ -21,7 +21,15 @@ import {
   getDeviceConfigsForView,
   DeviceConfig,
 } from './config-loader';
-import { hciDownCategories, HCI_AI_CLUSTER_CATS, lbVlanGroups } from './topology';
+import {
+  hciDownCategories,
+  HCI_AI_CLUSTER_CATS,
+  lbVlanGroups,
+  yktPortDefs,
+  zabPortDefs,
+  storagePortDefs,
+  LogicalPortDef,
+} from './topology';
 
 // 类型定义
 export interface PortData {
@@ -396,6 +404,18 @@ async function collectView(viewId: string, firstRound: boolean): Promise<void> {
  * 探测单台设备：直接 walk ifName 做端口发现，成功即视为连通。
  * 首轮使用快速参数（短超时/0 重试），避免不可达设备拖慢首屏。
  */
+/** 设备采集模式：决定端口发现与采集函数（按视图 + 设备 id 分发） */
+type DeviceMode = 'hci' | 'lb' | 'ykt' | 'zab' | 'st' | 'core';
+
+function deviceMode(viewId: string, deviceId: string): DeviceMode {
+  if (viewId === 'hyperconverged') return 'hci';
+  if (viewId === 'loadbalancer') return 'lb';
+  if (deviceId === 'ykt') return 'ykt';
+  if (deviceId === 'zab') return 'zab';
+  if (deviceId === 'st25' || deviceId === 'st26' || deviceId === 'st27' || deviceId === 'st28') return 'st';
+  return 'core';
+}
+
 async function probeDevice(
   viewId: string,
   d: DeviceRuntime,
@@ -403,12 +423,19 @@ async function probeDevice(
   fast: boolean,
 ): Promise<boolean> {
   const opts = fast ? { timeout: FIRST_PROBE_TIMEOUT_MS, retries: 0, noFallback: true } : undefined;
-  const useLogical = viewId === 'hyperconverged' || viewId === 'loadbalancer';
+  const mode = deviceMode(viewId, d.config.id);
+  const useLogical = mode !== 'core';
   try {
-    if (viewId === 'hyperconverged') {
+    if (mode === 'hci') {
       await discoverHciPorts(d, opts);
-    } else if (viewId === 'loadbalancer') {
+    } else if (mode === 'lb') {
       await discoverLbPorts(d, opts);
+    } else if (mode === 'ykt') {
+      await discoverYktPorts(d, opts);
+    } else if (mode === 'zab') {
+      await discoverZabPorts(d, opts);
+    } else if (mode === 'st') {
+      await discoverStoragePorts(d, opts);
     } else {
       await discoverCorePorts(d, links, opts);
       if (d.ifIndexMap.size === 0) throw new Error('未发现任何目标端口');
@@ -447,15 +474,19 @@ async function collectDevice(
   links: ReturnType<typeof getLinksForView>,
   dt: number,
 ): Promise<DeviceCollectResult> {
+  const mode = deviceMode(viewId, d.config.id);
   if (!d.discovered) {
-    if (viewId === 'hyperconverged') await discoverHciPorts(d);
-    else if (viewId === 'loadbalancer') await discoverLbPorts(d);
+    if (mode === 'hci') await discoverHciPorts(d);
+    else if (mode === 'lb') await discoverLbPorts(d);
+    else if (mode === 'ykt') await discoverYktPorts(d);
+    else if (mode === 'zab') await discoverZabPorts(d);
+    else if (mode === 'st') await discoverStoragePorts(d);
     else await discoverCorePorts(d, links);
     d.discovered = true;
   }
-  if (viewId === 'hyperconverged') return collectHciDevice(d, dt);
-  if (viewId === 'loadbalancer') return collectLbDevice(d, dt);
-  return collectCoreDevice(d, links, dt);
+  if (mode === 'core') return collectCoreDevice(d, links, dt);
+  if (mode === 'lb') return collectLbDevice(d, dt); // LB 与 HCI 同为逻辑链路求和模式
+  return collectHciDevice(d, dt); // ykt / st 复用逻辑链路采集
 }
 
 /**
@@ -925,6 +956,132 @@ async function discoverLbPorts(
 
   d.logicalPorts = logical;
   d.aggPrev.clear();
+}
+
+/**
+ * 按 ifName 精确/尾匹配解析 ifIndex：先精确匹配；再取「以 name 结尾且前一边界
+ * 字符非数字」的 ifName（'Twenty-FiveGigE1/0/1' 尾匹配 '1/0/1' 边界 'E' ✓，
+ * 'TF21/0/4' 命中 '1/0/4' 边界 '2' 数字 ✗ 被拒绝）。
+ */
+function resolveIfName(ifIndexByName: Map<string, number>, name: string): string | null {
+  if (ifIndexByName.has(name)) return name;
+  for (const ifName of ifIndexByName.keys()) {
+    if (ifName.length <= name.length || !ifName.endsWith(name)) continue;
+    const boundary = ifName[ifName.length - name.length - 1];
+    if (!/\d/.test(boundary)) return ifName;
+  }
+  return null;
+}
+
+/**
+ * 通用逻辑端口发现：按拓扑声明的 LogicalPortDef（整链聚合口候选 + 成员
+ * ifName/聚合口候选）在设备 ifName 表中解析出逻辑链路 → ifIndex 映射。
+ *
+ * 取数口径（杜绝双算）：
+ * - 整链 agg 候选任一命中 → 整条链路只取该聚合口，成员物理口不再参与；
+ * - 否则逐成员解析：成员 agg 候选优先于 ifName（精确 → 尾匹配）。
+ * 全部 def 均未解析到任何接口时抛错（判定设备不符/不可达）。
+ */
+async function discoverLogicalPortsByNames(
+  d: DeviceRuntime,
+  defs: LogicalPortDef[],
+  opts?: { timeout?: number; retries?: number; noFallback?: boolean },
+): Promise<void> {
+  const vbs = await d.client.walk(OID_IF_NAME, 4000, opts);
+  if (vbs.length === 0) throw new Error('ifName WALK 无结果');
+
+  const ifIndexByName = new Map<string, number>();
+  const nameByIfIndex = new Map<number, string>();
+  for (const vb of vbs) {
+    if (!vb.isStr) continue;
+    const oidParts = vb.oid.split('.');
+    const ifIndex = parseInt(oidParts[oidParts.length - 1], 10);
+    if (!Number.isFinite(ifIndex)) continue;
+    ifIndexByName.set(vb.str, ifIndex);
+    nameByIfIndex.set(ifIndex, vb.str);
+  }
+
+  const pickAgg = (candidates: string[] | undefined): number | undefined => {
+    if (!candidates) return undefined;
+    for (const c of candidates) {
+      const idx = ifIndexByName.get(c);
+      if (idx !== undefined) return idx;
+    }
+    return undefined;
+  };
+
+  const resolved: { key: string; names: string[]; ifIndices: number[] }[] = [];
+  for (const def of defs) {
+    const entries: { ifIndex: number; name: string }[] = [];
+    const wholeAgg = pickAgg(def.agg);
+    if (wholeAgg !== undefined) {
+      entries.push({ ifIndex: wholeAgg, name: nameByIfIndex.get(wholeAgg)! });
+    } else {
+      for (const m of def.members) {
+        const memAgg = pickAgg(m.agg);
+        if (memAgg !== undefined) {
+          entries.push({ ifIndex: memAgg, name: nameByIfIndex.get(memAgg)! });
+          continue;
+        }
+        const nm = resolveIfName(ifIndexByName, m.name);
+        if (nm) entries.push({ ifIndex: ifIndexByName.get(nm)!, name: nm });
+      }
+    }
+    if (entries.length === 0) continue; // 设备上该逻辑链路不存在，跳过
+    resolved.push({
+      key: def.key,
+      names: entries.map((e) => e.name),
+      ifIndices: entries.map((e) => e.ifIndex),
+    });
+  }
+  if (resolved.length === 0) throw new Error('未发现任何目标逻辑端口（设备不符）');
+
+  // 批量取协商速率与 oper（聚合带宽只计 UP 成员，与 HCI 口径一致）
+  const allIndices = [...new Set(resolved.flatMap((r) => r.ifIndices))].sort((a, b) => a - b);
+  const [speedResult, operResult] = await Promise.all([
+    d.client.get(allIndices.map((i) => `${OID_HIGH_SPEED}.${i}`), opts),
+    d.client.get(allIndices.map((i) => `${OID_OPER_STATUS}.${i}`), opts),
+  ]);
+  const speedOf = (ifIndex: number): number => {
+    const vb = speedResult.get(`${OID_HIGH_SPEED}.${ifIndex}`);
+    return vb && !vb.missing ? vb.num : 0;
+  };
+  const operOf = (ifIndex: number): number => {
+    const vb = operResult.get(`${OID_OPER_STATUS}.${ifIndex}`);
+    return vb && !vb.missing ? vb.num : 0;
+  };
+
+  d.logicalPorts = resolved.map((r) => ({
+    key: r.key,
+    name: compactMemberNames(r.names),
+    ifIndices: r.ifIndices,
+    speed: r.ifIndices.filter((i) => operOf(i) === 1).reduce((s, i) => s + speedOf(i), 0),
+  }));
+  d.aggPrev.clear();
+}
+
+/** YKT 视图端口发现（锐捷 S6150 堆叠，按 topology.yktPortDefs 声明） */
+async function discoverYktPorts(
+  d: DeviceRuntime,
+  opts?: { timeout?: number; retries?: number; noFallback?: boolean },
+): Promise<void> {
+  await discoverLogicalPortsByNames(d, yktPortDefs(), opts);
+}
+
+/** 灾备视图端口发现（锐捷 S6150 堆叠，按 topology.zabPortDefs 声明） */
+async function discoverZabPorts(
+  d: DeviceRuntime,
+  opts?: { timeout?: number; retries?: number; noFallback?: boolean },
+): Promise<void> {
+  await discoverLogicalPortsByNames(d, zabPortDefs(), opts);
+}
+
+/** 存储视图端口发现（H3C S6530X m-lag ×4，按 topology.storagePortDefs 声明） */
+async function discoverStoragePorts(
+  d: DeviceRuntime,
+  opts?: { timeout?: number; retries?: number; noFallback?: boolean },
+): Promise<void> {
+  await discoverLogicalPortsByNames(d, storagePortDefs(d.config.id), opts);
 }
 
 /**
