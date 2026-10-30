@@ -138,7 +138,8 @@ function ITCWeathermapContent() {
     }
   }, [message]);
 
-  // 自适应轮询：首轮未就绪（端口/基线尚未建立）时 5 秒快轮，就绪后 30 秒
+  // 自适应轮询：首轮「就绪」仅代表基线已建立，真实速率要等采集器 5 秒后的预热轮才有；
+  // 拿到真实速率（warm=true）前保持 5 秒快轮询，避免干等一个 30 秒刷新周期
   useEffect(() => {
     if (forbidden) return;
     let stopped = false;
@@ -146,7 +147,7 @@ function ITCWeathermapContent() {
     const loop = async () => {
       const data = await fetchSnapshot();
       if (stopped) return;
-      timer = setTimeout(loop, data?.ready ? 30000 : 5000);
+      timer = setTimeout(loop, data?.warm ? 30000 : 5000);
     };
     void loop();
     return () => { stopped = true; clearTimeout(timer); };
