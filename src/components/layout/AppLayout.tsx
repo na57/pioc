@@ -426,7 +426,8 @@ function AppLayout({ children }: AppLayoutProps) {
   const flatAppMenus = flattenAppMenus(appMenus);
 
   // 应用级侧边菜单（当前应用在代码中注册了菜单时显示），key 直接使用菜单路径；
-  // 带子项的菜单渲染为可收缩子菜单，父项标题点击跳转父项路径
+  // 带子项的菜单渲染为可收缩子菜单：点击文字跳转父项路径（stopPropagation 阻止折叠），
+  // 点击标题其他区域（含右侧展开图标）走 antd 默认折叠/展开
   const buildAppMenuItems = (items: AppSideMenu[]): MenuProps['items'] =>
     items.map((m) => {
       const base = {
@@ -437,8 +438,18 @@ function AppLayout({ children }: AppLayoutProps) {
       if (m.children?.length) {
         return {
           ...base,
+          label: (
+            <span
+              style={{ userSelect: 'none' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                router.push(m.path);
+              }}
+            >
+              {m.name}
+            </span>
+          ),
           children: buildAppMenuItems(m.children),
-          onTitleClick: () => router.push(m.path),
         };
       }
       return base;

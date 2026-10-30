@@ -5,12 +5,8 @@ import {
   App,
   Alert,
   Badge,
-  Card,
-  Col,
-  Row,
   Space,
   Spin,
-  Statistic,
   Tag,
   Typography,
 } from 'antd';
@@ -54,9 +50,7 @@ function StepItem({ step }: { step: DiagnosisStep }) {
   return (
     <div
       style={{
-        padding: '10px 12px',
-        borderRadius: 8,
-        background: step.status === 'fail' ? '#fff2f0' : step.status === 'warn' ? '#fffbe6' : '#fafafa',
+        padding: '10px 0',
         marginBottom: 8,
       }}
     >
@@ -104,9 +98,8 @@ function DeviceCard({
   const level = deviceLevel(dev);
   const levelText = level === 'error' ? '异常' : level === 'warning' ? '有警告' : '正常';
   return (
-    <Card
-      size="small"
-      title={
+    <div style={{ padding: '12px 0', borderBottom: '1px solid #EBEAE6' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         <Space size={8} wrap>
           <Badge status={level} text={<Text strong>{dev.name}</Text>} />
           <Text type="secondary" code>{dev.ip}</Text>
@@ -114,8 +107,6 @@ function DeviceCard({
             {levelText}
           </Tag>
         </Space>
-      }
-      extra={
         <Space size={8} wrap>
           {dev.views.map((v) => (
             <Tag key={v.id} color="blue">{v.title}</Tag>
@@ -128,14 +119,13 @@ function DeviceCard({
             disabled={retesting}
           />
         </Space>
-      }
-    >
+      </div>
       <Spin spinning={retesting} description="正在重新诊断...">
         {dev.steps.map((s) => (
           <StepItem key={s.key} step={s} />
         ))}
       </Spin>
-    </Card>
+    </div>
   );
 }
 
@@ -233,47 +223,30 @@ export default function SnmpDiagnosisPage() {
         />
       </div>
 
-      <Alert
-        title="诊断为旁路只读操作：对每台设备独立发起新的 SNMP 会话，不影响正在运行的采集进程。步骤包括连通性（sysDescr）、设备名称、运行时长、接口表遍历，以及按视图复刻采集发现规则的采集验证。"
-        type="info"
-        showIcon
-        style={{ marginBottom: 16 }}
-      />
+      <div style={{ marginBottom: 16, fontSize: 13, lineHeight: 1.8, color: '#5F5E5A' }}>
+        诊断为旁路只读操作：对每台设备独立发起新的 SNMP 会话，不影响正在运行的采集进程。步骤包括连通性（sysDescr）、设备名称、运行时长、接口表遍历，以及按视图复刻采集发现规则的采集验证。
+      </div>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={24} sm={8}>
-          <Card size="small">
-            <Statistic title="设备总数" value={report?.totalCount ?? '-'} suffix="台" />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card size="small">
-            <Statistic
-              title="SNMP 正常"
-              value={report?.okCount ?? '-'}
-              suffix="台"
-              styles={{ content: { color: '#52c41a' } }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card size="small">
-            <Statistic
-              title="异常/警告"
-              value={report ? failCount : '-'}
-              suffix="台"
-              styles={{ content: { color: failCount > 0 ? '#ff4d4f' : undefined } }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      {/* 统计（扁平排版，无卡片） */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 56px', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 12, color: '#5F5E5A' }}>设备总数</div>
+          <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#2C2C2A' }}>{report?.totalCount ?? '-'} 台</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: '#5F5E5A' }}>SNMP 正常</div>
+          <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#52c41a' }}>{report?.okCount ?? '-'} 台</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: '#5F5E5A' }}>异常/警告</div>
+          <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: failCount > 0 ? '#ff4d4f' : '#2C2C2A' }}>{report ? failCount : '-'} 台</div>
+        </div>
+      </div>
 
       {loading && !report ? (
-        <Card>
-          <Spin spinning description="正在逐台诊断所有设备的 SNMP 连接情况，请稍候（每台设备最长约 5 秒）...">
-            <div style={{ minHeight: 200 }} />
-          </Spin>
-        </Card>
+        <Spin spinning description="正在逐台诊断所有设备的 SNMP 连接情况，请稍候（每台设备最长约 5 秒）...">
+          <div style={{ minHeight: 200 }} />
+        </Spin>
       ) : report ? (
         <>
           <div style={{ marginBottom: 12 }}>

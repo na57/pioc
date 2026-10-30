@@ -5,14 +5,10 @@ import type { Key } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   App,
-  Card,
-  Row,
-  Col,
   Space,
   Spin,
   Typography,
   Badge,
-  Statistic,
   Alert,
   Tooltip,
   Tabs,
@@ -326,15 +322,12 @@ function ITCWeathermapContent() {
         </Space>
       </div>
 
-      {/* SNMP 未连接提示 */}
+      {/* SNMP 未连接提示（无框文字） */}
       {apiData && !apiData.connected && (
-        <Alert
-          type="info"
-          showIcon
-          title="SNMP 未连接"
-          description="当前显示拓扑框架（节点/链路/带宽/标称速率），尚未采集到实时流量数据。检查 SNMP community 或网络连通后自动刷新。"
-          style={{ marginBottom: 16 }}
-        />
+        <div style={{ marginBottom: 16, fontSize: 13, lineHeight: 1.8, color: '#5F5E5A' }}>
+          <span style={{ color: '#D46B08', fontWeight: 500 }}>SNMP 未连接</span>
+          ：当前显示拓扑框架（节点/链路/带宽/标称速率），尚未采集到实时流量数据。检查 SNMP community 或网络连通后自动刷新。
+        </div>
       )}
       {apiData?.error && apiData.connected && (
         <Alert
@@ -355,43 +348,34 @@ function ITCWeathermapContent() {
       {/* ========== 主图 ========== */}
       {apiData?.svg && (
         <>
-          {/* ========== 统计 ========== */}
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8}>
-              <Card size="small"><Statistic title="总链路" value={total} /></Card>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Card size="small">
-                <Statistic title="Up" value={upCount} styles={{ content: { color: '#3B6D11' } }} />
-              </Card>
-            </Col>
-            <Col xs={24} sm={8}>
-              <Card size="small">
-                <Statistic title="Down" value={downCount} styles={{ content: { color: '#A32D2D' } }} />
-              </Card>
-            </Col>
-          </Row>
+          {/* ========== 统计（扁平排版，无卡片） ========== */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 56px', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#5F5E5A' }}>总链路</div>
+              <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#2C2C2A' }}>{total}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#5F5E5A' }}>Up</div>
+              <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#3B6D11' }}>{upCount}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#5F5E5A' }}>Down</div>
+              <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#A32D2D' }}>{downCount}</div>
+            </div>
+          </div>
 
           {/* SVG 拓扑图 */}
           <div
             ref={svgWrapRef}
             dangerouslySetInnerHTML={{ __html: apiData.svg }}
-            style={{
-              width: '100%',
-              overflowX: 'auto',
-              background: '#fff',
-              border: '1px solid #E8E6DF',
-              borderRadius: 10,
-              padding: 8,
-              marginBottom: 16,
-            }}
+            style={{ width: '100%', overflowX: 'auto', marginBottom: 16 }}
           />
 
           {/* 图例 */}
           <div
             dangerouslySetInnerHTML={{
               __html: `
-                <div style="display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;background:#FAFAF8;border:1px solid #E8E6DF;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:12px;color:#5F5E5A">
+                <div style="display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;margin-bottom:16px;font-size:12px;color:#5F5E5A">
                   <div>
                     <div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:500">链路粗细 = 带宽</div>
                     <svg width="260" height="20">

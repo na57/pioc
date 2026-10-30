@@ -4,13 +4,9 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import type { Key } from 'react';
 import {
   App,
-  Row,
-  Col,
   Space,
   Typography,
   Badge,
-  Statistic,
-  Alert,
   Tooltip,
   Table,
   Tag,
@@ -312,15 +308,12 @@ function StorageWeathermapContent() {
         </Space>
       </div>
 
-      {/* SNMP 未连接提示 */}
+      {/* SNMP 未连接提示（无框文字） */}
       {apiData && !apiData.connected && (
-        <Alert
-          type="info"
-          showIcon
-          title="SNMP 未连接"
-          description={`当前显示拓扑框架（节点/链路/带宽），尚未采集到实时流量数据。已配置 ${apiData.deviceTotal ?? 5} 台设备（核心 IRF + 4 台 S6530X），其中 ${apiData.deviceConnected ?? 0} 台可达；设备恢复可达后将自动刷新。`}
-          style={{ marginBottom: 16 }}
-        />
+        <div style={{ marginBottom: 16, fontSize: 13, lineHeight: 1.8, color: '#5F5E5A' }}>
+          <span style={{ color: '#D46B08', fontWeight: 500 }}>SNMP 未连接</span>
+          ：当前显示拓扑框架（节点/链路/带宽），尚未采集到实时流量数据。已配置 {apiData.deviceTotal ?? 5} 台设备（核心 IRF + 4 台 S6530X），其中 {apiData.deviceConnected ?? 0} 台可达；设备恢复可达后将自动刷新。
+        </div>
       )}
 
       {loading && !apiData?.svg && (
@@ -331,45 +324,34 @@ function StorageWeathermapContent() {
 
       {apiData?.svg && (
         <>
-          {/* 统计卡片 */}
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col xs={24} sm={8}>
-              <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-                <Statistic title="链路总数（逐端口）" value={total} />
-              </div>
-            </Col>
-            <Col xs={24} sm={8}>
-              <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-                <Statistic title="Up" value={upCount} styles={{ content: { color: '#3B6D11' } }} />
-              </div>
-            </Col>
-            <Col xs={24} sm={8}>
-              <div style={{ padding: 16, background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-                <Statistic title="Down / 未达" value={downCount} styles={{ content: { color: '#A32D2D' } }} />
-              </div>
-            </Col>
-          </Row>
+          {/* 统计（扁平排版，无卡片） */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 56px', marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#5F5E5A' }}>链路总数（逐端口）</div>
+              <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#2C2C2A' }}>{total}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#5F5E5A' }}>Up</div>
+              <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#3B6D11' }}>{upCount}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#5F5E5A' }}>Down / 未达</div>
+              <div style={{ fontSize: 30, fontWeight: 500, lineHeight: 1.3, color: '#A32D2D' }}>{downCount}</div>
+            </div>
+          </div>
 
           {/* SVG 拓扑图 */}
           <div
             ref={svgWrapRef}
             dangerouslySetInnerHTML={{ __html: apiData.svg }}
-            style={{
-              width: '100%',
-              overflowX: 'auto',
-              background: '#fff',
-              border: '1px solid #E8E6DF',
-              borderRadius: 10,
-              padding: 8,
-              marginBottom: 16,
-            }}
+            style={{ width: '100%', overflowX: 'auto', marginBottom: 16 }}
           />
 
           {/* 图例 */}
           <div
             dangerouslySetInnerHTML={{
               __html: `
-                <div style="display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;background:#FAFAF8;border:1px solid #E8E6DF;border-radius:10px;padding:12px 18px;margin-bottom:16px;font-size:12px;color:#5F5E5A">
+                <div style="display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start;margin-bottom:16px;font-size:12px;color:#5F5E5A">
                   <div>
                     <div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:500">链路粗细 = 带宽</div>
                     <svg width="260" height="20">
